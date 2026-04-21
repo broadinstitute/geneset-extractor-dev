@@ -1,0 +1,41 @@
+# Ignore everything
+*
+
+# Except these base files...
+!.gitignore
+
+# Allow traversing these subdirectories
+!LINCS_L1000/
+!RummaGEO/
+!ExRNA/
+!GTEx/
+!IDG/
+!Metabolomics/
+!GlyGen/
+!HuBMAP/
+!MoTrPAC/
+!KOMP2/
+
+!LINCS_L1000/**/
+!RummaGEO/**/
+!ExRNA/**/
+!GTEx/**/
+!IDG/**/
+!Metabolomics/**/
+!GlyGen/**/
+!HuBMAP/**/
+!MoTrPAC/**/
+!KOMP2/**/
+
+# Allow certain filetypes
+!LINCS_L1000/**/*.{py,r,R,sh,md,pdf,png,txt}
+!RummaGEO/**/*.{py,r,R,sh,md,pdf,png,txt}
+!ExRNA/**/*.{py,r,R,sh,md,pdf,png,txt}
+!GTEx/**/*.{py,r,R,sh,md,pdf,png,txt}
+!IDG/**/*.{py,r,R,sh,md,pdf,png,txt}
+!Metabolomics/**/*.{py,r,R,sh,md,pdf,png,txt}
+!GlyGen/**/*.{py,r,R,sh,md,pdf,png,txt}
+!HuBMAP/**/*.{py,r,R,sh,md,pdf,png,txt}
+!MoTrPAC/**/*.{py,r,R,sh,md,pdf,png,txt}
+!KOMP2/**/*.{py,r,R,sh,md,pdf,png,txt}
+
