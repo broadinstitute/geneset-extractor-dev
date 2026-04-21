@@ -1,0 +1,7 @@
+Run Summary
+===========
+converter: rna_deg_multi
+warnings:
+  - score_mode=logfc is being used without padj/pvalue/logFC row filters. This effect-size-first mode is best paired with explicit filters such as --padj_max and/or --min_abs_logfc.
+warnings: 1
+  warning: score_mode=logfc is being used without padj/pvalue/logFC row filters. This effect-size-first mode is best paired with explicit filters such as --padj_max and/or --min_abs_logfc.

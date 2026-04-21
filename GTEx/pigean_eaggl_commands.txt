@@ -1,0 +1,4 @@
+1. Clone repo at git@github.com:flannick/pigean.git
+2. Run pigean using 3 sets of previously generated gene lists as input (ie. --gene-list-in): 1) gtex_harmonizome_analysis_v1, 2) gtex_no_harmonizome_analysis_v1, 3) GTEx_XMT_2022-06-06_GTEx_Aging_Signatures_2021.gmt.gz
+3. Run EAGGL on the pigean results from 3 for all 3 gene list sets
+
