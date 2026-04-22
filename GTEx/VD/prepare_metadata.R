@@ -15,9 +15,9 @@ library(tidyverse)
 cat("Preparing GTEx metadata file...\n\n")
 
 # Define file paths
-sample_attr_file <- "GTEx_Analysis_v8_Annotations_SampleAttributesDS.txt"
-subject_pheno_file <- "GTEx_Analysis_v8_Annotations_SubjectPhenotypesDS.txt"
-output_file <- "metadata.tsv"
+sample_attr_file <- "inputs/GTEx_Analysis_v8_Annotations_SampleAttributesDS.txt"
+subject_pheno_file <- "inputs/GTEx_Analysis_v8_Annotations_SubjectPhenotypesDS.txt"
+output_file <- "inputs/metadata.tsv"
 
 # Load files
 cat("Step 1: Loading input files...\n")

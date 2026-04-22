@@ -26,7 +26,7 @@ cat("===========================================================================
 # LOAD COMPARISONS FROM FILE
 # ============================================================================
 
-comparisons_file <- "comparisons.txt"
+comparisons_file <- "inputs/comparisons.txt"
 
 if (!file.exists(comparisons_file)) {
   cat("ERROR: comparisons.txt not found!\n")

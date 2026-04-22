@@ -50,9 +50,9 @@ if (!exists("comparison_type")) {
 cat("Step 1: Loading metadata and gene annotations...\n")
 
 # Define file paths
-gct_file <- "GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_reads.gct"
-metadata_file <- "metadata.tsv"
-hgnc_file <- "hgnc.txt"
+gct_file <- "inputs/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_reads.gct"
+metadata_file <- "inputs/metadata.tsv"
+hgnc_file <- "inputs/hgnc.txt"
 
 # Load gene symbol mapping from HGNC
 cat("  Loading HGNC gene symbol mapping...\n")
@@ -173,16 +173,16 @@ cat(sprintf("  - Sample metadata dimensions: %d samples\n", nrow(sample_metadata
 # Create folder name from comparison parameter
 if (!is.null(comparison_param) && comparison_param != "") {
   # Replace spaces and "vs" with underscores for folder name
-  output_dir <- comparison_param %>%
+  output_dir <- file.path("outputs", comparison_param %>%
     gsub(" vs ", "_vs_", .) %>%
-    gsub(" ", "_", .)
+    gsub(" ", "_", .))
 } else {
-  output_dir <- "results_all_samples"
+  output_dir <- file.path("outputs", "results_all_samples")
 }
 
 # Create the output directory if it doesn't exist
 if (!dir.exists(output_dir)) {
-  dir.create(output_dir, showWarnings = FALSE)
+  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
   cat(sprintf("\nCreated output directory: %s\n", output_dir))
 } else {
   cat(sprintf("\nUsing existing output directory: %s\n", output_dir))

@@ -93,7 +93,7 @@ def process_comparison(comparison, current_dir, up_gmt_genes, up_gmt_size, down_
     """
     
     folder_name = comparison.replace(" ", "_").replace("-", "-")
-    de_folder = current_dir / folder_name
+    de_folder = current_dir / "outputs" / folder_name
     de_with_gmt_file = de_folder / "de_genes_with_gmt.tsv"
     
     # Check if file exists
@@ -210,9 +210,9 @@ def main():
     """Main function."""
     
     current_dir = Path.cwd()
-    comparisons_file = current_dir / "comparisons.txt"
-    summary_file = current_dir / "gmt_analysis_summary.tsv"
-    gmt_file = current_dir / "GTEx_XMT_2022-06-06_GTEx_Aging_Signatures_2021.gmt"
+    comparisons_file = current_dir / "inputs" / "comparisons.txt"
+    summary_file = current_dir / "outputs" / "gmt_analysis_summary.tsv"
+    gmt_file = current_dir / "inputs" / "GTEx_XMT_2022-06-06_GTEx_Aging_Signatures_2021.gmt"
     
     if not comparisons_file.exists():
         print(f"Error: File not found: {comparisons_file}")

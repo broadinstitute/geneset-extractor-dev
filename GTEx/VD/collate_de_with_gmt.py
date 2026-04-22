@@ -130,9 +130,9 @@ def main():
     
     # Get current directory and file paths
     current_dir = Path.cwd()
-    gmt_path = current_dir / "GTEx_XMT_2022-06-06_GTEx_Aging_Signatures_2021.gmt"
+    gmt_path = current_dir / "inputs" / "GTEx_XMT_2022-06-06_GTEx_Aging_Signatures_2021.gmt"
     folder_name = get_folder_name(comparison_param)
-    de_folder = current_dir / folder_name
+    de_folder = current_dir / "outputs" / folder_name
     de_file = de_folder / "de_genes_all.tsv"
     output_file = de_folder / "de_genes_with_gmt.tsv"
     
