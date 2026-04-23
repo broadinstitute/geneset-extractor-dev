@@ -60,7 +60,6 @@
 !GTEx/**/*.pdf
 !GTEx/**/*.png
 !GTEx/**/*.txt
-!GTEx/**/*.tsv
 !IDG/**/*.py
 !IDG/**/*.r
 !IDG/**/*.R
