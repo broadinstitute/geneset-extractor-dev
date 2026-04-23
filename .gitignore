@@ -35,7 +35,6 @@
 !LINCS_L1000/**/*.md
 !LINCS_L1000/**/*.pdf
 !LINCS_L1000/**/*.png
-!LINCS_L1000/**/*.txt
 !RummaGEO/**/*.py
 !RummaGEO/**/*.r
 !RummaGEO/**/*.R
@@ -43,7 +42,6 @@
 !RummaGEO/**/*.md
 !RummaGEO/**/*.pdf
 !RummaGEO/**/*.png
-!RummaGEO/**/*.txt
 !ExRNA/**/*.py
 !ExRNA/**/*.r
 !ExRNA/**/*.R
@@ -51,7 +49,6 @@
 !ExRNA/**/*.md
 !ExRNA/**/*.pdf
 !ExRNA/**/*.png
-!ExRNA/**/*.txt
 !GTEx/**/*.py
 !GTEx/**/*.r
 !GTEx/**/*.R
@@ -59,7 +56,6 @@
 !GTEx/**/*.md
 !GTEx/**/*.pdf
 !GTEx/**/*.png
-!GTEx/**/*.txt
 !IDG/**/*.py
 !IDG/**/*.r
 !IDG/**/*.R
@@ -67,7 +63,6 @@
 !IDG/**/*.md
 !IDG/**/*.pdf
 !IDG/**/*.png
-!IDG/**/*.txt
 !Metabolomics/**/*.py
 !Metabolomics/**/*.r
 !Metabolomics/**/*.R
@@ -75,7 +70,6 @@
 !Metabolomics/**/*.md
 !Metabolomics/**/*.pdf
 !Metabolomics/**/*.png
-!Metabolomics/**/*.txt
 !GlyGen/**/*.py
 !GlyGen/**/*.r
 !GlyGen/**/*.R
@@ -83,7 +77,6 @@
 !GlyGen/**/*.md
 !GlyGen/**/*.pdf
 !GlyGen/**/*.png
-!GlyGen/**/*.txt
 !HuBMAP/**/*.py
 !HuBMAP/**/*.r
 !HuBMAP/**/*.R
@@ -91,7 +84,6 @@
 !HuBMAP/**/*.md
 !HuBMAP/**/*.pdf
 !HuBMAP/**/*.png
-!HuBMAP/**/*.txt
 !MoTrPAC/**/*.py
 !MoTrPAC/**/*.r
 !MoTrPAC/**/*.R
@@ -99,7 +91,6 @@
 !MoTrPAC/**/*.md
 !MoTrPAC/**/*.pdf
 !MoTrPAC/**/*.png
-!MoTrPAC/**/*.txt
 !KOMP2/**/*.py
 !KOMP2/**/*.r
 !KOMP2/**/*.R
@@ -107,5 +98,3 @@
 !KOMP2/**/*.md
 !KOMP2/**/*.pdf
 !KOMP2/**/*.png
-!KOMP2/**/*.txt
-
