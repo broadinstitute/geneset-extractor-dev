@@ -1,0 +1,88 @@
+suppressPackageStartupMessages({
+  library(edgeR)
+  library(limma)
+})
+
+counts <- read.delim("/home/ryank/software/geneset_extractors/geneset-extractor-dev/GTEx/outputs/gtex_model_sweep_v1/workflow_runs/de=modern__balance=false__seed=0__scope=contrast__covariates=sex,smtsd__backend=auto/rna_de_prepare/AdrenalGland.v1/backend_work/counts_gene_by_sample.tsv", check.names=FALSE)
+meta <- read.delim("/home/ryank/software/geneset_extractors/geneset-extractor-dev/GTEx/outputs/gtex_model_sweep_v1/workflow_runs/de=modern__balance=false__seed=0__scope=contrast__covariates=sex,smtsd__backend=auto/rna_de_prepare/AdrenalGland.v1/backend_work/metadata.tsv", check.names=FALSE)
+comps <- read.delim("/home/ryank/software/geneset_extractors/geneset-extractor-dev/GTEx/outputs/gtex_model_sweep_v1/workflow_runs/de=modern__balance=false__seed=0__scope=contrast__covariates=sex,smtsd__backend=auto/rna_de_prepare/AdrenalGland.v1/backend_work/comparisons.tsv", check.names=FALSE)
+selected <- read.delim("/home/ryank/software/geneset_extractors/geneset-extractor-dev/GTEx/outputs/gtex_model_sweep_v1/workflow_runs/de=modern__balance=false__seed=0__scope=contrast__covariates=sex,smtsd__backend=auto/rna_de_prepare/AdrenalGland.v1/backend_work/comparison_selected_samples.tsv", check.names=FALSE)
+feature_ids <- counts[[1]]
+gene_symbols <- if ("gene_symbol" %in% colnames(counts)) as.character(counts[["gene_symbol"]]) else as.character(feature_ids)
+count_cols <- setdiff(colnames(counts), c(colnames(counts)[1], "gene_symbol"))
+count_mat <- as.matrix(counts[, count_cols, drop=FALSE])
+storage.mode(count_mat) <- "numeric"
+rownames(count_mat) <- feature_ids
+meta$sample_id <- as.character(meta$sample_id)
+selected$sample_id <- as.character(selected$sample_id)
+selected$comparison_id <- as.character(selected$comparison_id)
+selected$group_label <- as.character(selected$group_label)
+count_mat <- count_mat[, meta$sample_id, drop=FALSE]
+all_rows <- list()
+extra_cols <- unique(c(strsplit("sex,smtsd", ",", fixed=TRUE)[[1]], strsplit("", ",", fixed=TRUE)[[1]]))
+extra_cols <- extra_cols[nzchar(extra_cols)]
+for (i in seq_len(nrow(comps))) {
+  comp <- comps[i, , drop=FALSE]
+  gcol <- as.character(comp$group_column[1])
+  ga <- as.character(comp$group_a[1])
+  gb <- as.character(comp$group_b[1])
+  sel <- selected[selected$comparison_id == as.character(comp$comparison_id[1]), , drop=FALSE]
+  if (!nrow(sel)) next
+  sub_meta <- merge(sel, meta, by="sample_id", all.x=TRUE, sort=FALSE)
+  sub_meta <- sub_meta[match(sel$sample_id, sub_meta$sample_id), , drop=FALSE]
+  sub_meta$.__group <- factor(as.character(sub_meta$group_label), levels=c(gb, ga))
+  sub_meta <- sub_meta[!is.na(sub_meta$.__group), , drop=FALSE]
+  if (sum(sub_meta$.__group == ga) < 2 || sum(sub_meta$.__group == gb) < 2) next
+  sub_counts <- count_mat[, sub_meta$sample_id, drop=FALSE]
+  y <- DGEList(counts=sub_counts)
+  if ("contrast" == "stratum") {
+    strata_cols <- setdiff(colnames(comp), c("comparison_id", "comparison_kind", "group_column", "group_a", "group_b"))
+    scope_meta <- meta
+    for (col_name in strata_cols) {
+      scope_meta <- scope_meta[as.character(scope_meta[[col_name]]) == as.character(comp[[col_name]][1]), , drop=FALSE]
+    }
+    scope_meta <- scope_meta[nzchar(as.character(scope_meta[[gcol]])), , drop=FALSE]
+    scope_counts <- count_mat[, scope_meta$sample_id, drop=FALSE]
+    keep_genes <- filterByExpr(DGEList(counts=scope_counts))
+  } else {
+    keep_genes <- filterByExpr(y, group=sub_meta$.__group)
+  }
+  y <- y[keep_genes, , keep.lib.sizes=FALSE]
+  y <- calcNormFactors(y)
+  present_extra_cols <- extra_cols[extra_cols %in% colnames(sub_meta)]
+  variable_extra_cols <- c()
+  for (col_name in present_extra_cols) {
+    values <- sub_meta[[col_name]]
+    values <- values[!is.na(values) & nzchar(as.character(values))]
+    if (length(unique(as.character(values))) >= 2) {
+      variable_extra_cols <- c(variable_extra_cols, col_name)
+    }
+  }
+  formula_terms <- c(".__group", variable_extra_cols)
+  design <- model.matrix(as.formula(paste("~", paste(formula_terms, collapse=" + "))), data=sub_meta)
+  v <- voom(y, design, plot=FALSE)
+  fit <- lmFit(v, design)
+  coef_name <- grep("^.__group", colnames(design), value=TRUE)[1]
+  fit <- eBayes(fit)
+  tt <- topTable(fit, coef=coef_name, number=Inf, sort.by="none")
+  tt$comparison_id <- as.character(comp$comparison_id[1])
+  tt$gene_id <- rownames(tt)
+  tt$gene_symbol <- gene_symbols[match(rownames(tt), feature_ids)]
+  tt$group_a <- ga
+  tt$group_b <- gb
+  tt$stratum <- paste(paste(setdiff(colnames(comp), c("comparison_id", "comparison_kind", "group_column", "group_a", "group_b")), as.character(comp[1, setdiff(colnames(comp), c("comparison_id", "comparison_kind", "group_column", "group_a", "group_b"))]), sep="="), collapse="|")
+  tt$backend <- "r_limma_voom"
+  tt$n_group_a <- sum(sub_meta$.__group == ga)
+  tt$n_group_b <- sum(sub_meta$.__group == gb)
+  tt$mean_expr <- tt$AveExpr
+  tt$model_formula <- paste(formula_terms, collapse=" + ")
+  keep_cols <- c("comparison_id", "gene_id", "gene_symbol", "logFC", "t", "P.Value", "adj.P.Val", "group_a", "group_b", "stratum", "backend", "n_group_a", "n_group_b", "mean_expr", "model_formula")
+  tt <- tt[, keep_cols, drop=FALSE]
+  colnames(tt)[colnames(tt) == "t"] <- "stat"
+  colnames(tt)[colnames(tt) == "P.Value"] <- "pvalue"
+  colnames(tt)[colnames(tt) == "adj.P.Val"] <- "padj"
+  all_rows[[length(all_rows) + 1]] <- tt
+}
+if (!length(all_rows)) stop("No contrasts produced output")
+out <- do.call(rbind, all_rows)
+write.table(out, file="/home/ryank/software/geneset_extractors/geneset-extractor-dev/GTEx/outputs/gtex_model_sweep_v1/workflow_runs/de=modern__balance=false__seed=0__scope=contrast__covariates=sex,smtsd__backend=auto/rna_de_prepare/AdrenalGland.v1/backend_work/deg_long.tsv", sep="	", row.names=FALSE, quote=FALSE)
