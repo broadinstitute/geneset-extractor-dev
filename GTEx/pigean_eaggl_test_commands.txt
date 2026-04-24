@@ -1,7 +1,0 @@
-1. Clone repo at git@github.com:flannick/pigean.git
-2. Pick a gene set from Adipose tissue that appears in all 3 gmt files: gtex_harmonizome_analysis_v1, gtex_no_harmonizome_analysis_v1, and GTEx_XMT_2022-06-06_GTEx_Aging_Signatures_2021.gmt.gz
-3. Analyze the overlap between the gene sets and produce a comprehensive summary, with plots in pdf format and tables in tsv format
-4. Run pigean 3 times, using each of the 3 gene sets as input (ie. --gene-list-in)
-5. Run EAGGL 3 times, once on each of the pigean results from 4
-6. Write the take-home message for each of the 3 EAGGL runs, summarizing the similarities or differences between them
-

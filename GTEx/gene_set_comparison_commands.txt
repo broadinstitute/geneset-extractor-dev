@@ -1,2 +1,0 @@
-Considering the gene sets identified in the 3 gmt files: gtex_harmonizome_analysis_v1, gtex_no_harmonizome_analysis_v1, and GTEx_XMT_2022-06-06_GTEx_Aging_Signatures_2021.gmt.gz, analyze the overlap between the gene sets common to all 3 and produce a comprehensive summary, with plots in pdf format and/or tables in tsv format. Make sure any plots have appropriate and readable labels, easily identifiable to an outside reader. Write a paragraph describing the findings to a text file.
-

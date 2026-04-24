@@ -1,9 +1,0 @@
-Run Summary
-===========
-converter: rna_deg_multi
-warnings:
-  - many genes pass padj<=0.05 before ranking (n=7221). Top-K truncation may be brittle; validate pathway/marker coherence and consider additional effect-size filters if signatures look generic.
-  - score_mode=logfc is being used without padj/pvalue/logFC row filters. This effect-size-first mode is best paired with explicit filters such as --padj_max and/or --min_abs_logfc.
-warnings: 2
-  warning: many genes pass padj<=0.05 before ranking (n=7221). Top-K truncation may be brittle; validate pathway/marker coherence and consider additional effect-size filters if signatures look generic.
-  warning: score_mode=logfc is being used without padj/pvalue/logFC row filters. This effect-size-first mode is best paired with explicit filters such as --padj_max and/or --min_abs_logfc.

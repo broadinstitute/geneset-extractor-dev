@@ -1,7 +1,0 @@
-Run Summary
-===========
-converter: rna_deg_multi
-warnings:
-  - many genes pass padj<=0.05 before ranking (n=9726). Top-K truncation may be brittle; validate pathway/marker coherence and consider additional effect-size filters if signatures look generic.
-warnings: 1
-  warning: many genes pass padj<=0.05 before ranking (n=9726). Top-K truncation may be brittle; validate pathway/marker coherence and consider additional effect-size filters if signatures look generic.

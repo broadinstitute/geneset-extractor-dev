@@ -1,3 +1,0 @@
-1. Clone repo at git@github.com:flannick/pigean.git
-2. Run EAGGL on 3 input gene lists: 1) gtex_harmonizome_analysis_v1, 2) gtex_no_harmonizome_analysis_v1, 3) GTEx_XMT_2022-06-06_GTEx_Aging_Signatures_2021.gmt.gz
-
