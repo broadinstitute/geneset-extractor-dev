@@ -78,6 +78,7 @@ PYTHON_BIN="python3"
 ORGANISM="human"
 GENOME_BUILD="hg38"
 GTF_PATH=""
+WRITE_COMMANDS_ONLY="false"
 REPO_ROOT="$(cd "$(dirname "${{BASH_SOURCE[0]}}")/../../.." && pwd)"
 DIG_DIR="${{REPO_ROOT}}/dig-gene-set-extractors"
 GTEX_OVERRIDE_DIR="${{REPO_ROOT}}/geneset-extractor-dev/GTEx/src"
@@ -92,6 +93,7 @@ while [[ $# -gt 0 ]]; do
     --genome_build) GENOME_BUILD="$2"; shift 2 ;;
     --gtf) GTF_PATH="$2"; shift 2 ;;
     --dig_dir) DIG_DIR="$2"; shift 2 ;;
+    --write_commands_only) WRITE_COMMANDS_ONLY="true"; shift 1 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -101,7 +103,7 @@ if [[ -z "${{MODEL_ID}}" || -z "${{PREPARED_DIR}}" || -z "${{RUN_ROOT}}" ]]; the
   exit 1
 fi
 
-if [[ ! -f "${{PREPARED_DIR}}/tissue_counts.tsv" || ! -f "${{PREPARED_DIR}}/sample_metadata.tsv" || ! -f "${{PREPARED_DIR}}/comparisons.tsv" ]]; then
+if [[ "${{WRITE_COMMANDS_ONLY}}" != "true" && ( ! -f "${{PREPARED_DIR}}/tissue_counts.tsv" || ! -f "${{PREPARED_DIR}}/sample_metadata.tsv" || ! -f "${{PREPARED_DIR}}/comparisons.tsv" ) ]]; then
   echo "prepared_dir must contain tissue_counts.tsv, sample_metadata.tsv, and comparisons.tsv" >&2
   exit 1
 fi
@@ -209,21 +211,21 @@ fi
 
 EXTRACTOR_CMD=("${{PYTHON_BIN}}" -m geneset_extractors.cli convert rna_deg_multi "${{EXTRACTOR_FLAGS[@]}}")
 
-cat > "${{MODEL_OUT}}/commands.md" <<EOF
-# Commands For ${{MODEL_ID}}
+{{
+  printf '# Commands For %s\n\n' "${{MODEL_ID}}"
+  printf '## Workflow\n\n'
+  printf '```bash\n'
+  printf 'PYTHONPATH=%s:%s/src %s\n' "${{GTEX_OVERRIDE_DIR}}" "${{DIG_DIR}}" "${{WORKFLOW_CMD[*]}}"
+  printf '```\n\n'
+  printf '## Extractor\n\n'
+  printf '```bash\n'
+  printf 'PYTHONPATH=%s:%s/src %s\n' "${{GTEX_OVERRIDE_DIR}}" "${{DIG_DIR}}" "${{EXTRACTOR_CMD[*]}}"
+  printf '```\n'
+}} > "${{MODEL_OUT}}/commands.md"
 
-## Workflow
-
-```bash
-PYTHONPATH=${{GTEX_OVERRIDE_DIR}}:${{DIG_DIR}}/src ${{WORKFLOW_CMD[*]}}
-```
-
-## Extractor
-
-```bash
-PYTHONPATH=${{GTEX_OVERRIDE_DIR}}:${{DIG_DIR}}/src ${{EXTRACTOR_CMD[*]}}
-```
-EOF
+if [[ "${{WRITE_COMMANDS_ONLY}}" == "true" ]]; then
+  exit 0
+fi
 
 echo "[run_gtex_model] MODEL_ID=${{MODEL_ID}}" | tee "${{MODEL_OUT}}/run.log"
 (
