@@ -1,0 +1,719 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MODEL_ID=""
+PREPARED_DIR=""
+RUN_ROOT=""
+PYTHON_BIN="python3"
+ORGANISM="human"
+GENOME_BUILD="hg38"
+GTF_PATH=""
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+DIG_DIR="${REPO_ROOT}/dig-gene-set-extractors"
+GTEX_OVERRIDE_DIR="${REPO_ROOT}/geneset-extractor-dev/GTEx/src"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --model_id) MODEL_ID="$2"; shift 2 ;;
+    --prepared_dir) PREPARED_DIR="$2"; shift 2 ;;
+    --run_root) RUN_ROOT="$2"; shift 2 ;;
+    --python_bin) PYTHON_BIN="$2"; shift 2 ;;
+    --organism) ORGANISM="$2"; shift 2 ;;
+    --genome_build) GENOME_BUILD="$2"; shift 2 ;;
+    --gtf) GTF_PATH="$2"; shift 2 ;;
+    --dig_dir) DIG_DIR="$2"; shift 2 ;;
+    *) echo "Unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -z "${MODEL_ID}" || -z "${PREPARED_DIR}" || -z "${RUN_ROOT}" ]]; then
+  echo "Usage: $0 --model_id M1 --prepared_dir <dir> --run_root <dir> [--gtf <path>]" >&2
+  exit 1
+fi
+
+if [[ ! -f "${PREPARED_DIR}/tissue_counts.tsv" || ! -f "${PREPARED_DIR}/sample_metadata.tsv" || ! -f "${PREPARED_DIR}/comparisons.tsv" ]]; then
+  echo "prepared_dir must contain tissue_counts.tsv, sample_metadata.tsv, and comparisons.tsv" >&2
+  exit 1
+fi
+
+case "${MODEL_ID}" in
+    M1)
+      WORKFLOW_DE_MODE='modern'
+      WORKFLOW_BACKEND='auto'
+      WORKFLOW_BALANCE_GROUPS='false'
+      WORKFLOW_BALANCE_SEED='0'
+      WORKFLOW_GENE_FILTER_SCOPE='contrast'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='harmonizome'
+      EXTRACTOR_SCORE_MODE='auto'
+      EXTRACTOR_SELECT='top_k'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='false'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='false'
+      EXTRACTOR_PADJ_MAX='NA'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='NA'
+      EXTRACTOR_GMT_SOURCE='full'
+      EXTRACTOR_GMT_TOPK_LIST='NA'
+      EXTRACTOR_GMT_MIN_GENES='NA'
+      EXTRACTOR_GMT_MAX_GENES='NA'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST='protein_coding'
+      ;;
+    M2)
+      WORKFLOW_DE_MODE='harmonizome'
+      WORKFLOW_BACKEND='auto'
+      WORKFLOW_BALANCE_GROUPS='true'
+      WORKFLOW_BALANCE_SEED='1'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='harmonizome'
+      EXTRACTOR_SCORE_MODE='auto'
+      EXTRACTOR_SELECT='top_k'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='false'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='false'
+      EXTRACTOR_PADJ_MAX='NA'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='NA'
+      EXTRACTOR_GMT_SOURCE='full'
+      EXTRACTOR_GMT_TOPK_LIST='NA'
+      EXTRACTOR_GMT_MIN_GENES='NA'
+      EXTRACTOR_GMT_MAX_GENES='NA'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST='protein_coding'
+      ;;
+    M3)
+      WORKFLOW_DE_MODE='harmonizome'
+      WORKFLOW_BACKEND='r_limma_voom'
+      WORKFLOW_BALANCE_GROUPS='true'
+      WORKFLOW_BALANCE_SEED='1'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='harmonizome'
+      EXTRACTOR_SCORE_MODE='auto'
+      EXTRACTOR_SELECT='top_k'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='false'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='false'
+      EXTRACTOR_PADJ_MAX='NA'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='NA'
+      EXTRACTOR_GMT_SOURCE='full'
+      EXTRACTOR_GMT_TOPK_LIST='NA'
+      EXTRACTOR_GMT_MIN_GENES='NA'
+      EXTRACTOR_GMT_MAX_GENES='NA'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST='protein_coding'
+      ;;
+    M4)
+      WORKFLOW_DE_MODE='harmonizome'
+      WORKFLOW_BACKEND='lightweight'
+      WORKFLOW_BALANCE_GROUPS='true'
+      WORKFLOW_BALANCE_SEED='1'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='signed_neglog10padj'
+      EXTRACTOR_SELECT='threshold'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='1.30103'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='250'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='250'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    M5)
+      WORKFLOW_DE_MODE='harmonizome'
+      WORKFLOW_BACKEND='lightweight'
+      WORKFLOW_BALANCE_GROUPS='true'
+      WORKFLOW_BALANCE_SEED='1'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='signed_neglog10pvalue'
+      EXTRACTOR_SELECT='threshold'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='1.30103'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='250'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='250'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    M6)
+      WORKFLOW_DE_MODE='harmonizome'
+      WORKFLOW_BACKEND='lightweight'
+      WORKFLOW_BALANCE_GROUPS='true'
+      WORKFLOW_BALANCE_SEED='1'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='stat'
+      EXTRACTOR_SELECT='top_k'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='250'
+      EXTRACTOR_MIN_SCORE='NA'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='250'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='250'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    M7)
+      WORKFLOW_DE_MODE='harmonizome'
+      WORKFLOW_BACKEND='lightweight'
+      WORKFLOW_BALANCE_GROUPS='true'
+      WORKFLOW_BALANCE_SEED='1'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='logfc_times_neglog10p'
+      EXTRACTOR_SELECT='top_k'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='250'
+      EXTRACTOR_MIN_SCORE='NA'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='250'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='250'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    M8)
+      WORKFLOW_DE_MODE='harmonizome'
+      WORKFLOW_BACKEND='lightweight'
+      WORKFLOW_BALANCE_GROUPS='true'
+      WORKFLOW_BALANCE_SEED='1'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='logfc'
+      EXTRACTOR_SELECT='top_k'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='0.25'
+      EXTRACTOR_TOP_K='250'
+      EXTRACTOR_MIN_SCORE='NA'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='250'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='250'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    M9)
+      WORKFLOW_DE_MODE='harmonizome'
+      WORKFLOW_BACKEND='lightweight'
+      WORKFLOW_BALANCE_GROUPS='true'
+      WORKFLOW_BALANCE_SEED='1'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='signed_neglog10padj'
+      EXTRACTOR_SELECT='threshold'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='1.30103'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='150'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='150'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    M10)
+      WORKFLOW_DE_MODE='harmonizome'
+      WORKFLOW_BACKEND='lightweight'
+      WORKFLOW_BALANCE_GROUPS='true'
+      WORKFLOW_BALANCE_SEED='1'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='signed_neglog10padj'
+      EXTRACTOR_SELECT='threshold'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='1.30103'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='300'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='300'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    M11)
+      WORKFLOW_DE_MODE='harmonizome'
+      WORKFLOW_BACKEND='lightweight'
+      WORKFLOW_BALANCE_GROUPS='true'
+      WORKFLOW_BALANCE_SEED='1'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='signed_neglog10padj'
+      EXTRACTOR_SELECT='threshold'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.01'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='2.0'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='250'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='250'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    M12)
+      WORKFLOW_DE_MODE='harmonizome'
+      WORKFLOW_BACKEND='lightweight'
+      WORKFLOW_BALANCE_GROUPS='true'
+      WORKFLOW_BALANCE_SEED='1'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='signed_neglog10padj'
+      EXTRACTOR_SELECT='threshold'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='0.5'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='1.30103'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='250'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='250'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    M13)
+      WORKFLOW_DE_MODE='harmonizome'
+      WORKFLOW_BACKEND='lightweight'
+      WORKFLOW_BALANCE_GROUPS='true'
+      WORKFLOW_BALANCE_SEED='1'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='signed_neglog10padj'
+      EXTRACTOR_SELECT='threshold'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='1.30103'
+      EXTRACTOR_GMT_SOURCE='full'
+      EXTRACTOR_GMT_TOPK_LIST='250'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='250'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    M14)
+      WORKFLOW_DE_MODE='modern'
+      WORKFLOW_BACKEND='lightweight'
+      WORKFLOW_BALANCE_GROUPS='false'
+      WORKFLOW_BALANCE_SEED='0'
+      WORKFLOW_GENE_FILTER_SCOPE='contrast'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='signed_neglog10padj'
+      EXTRACTOR_SELECT='threshold'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='1.30103'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='250'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='250'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    M15)
+      WORKFLOW_DE_MODE='modern'
+      WORKFLOW_BACKEND='lightweight'
+      WORKFLOW_BALANCE_GROUPS='false'
+      WORKFLOW_BALANCE_SEED='0'
+      WORKFLOW_GENE_FILTER_SCOPE='contrast'
+      WORKFLOW_COVARIATES='none'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='signed_neglog10padj'
+      EXTRACTOR_SELECT='threshold'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='1.30103'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='250'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='250'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    M16)
+      WORKFLOW_DE_MODE='modern'
+      WORKFLOW_BACKEND='lightweight'
+      WORKFLOW_BALANCE_GROUPS='false'
+      WORKFLOW_BALANCE_SEED='0'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='signed_neglog10padj'
+      EXTRACTOR_SELECT='threshold'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='1.30103'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='250'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='250'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    M17)
+      WORKFLOW_DE_MODE='harmonizome'
+      WORKFLOW_BACKEND='lightweight'
+      WORKFLOW_BALANCE_GROUPS='true'
+      WORKFLOW_BALANCE_SEED='1'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='none'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='signed_neglog10padj'
+      EXTRACTOR_SELECT='threshold'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='1.30103'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='250'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='250'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    M18)
+      WORKFLOW_DE_MODE='harmonizome'
+      WORKFLOW_BACKEND='lightweight'
+      WORKFLOW_BALANCE_GROUPS='true'
+      WORKFLOW_BALANCE_SEED='1'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='signed_neglog10padj'
+      EXTRACTOR_SELECT='threshold'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='false'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='1.30103'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='250'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='250'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    M19)
+      WORKFLOW_DE_MODE='harmonizome'
+      WORKFLOW_BACKEND='lightweight'
+      WORKFLOW_BALANCE_GROUPS='true'
+      WORKFLOW_BALANCE_SEED='1'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gtf_annotated'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='signed_neglog10padj'
+      EXTRACTOR_SELECT='threshold'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='1.30103'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='250'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='250'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST='protein_coding'
+      ;;
+    M20)
+      WORKFLOW_DE_MODE='harmonizome'
+      WORKFLOW_BACKEND='lightweight'
+      WORKFLOW_BALANCE_GROUPS='true'
+      WORKFLOW_BALANCE_SEED='1'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gtf_annotated'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='signed_neglog10padj'
+      EXTRACTOR_SELECT='threshold'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='false'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='1.30103'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='250'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='250'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    M21)
+      WORKFLOW_DE_MODE='harmonizome'
+      WORKFLOW_BACKEND='r_limma_voom'
+      WORKFLOW_BALANCE_GROUPS='true'
+      WORKFLOW_BALANCE_SEED='1'
+      WORKFLOW_GENE_FILTER_SCOPE='stratum'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='signed_neglog10padj'
+      EXTRACTOR_SELECT='threshold'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='1.30103'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='250'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='250'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    M22)
+      WORKFLOW_DE_MODE='modern'
+      WORKFLOW_BACKEND='r_limma_voom'
+      WORKFLOW_BALANCE_GROUPS='false'
+      WORKFLOW_BALANCE_SEED='0'
+      WORKFLOW_GENE_FILTER_SCOPE='contrast'
+      WORKFLOW_COVARIATES='SEX'
+      ANNOTATION_MODE='gct_symbols_only'
+      EXTRACTOR_POSTPROCESS_MODE='legacy'
+      EXTRACTOR_SCORE_MODE='signed_neglog10padj'
+      EXTRACTOR_SELECT='threshold'
+      EXTRACTOR_DISABLE_DEFAULT_EXCLUDES='true'
+      EXTRACTOR_GMT_REQUIRE_SYMBOL='true'
+      EXTRACTOR_EMIT_SMALL_GENE_SETS='true'
+      EXTRACTOR_PADJ_MAX='0.05'
+      EXTRACTOR_PVALUE_MAX='NA'
+      EXTRACTOR_MIN_ABS_LOGFC='NA'
+      EXTRACTOR_TOP_K='NA'
+      EXTRACTOR_MIN_SCORE='1.30103'
+      EXTRACTOR_GMT_SOURCE='selected'
+      EXTRACTOR_GMT_TOPK_LIST='250'
+      EXTRACTOR_GMT_MIN_GENES='5'
+      EXTRACTOR_GMT_MAX_GENES='250'
+      EXTRACTOR_GMT_BIOTYPE_ALLOWLIST=''
+      ;;
+    *)
+      echo "Unsupported model_id: ${MODEL_ID}" >&2
+      exit 1
+      ;;
+esac
+
+if [[ "${ANNOTATION_MODE}" == "gtf_annotated" && -z "${GTF_PATH}" ]]; then
+  echo "Model ${MODEL_ID} requires --gtf" >&2
+  exit 1
+fi
+
+MODEL_OUT="${RUN_ROOT}/${MODEL_ID}"
+WORKFLOW_OUT="${MODEL_OUT}/workflow"
+EXTRACTOR_OUT="${MODEL_OUT}/extractor"
+mkdir -p "${MODEL_OUT}"
+
+WORKFLOW_CMD=(
+  "${PYTHON_BIN}" -m geneset_extractors.cli workflows rna_de_prepare
+  --modality bulk
+  --counts_tsv "${PREPARED_DIR}/tissue_counts.tsv"
+  --matrix_orientation gene_by_sample
+  --feature_id_column gene_id
+  --matrix_gene_symbol_column gene_symbol
+  --sample_metadata_tsv "${PREPARED_DIR}/sample_metadata.tsv"
+  --sample_id_column sample_id
+  --group_column age_bin
+  --comparisons_tsv "${PREPARED_DIR}/comparisons.tsv"
+  --de_mode "${WORKFLOW_DE_MODE}"
+  --balance_groups "${WORKFLOW_BALANCE_GROUPS}"
+  --balance_seed "${WORKFLOW_BALANCE_SEED}"
+  --gene_filter_scope "${WORKFLOW_GENE_FILTER_SCOPE}"
+  --backend "${WORKFLOW_BACKEND}"
+  --out_dir "${WORKFLOW_OUT}"
+  --organism "${ORGANISM}"
+  --genome_build "${GENOME_BUILD}"
+)
+
+if [[ "${WORKFLOW_COVARIATES}" != "none" ]]; then
+  WORKFLOW_CMD+=(--covariates "${WORKFLOW_COVARIATES}")
+fi
+
+EXTRACTOR_FLAGS=(
+  --deg_tsv "${WORKFLOW_OUT}/deg_long.tsv"
+  --comparison_column comparison_id
+  --out_dir "${EXTRACTOR_OUT}"
+  --organism "${ORGANISM}"
+  --genome_build "${GENOME_BUILD}"
+  --signature_name "${MODEL_ID}"
+  --postprocess_mode "${EXTRACTOR_POSTPROCESS_MODE}"
+  --score_mode "${EXTRACTOR_SCORE_MODE}"
+  --select "${EXTRACTOR_SELECT}"
+  --normalize within_set_l1
+  --emit_full true
+  --emit_gmt true
+  --gmt_split_signed true
+  --gmt_require_symbol "${EXTRACTOR_GMT_REQUIRE_SYMBOL}"
+  --emit_small_gene_sets "${EXTRACTOR_EMIT_SMALL_GENE_SETS}"
+)
+
+if [[ "${EXTRACTOR_DISABLE_DEFAULT_EXCLUDES}" == "true" ]]; then
+  EXTRACTOR_FLAGS+=(--disable_default_excludes)
+fi
+
+if [[ "${EXTRACTOR_PADJ_MAX}" != "NA" ]]; then
+  EXTRACTOR_FLAGS+=(--padj_max "${EXTRACTOR_PADJ_MAX}")
+fi
+if [[ "${EXTRACTOR_PVALUE_MAX}" != "NA" ]]; then
+  EXTRACTOR_FLAGS+=(--pvalue_max "${EXTRACTOR_PVALUE_MAX}")
+fi
+if [[ "${EXTRACTOR_MIN_ABS_LOGFC}" != "NA" ]]; then
+  EXTRACTOR_FLAGS+=(--min_abs_logfc "${EXTRACTOR_MIN_ABS_LOGFC}")
+fi
+if [[ "${EXTRACTOR_TOP_K}" != "NA" ]]; then
+  EXTRACTOR_FLAGS+=(--top_k "${EXTRACTOR_TOP_K}")
+fi
+if [[ "${EXTRACTOR_MIN_SCORE}" != "NA" ]]; then
+  EXTRACTOR_FLAGS+=(--min_score "${EXTRACTOR_MIN_SCORE}")
+fi
+if [[ "${EXTRACTOR_GMT_SOURCE}" != "NA" ]]; then
+  EXTRACTOR_FLAGS+=(--gmt_source "${EXTRACTOR_GMT_SOURCE}")
+fi
+if [[ "${EXTRACTOR_GMT_TOPK_LIST}" != "NA" ]]; then
+  EXTRACTOR_FLAGS+=(--gmt_topk_list "${EXTRACTOR_GMT_TOPK_LIST}")
+fi
+if [[ "${EXTRACTOR_GMT_MIN_GENES}" != "NA" ]]; then
+  EXTRACTOR_FLAGS+=(--gmt_min_genes "${EXTRACTOR_GMT_MIN_GENES}")
+fi
+if [[ "${EXTRACTOR_GMT_MAX_GENES}" != "NA" ]]; then
+  EXTRACTOR_FLAGS+=(--gmt_max_genes "${EXTRACTOR_GMT_MAX_GENES}")
+fi
+
+if [[ -n "${EXTRACTOR_GMT_BIOTYPE_ALLOWLIST}" ]]; then
+  EXTRACTOR_FLAGS+=(--gmt_biotype_allowlist "${EXTRACTOR_GMT_BIOTYPE_ALLOWLIST}")
+fi
+
+if [[ -n "${GTF_PATH}" ]]; then
+  EXTRACTOR_FLAGS+=(--gtf "${GTF_PATH}")
+fi
+
+EXTRACTOR_CMD=("${PYTHON_BIN}" -m geneset_extractors.cli convert rna_deg_multi "${EXTRACTOR_FLAGS[@]}")
+
+cat > "${MODEL_OUT}/commands.md" <<EOF
+# Commands For ${MODEL_ID}
+
+## Workflow
+
+```bash
+PYTHONPATH=${GTEX_OVERRIDE_DIR}:${DIG_DIR}/src ${WORKFLOW_CMD[*]}
+```
+
+## Extractor
+
+```bash
+PYTHONPATH=${GTEX_OVERRIDE_DIR}:${DIG_DIR}/src ${EXTRACTOR_CMD[*]}
+```
+EOF
+
+echo "[run_gtex_model] MODEL_ID=${MODEL_ID}" | tee "${MODEL_OUT}/run.log"
+(
+  cd "${DIG_DIR}"
+  PYTHONPATH="${GTEX_OVERRIDE_DIR}:${DIG_DIR}/src" "${WORKFLOW_CMD[@]}"
+) 2>&1 | tee -a "${MODEL_OUT}/run.log"
+(
+  cd "${DIG_DIR}"
+  PYTHONPATH="${GTEX_OVERRIDE_DIR}:${DIG_DIR}/src" "${EXTRACTOR_CMD[@]}"
+) 2>&1 | tee -a "${MODEL_OUT}/run.log"
+"${PYTHON_BIN}" "${REPO_ROOT}/geneset-extractor-dev/GTEx/src/compact_gtex_extractor_outputs.py" \
+  --extractor_out "${EXTRACTOR_OUT}" \
+  --model_id "${MODEL_ID}" \
+  --model_out "${MODEL_OUT}"
