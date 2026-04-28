@@ -38,35 +38,50 @@ def read_model_manifest(path: Path | None) -> dict[str, dict[str, str]]:
         return {str(row.get("model_id", "")).strip(): {str(k): str(v) for k, v in row.items()} for row in reader}
 
 
+def manifest_value(row: dict[str, str] | None, *keys: str) -> str:
+    if not row:
+        return ""
+    for key in keys:
+        if key in row and str(row.get(key, "")).strip():
+            return str(row.get(key, "")).strip()
+    return ""
+
+
 def representative_model_key(model_id: str, manifest_row: dict[str, str] | None) -> tuple[int, ... | str]:
     row = manifest_row or {}
     proposal_rank = {
         "anchor": 0,
+        "core": 0,
+        "sensitivity": 1,
+        "annotation": 1,
+        "threshold": 2,
+        "strictness": 2,
+        "ranked": 2,
         "defensible_alternative": 1,
         "parameter_sweep": 2,
-    }.get(row.get("family", ""), 3)
+    }.get(manifest_value(row, "family", "model_family"), 3)
     complexity = 0
-    if row.get("workflow_backend") not in {"", "auto"}:
+    if manifest_value(row, "workflow_backend", "WORKFLOW_BACKEND") not in {"", "auto"}:
         complexity += 2
-    if row.get("annotation_mode") not in {"", "gct_symbols_only"}:
+    if manifest_value(row, "annotation_mode", "ANNOTATION_MODE") not in {"", "gct_symbols_only"}:
         complexity += 2
-    if row.get("workflow_gene_filter_scope") not in {"", "contrast"}:
+    if manifest_value(row, "workflow_gene_filter_scope", "WORKFLOW_GENE_FILTER_SCOPE") not in {"", "contrast"}:
         complexity += 1
-    if row.get("workflow_balance_groups") not in {"", "false"}:
+    if manifest_value(row, "workflow_balance_groups", "WORKFLOW_BALANCE_GROUPS") not in {"", "false"}:
         complexity += 1
-    if row.get("extractor_postprocess_mode") not in {"", "harmonizome"}:
+    if manifest_value(row, "extractor_postprocess_mode", "EXTRACTOR_POSTPROCESS_MODE") not in {"", "harmonizome"}:
         complexity += 1
-    if row.get("extractor_score_mode") not in {"", "auto"}:
+    if manifest_value(row, "extractor_score_mode", "EXTRACTOR_SCORE_MODE") not in {"", "auto"}:
         complexity += 1
-    if row.get("extractor_select") not in {"", "top_k"}:
+    if manifest_value(row, "extractor_select", "EXTRACTOR_SELECT") not in {"", "top_k"}:
         complexity += 1
-    if row.get("extractor_disable_default_excludes") not in {"", "false"}:
+    if manifest_value(row, "extractor_disable_default_excludes", "EXTRACTOR_DISABLE_DEFAULT_EXCLUDES") not in {"", "false"}:
         complexity += 1
-    if row.get("extractor_emit_small_gene_sets") not in {"", "false"}:
+    if manifest_value(row, "extractor_emit_small_gene_sets", "EXTRACTOR_EMIT_SMALL_GENE_SETS") not in {"", "false"}:
         complexity += 1
-    if row.get("extractor_gmt_source") not in {"", "full"}:
+    if manifest_value(row, "extractor_gmt_source", "EXTRACTOR_GMT_SOURCE") not in {"", "full"}:
         complexity += 1
-    if row.get("extractor_gmt_biotype_allowlist") not in {"", "protein_coding"}:
+    if manifest_value(row, "extractor_gmt_biotype_allowlist", "EXTRACTOR_GMT_BIOTYPE_ALLOWLIST") not in {"", "protein_coding"}:
         complexity += 1
     for field_name in (
         "extractor_padj_max",
@@ -78,7 +93,8 @@ def representative_model_key(model_id: str, manifest_row: dict[str, str] | None)
         "extractor_gmt_min_genes",
         "extractor_gmt_max_genes",
     ):
-        if row.get(field_name) not in {"", "NA"}:
+        upper_name = field_name.upper()
+        if manifest_value(row, field_name, upper_name) not in {"", "NA"}:
             complexity += 1
     return (proposal_rank, complexity, *model_sort_key(model_id))
 
@@ -86,30 +102,34 @@ def representative_model_key(model_id: str, manifest_row: dict[str, str] | None)
 def representative_reason(model_id: str, manifest_row: dict[str, str] | None) -> str:
     row = manifest_row or {}
     reasons: list[str] = []
-    family = row.get("family", "")
+    family = manifest_value(row, "family", "model_family")
     if family == "anchor":
         reasons.append("anchor model")
+    elif family == "core":
+        reasons.append("core model")
+    elif family in {"sensitivity", "annotation", "threshold", "strictness", "ranked"}:
+        reasons.append(f"{family} model")
     elif family == "defensible_alternative":
         reasons.append("defensible alternative")
     elif family == "parameter_sweep":
         reasons.append("parameter sweep")
-    if row.get("workflow_backend") in {"", "auto"}:
+    if manifest_value(row, "workflow_backend", "WORKFLOW_BACKEND") in {"", "auto"}:
         reasons.append("auto backend")
     else:
-        reasons.append(f"forced backend={row.get('workflow_backend')}")
-    if row.get("annotation_mode") == "gct_symbols_only":
+        reasons.append(f"forced backend={manifest_value(row, 'workflow_backend', 'WORKFLOW_BACKEND')}")
+    if manifest_value(row, "annotation_mode", "ANNOTATION_MODE") == "gct_symbols_only":
         reasons.append("standard gct_symbols_only annotation")
-    elif row.get("annotation_mode"):
-        reasons.append(f"annotation_mode={row.get('annotation_mode')}")
-    if row.get("extractor_postprocess_mode") == "harmonizome" and row.get("extractor_score_mode") == "auto":
+    elif manifest_value(row, "annotation_mode", "ANNOTATION_MODE"):
+        reasons.append(f"annotation_mode={manifest_value(row, 'annotation_mode', 'ANNOTATION_MODE')}")
+    if manifest_value(row, "extractor_postprocess_mode", "EXTRACTOR_POSTPROCESS_MODE") == "harmonizome" and manifest_value(row, "extractor_score_mode", "EXTRACTOR_SCORE_MODE") == "auto":
         reasons.append("canonical harmonizome-style extractor defaults")
-    elif row.get("extractor_postprocess_mode") or row.get("extractor_score_mode"):
+    elif manifest_value(row, "extractor_postprocess_mode", "EXTRACTOR_POSTPROCESS_MODE") or manifest_value(row, "extractor_score_mode", "EXTRACTOR_SCORE_MODE"):
         reasons.append(
-            f"extractor={row.get('extractor_postprocess_mode', '')}/{row.get('extractor_score_mode', '')}".strip("/")
+            f"extractor={manifest_value(row, 'extractor_postprocess_mode', 'EXTRACTOR_POSTPROCESS_MODE')}/{manifest_value(row, 'extractor_score_mode', 'EXTRACTOR_SCORE_MODE')}".strip("/")
         )
-    if row.get("workflow_balance_groups") == "false":
+    if manifest_value(row, "workflow_balance_groups", "WORKFLOW_BALANCE_GROUPS") == "false":
         reasons.append("no balancing")
-    elif row.get("workflow_balance_groups") == "true":
+    elif manifest_value(row, "workflow_balance_groups", "WORKFLOW_BALANCE_GROUPS") == "true":
         reasons.append("balanced groups")
     return "; ".join(reasons) if reasons else "lowest-complexity manifest profile"
 
@@ -132,14 +152,20 @@ def build_reports(
 
     for model_dir in sorted(path for path in models_root.iterdir() if path.is_dir()):
         extractor_dir = model_dir / "extractor"
-        if not extractor_dir.exists():
-            continue
-        for comparison_dir in sorted(path for path in extractor_dir.iterdir() if path.is_dir() and path.name.startswith("age")):
-            geneset_path = comparison_dir / "geneset.tsv"
+        tissue_extractor_dir = model_dir / "tissue_extractor"
+        if extractor_dir.exists():
+            for comparison_dir in sorted(path for path in extractor_dir.iterdir() if path.is_dir() and path.name.startswith("age")):
+                geneset_path = comparison_dir / "geneset.tsv"
+                if not geneset_path.exists():
+                    continue
+                geneset_hash = sha256_path(geneset_path)
+                by_geneset_hash[geneset_hash].append((model_dir.name, comparison_dir.name))
+        elif tissue_extractor_dir.exists():
+            geneset_path = tissue_extractor_dir / "geneset.tsv"
             if not geneset_path.exists():
                 continue
             geneset_hash = sha256_path(geneset_path)
-            by_geneset_hash[geneset_hash].append((model_dir.name, comparison_dir.name))
+            by_geneset_hash[geneset_hash].append((model_dir.name, "tissue"))
 
     duplicate_geneset_rows: list[dict[str, str]] = []
     cluster_id = 0
@@ -164,12 +190,18 @@ def build_reports(
     model_signature_members: dict[tuple[tuple[str, str], ...], list[str]] = defaultdict(list)
     for model_dir in sorted(path for path in models_root.iterdir() if path.is_dir()):
         extractor_dir = model_dir / "extractor"
+        tissue_extractor_dir = model_dir / "tissue_extractor"
         signature_parts: list[tuple[str, str]] = []
-        for comparison_dir in sorted(path for path in extractor_dir.iterdir() if path.is_dir() and path.name.startswith("age")):
-            geneset_path = comparison_dir / "geneset.tsv"
-            if not geneset_path.exists():
-                continue
-            signature_parts.append((comparison_dir.name, sha256_path(geneset_path)))
+        if extractor_dir.exists():
+            for comparison_dir in sorted(path for path in extractor_dir.iterdir() if path.is_dir() and path.name.startswith("age")):
+                geneset_path = comparison_dir / "geneset.tsv"
+                if not geneset_path.exists():
+                    continue
+                signature_parts.append((comparison_dir.name, sha256_path(geneset_path)))
+        elif tissue_extractor_dir.exists():
+            geneset_path = tissue_extractor_dir / "geneset.tsv"
+            if geneset_path.exists():
+                signature_parts.append(("tissue", sha256_path(geneset_path)))
         if signature_parts:
             model_signature_members[tuple(signature_parts)].append(model_dir.name)
 
@@ -215,8 +247,8 @@ def write_summary(
         "# Identical GTEx Model Report",
         "",
         f"- models_root: `{models_root}`",
-        f"- duplicate comparison-level clusters: `{total_duplicate_clusters}`",
-        f"- duplicate comparison-level memberships: `{total_duplicate_genesets}`",
+        f"- duplicate geneset-level clusters: `{total_duplicate_clusters}`",
+        f"- duplicate geneset-level memberships: `{total_duplicate_genesets}`",
         f"- duplicate model-level clusters: `{len(duplicate_model_rows)}`",
         "",
         "## Model-Level Duplicate Clusters",
@@ -232,9 +264,9 @@ def write_summary(
                 f"across `{row['comparison_count']}` comparisons "
                 f"({row['comparisons']})"
             )
-    lines.extend(["", "## Comparison-Level Duplicate Clusters", ""])
+    lines.extend(["", "## Geneset-Level Duplicate Clusters", ""])
     if not duplicate_geneset_rows:
-        lines.append("No comparison-level duplicate clusters were detected.")
+        lines.append("No geneset-level duplicate clusters were detected.")
     else:
         seen_clusters: set[str] = set()
         for row in duplicate_geneset_rows:
