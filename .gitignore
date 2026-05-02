@@ -27,6 +27,10 @@
 !MoTrPAC/**/
 !KOMP2/**/
 
+!validation/
+!validation/**/
+!validation/**/*.py
+
 # Allow certain filetypes
 !LINCS_L1000/**/*.py
 !LINCS_L1000/**/*.r
