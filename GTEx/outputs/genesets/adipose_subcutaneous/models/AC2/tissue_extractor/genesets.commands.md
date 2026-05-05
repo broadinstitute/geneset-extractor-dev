@@ -11,7 +11,7 @@
 ## Top-Level Wrapper Command
 
 ```bash
-bash /home/ryank/software/geneset_extractors/geneset-extractor-dev/GTEx/run/run_gtex_tissue_gmt.sh --python_bin /home/ryank/software/miniconda3/envs/work/bin/python --rscript_bin /home/ryank/software/miniconda3/envs/work/bin/Rscript --tissue_id adipose_subcutaneous --prepared_dir /home/ryank/software/geneset_extractors/geneset-extractor-dev/GTEx/outputs/genesets/adipose_subcutaneous/prepared --run_root /home/ryank/software/geneset_extractors/geneset-extractor-dev/GTEx/outputs/genesets/adipose_subcutaneous/models --model_ids AC2 --gtf /home/ryank/software/geneset_extractors/inputs/GTEx/v10/gencode.v26.annotation.gtf.gz
+bash /home/ryank/software/geneset_extractors/geneset-extractor-dev/GTEx/run/run_continuous_age_model.sh --python_bin /home/ryank/software/miniconda3/envs/work/bin/python --rscript_bin /home/ryank/software/miniconda3/envs/work/bin/Rscript --tissue_id adipose_subcutaneous --prepared_dir /home/ryank/software/geneset_extractors/geneset-extractor-dev/GTEx/outputs/genesets/adipose_subcutaneous/prepared --run_root /home/ryank/software/geneset_extractors/geneset-extractor-dev/GTEx/outputs/genesets/adipose_subcutaneous/models --model_ids AC2 --gtf /home/ryank/software/geneset_extractors/inputs/GTEx/v10/gencode.v26.annotation.gtf.gz
 ```
 
 ## Workflow Script Path

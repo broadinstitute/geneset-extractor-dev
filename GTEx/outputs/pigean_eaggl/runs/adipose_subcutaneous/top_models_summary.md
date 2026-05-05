@@ -4,7 +4,7 @@
 - model_groups: `age_binned,continuous_age`
 - top_n_per_group: `5`
 - ranking rule: `total_score` descending, then `num_strong_queries`, then `mean_score`, then `best_query_score`
-- biology score source: existing PIGEAN/EAGGL biology summaries from `summarize_pigean_eaggl_results.py`
+- biology score source: existing PIGEAN/EAGGL biology summaries from `summarize_model_enrichment.py`
 - identical-model groups source: existing `identical_model_groups.tsv` outputs
 
 ## age_binned

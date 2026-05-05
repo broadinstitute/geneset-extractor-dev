@@ -1,7 +1,7 @@
 # Summary Commands
 
 ```bash
-python3 geneset-extractor-dev/GTEx/src/summarize_pigean_eaggl_results.py
+python3 geneset-extractor-dev/GTEx/src/summarize_model_enrichment.py
 ```
 
 output_prefix=continuous_age_models
