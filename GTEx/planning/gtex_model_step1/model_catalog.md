@@ -23,6 +23,13 @@ This catalog intentionally ignores everything under `geneset-extractor-dev/GTEx/
 
 Each proposed model is supported by the current codebase and varies only knobs that the current implementation actually exposes.
 
+Current naming convention:
+- `AB*`: age-binned contrast models
+- `AC*`: continuous-age models
+- `TV*`: reserved for future tissue-versus-reference models
+
+This catalog was originally drafted with `M1` to `M22`. In the current GTEx-local code and manifests, those models are now named `AB1` to `AB22`.
+
 The highest-value knobs for GTEx gene inclusion in the final GMT are:
 
 1. DE fit mode: `modern` vs `harmonizome`
@@ -366,16 +373,16 @@ The following are intentionally not modeled in step 1:
 
 ## Recommended Order
 
-1. Run anchors first: `M1`, `M2`, `M3`, `M4`.
-2. Run score and threshold sweeps next: `M5` to `M13`.
-3. Run workflow-design alternatives: `M14` to `M17`.
-4. Run annotation and technical-filter alternatives: `M18` to `M20`.
-5. Run backend validation last: `M21`, `M22`.
+1. Run anchors first: `AB1`, `AB2`, `AB3`, `AB4`.
+2. Run score and threshold sweeps next: `AB5` to `AB13`.
+3. Run workflow-design alternatives: `AB14` to `AB17`.
+4. Run annotation and technical-filter alternatives: `AB18` to `AB20`.
+5. Run backend validation last: `AB21`, `AB22`.
 
 ## Output Files From Step 1
 
 - `model_catalog.md`: this detailed model file
-- `model_manifest.tsv.gz`: one row per model with explicit settings
+- `model_manifest.tsv`: one row per model with explicit settings
 - `model_family_summary.tsv.gz`: counts and rationale by family
 - `output_manifest.tsv.gz`: manifest of step-1 deliverables
 - `run_summary.md`: compact summary of the step-1 result

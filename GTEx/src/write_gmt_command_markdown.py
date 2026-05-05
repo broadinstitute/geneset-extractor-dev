@@ -26,7 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--outputs_root",
         default=str(default_outputs_root()),
-        help="GTEx outputs/genesets root to scan for models and tissue_models directories.",
+        help="GTEx outputs/genesets root to scan for tissue directories with a unified models directory.",
     )
     return parser.parse_args()
 
@@ -71,11 +71,11 @@ def current_gtf_path() -> str:
 
 def wrapper_command_for(gmt_path: Path) -> str:
     root = repo_root()
-    tissue_root = gmt_path.parents[4] if "models" in gmt_path.parts else gmt_path.parents[3]
     python_bin = current_python_bin()
     gtf_path = current_gtf_path()
-    if "tissue_models" in gmt_path.parts:
-        model_id = gmt_path.parents[1].name
+    model_id = gmt_path.parents[1].name
+    if "tissue_extractor" in gmt_path.parts:
+        tissue_root = gmt_path.parents[3]
         tissue_id = tissue_root.name
         return " ".join(
             [
@@ -90,14 +90,15 @@ def wrapper_command_for(gmt_path: Path) -> str:
                 "--prepared_dir",
                 str(tissue_root / "prepared"),
                 "--run_root",
-                str(tissue_root / "tissue_models"),
+                str(tissue_root / "models"),
                 "--model_ids",
                 model_id,
                 "--gtf",
                 gtf_path,
             ]
         )
-    model_id = gmt_path.parents[2].name
+    tissue_root = gmt_path.parents[4] if gmt_path.parent.name.startswith("age") else gmt_path.parents[3]
+    model_id = gmt_path.parents[2].name if gmt_path.parent.name.startswith("age") else gmt_path.parents[1].name
     return " ".join(
         [
             "bash",
@@ -121,20 +122,23 @@ def discover_gmts(outputs_root: Path) -> list[Path]:
     for tissue_dir in sorted(path for path in outputs_root.iterdir() if path.is_dir()):
         models_dir = tissue_dir / "models"
         if models_dir.exists():
-            gmts.extend(sorted(models_dir.glob("M*/extractor/genesets.gmt")))
-            gmts.extend(sorted(models_dir.glob("M*/extractor/age*/genesets.gmt")))
-        tissue_models_dir = tissue_dir / "tissue_models"
-        if tissue_models_dir.exists():
-            gmts.extend(sorted(tissue_models_dir.glob("T*/tissue_extractor/genesets.gmt")))
+            gmts.extend(sorted(models_dir.glob("AB*/extractor/genesets.gmt")))
+            gmts.extend(sorted(models_dir.glob("AB*/extractor/age*/genesets.gmt")))
+            gmts.extend(sorted(models_dir.glob("AC*/tissue_extractor/genesets.gmt")))
+            gmts.extend(sorted(models_dir.glob("TV*/tissue_extractor/genesets.gmt")))
     return gmts
 
 
 def model_context(gmt_path: Path) -> dict[str, str | Path]:
-    if "tissue_models" in gmt_path.parts:
+    if "tissue_extractor" in gmt_path.parts:
         tissue_root = gmt_path.parents[3]
         model_dir = gmt_path.parents[1]
+        if model_dir.name.startswith("AC"):
+            model_group = "continuous_age"
+        else:
+            model_group = "tissue_versus"
         return {
-            "model_group": "tissue_models",
+            "model_group": model_group,
             "tissue_id": tissue_root.name,
             "model_id": model_dir.name,
             "model_dir": model_dir,
@@ -145,15 +149,19 @@ def model_context(gmt_path: Path) -> dict[str, str | Path]:
             "run_log": model_dir / "run.log",
             "workflow_script": model_dir / "workflow" / "run_continuous_age_limma_voom.R",
         }
-    tissue_root = gmt_path.parents[4]
-    model_dir = gmt_path.parents[2]
+    if gmt_path.parent.name.startswith("age"):
+        tissue_root = gmt_path.parents[4]
+        model_dir = gmt_path.parents[2]
+    else:
+        tissue_root = gmt_path.parents[3]
+        model_dir = gmt_path.parents[1]
     scope = "combined"
     scope_label = "all comparisons"
     if gmt_path.parent.name.startswith("age"):
         scope = "comparison"
         scope_label = gmt_path.parent.name
     return {
-        "model_group": "models",
+        "model_group": "age_binned",
         "tissue_id": tissue_root.name,
         "model_id": model_dir.name,
         "model_dir": model_dir,

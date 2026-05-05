@@ -20,5 +20,5 @@ Downstream GTEx model runs emit compact gene-set names using:
 
 Examples:
 
-- `M1__age50_20__pos`
-- `M1__age50_20__neg`
+- `AB1__age50_20__pos`
+- `AB1__age50_20__neg`

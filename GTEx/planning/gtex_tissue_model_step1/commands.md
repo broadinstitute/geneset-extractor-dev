@@ -10,7 +10,7 @@ cd /home/ryank/software/geneset_extractors
 bash geneset-extractor-dev/GTEx/run/run_gtex_tissue_gmt.sh \
   --python_bin /home/ryank/software/miniconda3/envs/work/bin/python \
   --tissue_id adipose_subcutaneous \
-  --model_ids T1,T5,T8
+  --model_ids AC1,AC5,AC8
 ```
 
 All tissue models:

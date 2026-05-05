@@ -11,7 +11,6 @@ GTF_PATH=""
 WRITE_COMMANDS_ONLY="false"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 DIG_DIR="${REPO_ROOT}/dig-gene-set-extractors"
-GTEX_OVERRIDE_DIR="${REPO_ROOT}/geneset-extractor-dev/GTEx/src"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -29,7 +28,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "${MODEL_ID}" || -z "${PREPARED_DIR}" || -z "${RUN_ROOT}" ]]; then
-  echo "Usage: $0 --model_id M1 --prepared_dir <dir> --run_root <dir> [--gtf <path>]" >&2
+  echo "Usage: $0 --model_id AB1 --prepared_dir <dir> --run_root <dir> [--gtf <path>]" >&2
   exit 1
 fi
 
@@ -38,7 +37,12 @@ if [[ "${WRITE_COMMANDS_ONLY}" != "true" && ( ! -f "${PREPARED_DIR}/tissue_count
   exit 1
 fi
 
-case "${MODEL_ID}" in
+LEGACY_MODEL_ID="${MODEL_ID}"
+if [[ "${MODEL_ID}" =~ ^AB([0-9]+)$ ]]; then
+  LEGACY_MODEL_ID="M${BASH_REMATCH[1]}"
+fi
+
+case "${LEGACY_MODEL_ID}" in
     M1)
       WORKFLOW_DE_MODE='modern'
       WORKFLOW_BACKEND='auto'
@@ -694,11 +698,11 @@ EXTRACTOR_CMD=("${PYTHON_BIN}" -m geneset_extractors.cli convert rna_deg_multi "
   printf '# Commands For %s\n\n' "${MODEL_ID}"
   printf '## Workflow\n\n'
   printf '```bash\n'
-  printf 'PYTHONPATH=%s:%s/src %s\n' "${GTEX_OVERRIDE_DIR}" "${DIG_DIR}" "${WORKFLOW_CMD[*]}"
+  printf 'PYTHONPATH=%s/src %s\n' "${DIG_DIR}" "${WORKFLOW_CMD[*]}"
   printf '```\n\n'
   printf '## Extractor\n\n'
   printf '```bash\n'
-  printf 'PYTHONPATH=%s:%s/src %s\n' "${GTEX_OVERRIDE_DIR}" "${DIG_DIR}" "${EXTRACTOR_CMD[*]}"
+  printf 'PYTHONPATH=%s/src %s\n' "${DIG_DIR}" "${EXTRACTOR_CMD[*]}"
   printf '```\n'
 } > "${MODEL_OUT}/commands.md"
 
@@ -709,11 +713,11 @@ fi
 echo "[run_gtex_model] MODEL_ID=${MODEL_ID}" | tee "${MODEL_OUT}/run.log"
 (
   cd "${DIG_DIR}"
-  PYTHONPATH="${GTEX_OVERRIDE_DIR}:${DIG_DIR}/src" "${WORKFLOW_CMD[@]}"
+  PYTHONPATH="${DIG_DIR}/src" "${WORKFLOW_CMD[@]}"
 ) 2>&1 | tee -a "${MODEL_OUT}/run.log"
 (
   cd "${DIG_DIR}"
-  PYTHONPATH="${GTEX_OVERRIDE_DIR}:${DIG_DIR}/src" "${EXTRACTOR_CMD[@]}"
+  PYTHONPATH="${DIG_DIR}/src" "${EXTRACTOR_CMD[@]}"
 ) 2>&1 | tee -a "${MODEL_OUT}/run.log"
 "${PYTHON_BIN}" "${REPO_ROOT}/geneset-extractor-dev/GTEx/src/compact_gtex_extractor_outputs.py" \
   --extractor_out "${EXTRACTOR_OUT}" \

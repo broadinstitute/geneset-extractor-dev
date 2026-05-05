@@ -5,6 +5,7 @@
 - Archive use: none
 - Existing scripts executed: none
 - New model count: `22`
+- Current model ID prefix: `AB`
 - Families:
   - `anchor`: `4`
   - `parameter_sweep`: `9`
@@ -18,6 +19,7 @@ The current latest GTEx bulk-expression release referenced for planning is `v10`
 
 - a fresh model catalog derived only from the current `dig-gene-set-extractors` code and docs
 - an explicit manifest of supported model settings
+- a current naming scheme with `AB*` for age-binned models, `AC*` for continuous-age models, and `TV*` reserved for future tissue-versus-reference models
 - a recommended execution order for later pipeline runs
 
 ## What This Step Did Not Do

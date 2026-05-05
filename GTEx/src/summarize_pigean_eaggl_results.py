@@ -111,14 +111,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--model_group",
-        choices=["models", "tissue_models"],
+        choices=["age_binned", "continuous_age", "tissue_versus"],
         default=None,
         help="optional model-group filter",
     )
     parser.add_argument(
         "--output_prefix",
         default=None,
-        help="optional output filename prefix; defaults to comparison_models or tissue_models when model_group is set",
+        help="optional output filename prefix; defaults to age_binned_models, continuous_age_models, or tissue_versus_models when model_group is set",
     )
     return parser
 
@@ -178,10 +178,12 @@ def model_sort_key(model_id: str) -> tuple[str, int]:
 def resolve_output_prefix(args: argparse.Namespace) -> str:
     if args.output_prefix:
         return str(args.output_prefix)
-    if args.model_group == "models":
-        return "comparison_models"
-    if args.model_group == "tissue_models":
-        return "tissue_models"
+    if args.model_group == "age_binned":
+        return "age_binned_models"
+    if args.model_group == "continuous_age":
+        return "continuous_age_models"
+    if args.model_group == "tissue_versus":
+        return "tissue_versus_models"
     return "all_models"
 
 

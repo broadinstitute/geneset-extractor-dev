@@ -55,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--outputs_root",
         default=str(gtex_root / "outputs" / "genesets"),
-        help="GTEx gene-set outputs root to scan for tissue directories containing models/ and/or tissue_models/",
+        help="GTEx gene-set outputs root to scan for tissue directories containing a unified models/ directory",
     )
     parser.add_argument(
         "--out_dir",
@@ -87,7 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--models",
         default=None,
-        help="optional comma-separated model IDs such as M1,M2 or T1,T2",
+        help="optional comma-separated model IDs such as AB1,AB2 or AC1,AC2",
     )
     parser.add_argument(
         "--comparisons",
@@ -128,38 +128,45 @@ def discover_queries(
             continue
         if allowed_tissues is not None and tissue_dir.name not in allowed_tissues:
             continue
-        sources = [
-            ("models", tissue_dir / "models", "M*/extractor/genesets.gmt"),
-            ("tissue_models", tissue_dir / "tissue_models", "T*/tissue_extractor/genesets.gmt"),
-        ]
-        for model_group, models_dir, pattern in sources:
-            if not models_dir.is_dir():
+        models_dir = tissue_dir / "models"
+        if not models_dir.is_dir():
+            continue
+        gmt_paths = sorted(models_dir.glob("AB*/extractor/genesets.gmt"))
+        gmt_paths.extend(sorted(models_dir.glob("AC*/tissue_extractor/genesets.gmt")))
+        gmt_paths.extend(sorted(models_dir.glob("TV*/tissue_extractor/genesets.gmt")))
+        for gmt_path in gmt_paths:
+            model_id = gmt_path.parent.parent.name
+            if model_id.startswith("AB"):
+                model_group = "age_binned"
+            elif model_id.startswith("AC"):
+                model_group = "continuous_age"
+            elif model_id.startswith("TV"):
+                model_group = "tissue_versus"
+            else:
                 continue
-            for gmt_path in sorted(models_dir.glob(pattern)):
-                model_id = gmt_path.parent.parent.name
-                if allowed_models is not None and model_id not in allowed_models:
-                    continue
-                with gmt_path.open(encoding="utf-8") as input_fh:
-                    for raw_line in input_fh:
-                        line = raw_line.strip()
-                        if not line:
-                            continue
-                        query_name, genes_blob = line.split("\t", 1)
-                        _, comparison, direction = split_query_name(query_name)
-                        if allowed_comparisons is not None and comparison not in allowed_comparisons:
-                            continue
-                        genes = [gene for gene in genes_blob.split() if gene]
-                        queries.append(
-                            QueryRecord(
-                                tissue_id=tissue_dir.name,
-                                model_id=model_id,
-                                query_name=query_name,
-                                comparison=comparison,
-                                direction=direction,
-                                genes=genes,
-                                model_group=model_group,
-                            )
+            if allowed_models is not None and model_id not in allowed_models:
+                continue
+            with gmt_path.open(encoding="utf-8") as input_fh:
+                for raw_line in input_fh:
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    query_name, genes_blob = line.split("\t", 1)
+                    _, comparison, direction = split_query_name(query_name)
+                    if allowed_comparisons is not None and comparison not in allowed_comparisons:
+                        continue
+                    genes = [gene for gene in genes_blob.split() if gene]
+                    queries.append(
+                        QueryRecord(
+                            tissue_id=tissue_dir.name,
+                            model_id=model_id,
+                            query_name=query_name,
+                            comparison=comparison,
+                            direction=direction,
+                            genes=genes,
+                            model_group=model_group,
                         )
+                    )
     return queries
 
 
@@ -216,9 +223,9 @@ def is_complete_status(status_payload: dict[str, object] | None, query_dir: Path
 
 
 def query_dir_for(out_dir: Path, query: QueryRecord) -> Path:
-    if query.model_group not in {"models", "tissue_models"}:
+    if query.model_group not in {"age_binned", "continuous_age", "tissue_versus"}:
         raise ValueError(f"unexpected model_group: {query.model_group}")
-    return out_dir / "runs" / query.tissue_id / query.model_group / query.model_id / query.query_slug
+    return out_dir / "runs" / query.tissue_id / "models" / query.model_id / query.query_slug
 
 
 def build_pigean_command(

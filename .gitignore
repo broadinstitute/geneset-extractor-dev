@@ -98,3 +98,5 @@
 !KOMP2/**/*.md
 !KOMP2/**/*.pdf
 !KOMP2/**/*.png
+
+archive/

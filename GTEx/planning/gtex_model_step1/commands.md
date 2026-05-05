@@ -2,6 +2,8 @@
 
 These are the actual commands used to derive the step-1 proposal artifacts.
 
+Current GTEx-local naming uses `AB*` for the age-binned models originally proposed here as `M1` through `M22`.
+
 ```bash
 sed -n '1,220p' GTEx_model_plan.txt
 find dig-gene-set-extractors/src/geneset_extractors -maxdepth 4 -type f | sort | rg 'rna|cli'

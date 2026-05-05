@@ -18,9 +18,9 @@ GTF_PATH="${GTF_PATH:-${REPO_ROOT}/inputs/GTEx/v10/gencode.v26.annotation.gtf.gz
 GENESET_TISSUE_ROOT="${GENESET_TISSUE_ROOT:-${GTEX_ROOT}/outputs/genesets/${TISSUE_ID}}"
 PREPARED_DIR="${PREPARED_DIR:-${GENESET_TISSUE_ROOT}/prepared}"
 COMPARISON_MODEL_RUN_ROOT="${COMPARISON_MODEL_RUN_ROOT:-${GENESET_TISSUE_ROOT}/models}"
-TISSUE_MODEL_RUN_ROOT="${TISSUE_MODEL_RUN_ROOT:-${GENESET_TISSUE_ROOT}/tissue_models}"
-COMPARISON_IDENTICAL_OUT_DIR="${COMPARISON_IDENTICAL_OUT_DIR:-${GENESET_TISSUE_ROOT}/identical_model_check}"
-TISSUE_IDENTICAL_OUT_DIR="${TISSUE_IDENTICAL_OUT_DIR:-${GENESET_TISSUE_ROOT}/tissue_identical_model_check}"
+TISSUE_MODEL_RUN_ROOT="${TISSUE_MODEL_RUN_ROOT:-${GENESET_TISSUE_ROOT}/models}"
+COMPARISON_IDENTICAL_OUT_DIR="${COMPARISON_IDENTICAL_OUT_DIR:-${GENESET_TISSUE_ROOT}/age_binned_identical_model_check}"
+TISSUE_IDENTICAL_OUT_DIR="${TISSUE_IDENTICAL_OUT_DIR:-${GENESET_TISSUE_ROOT}/continuous_age_identical_model_check}"
 
 PIGEAN_EAGGL_OUT_DIR="${PIGEAN_EAGGL_OUT_DIR:-${GTEX_ROOT}/outputs/pigean_eaggl}"
 
@@ -63,12 +63,14 @@ bash "${GTEX_ROOT}/run/run_gtex_tissue_gmt.sh" \
 bash "${GTEX_ROOT}/run/check_identical_gtex_models.sh" \
   --python_bin "${PYTHON_BIN}" \
   --models_root "${COMPARISON_MODEL_RUN_ROOT}" \
-  --out_dir "${COMPARISON_IDENTICAL_OUT_DIR}"
+  --out_dir "${COMPARISON_IDENTICAL_OUT_DIR}" \
+  --model_prefixes AB
 
 bash "${GTEX_ROOT}/run/check_identical_gtex_models.sh" \
   --python_bin "${PYTHON_BIN}" \
   --models_root "${TISSUE_MODEL_RUN_ROOT}" \
-  --out_dir "${TISSUE_IDENTICAL_OUT_DIR}"
+  --out_dir "${TISSUE_IDENTICAL_OUT_DIR}" \
+  --model_prefixes AC
 
 PYTHON_BIN="${PYTHON_BIN}" \
 bash "${GTEX_ROOT}/run/run_pigean_eaggl.sh" \
@@ -80,10 +82,10 @@ PYTHON_BIN="${PYTHON_BIN}" \
 bash "${GTEX_ROOT}/run/summarize_pigean_eaggl_results.sh" \
   --run_root "${PIGEAN_EAGGL_OUT_DIR}" \
   --tissue "${TISSUE_ID}" \
-  --model_group models
+  --model_group age_binned
 
 PYTHON_BIN="${PYTHON_BIN}" \
 bash "${GTEX_ROOT}/run/summarize_pigean_eaggl_results.sh" \
   --run_root "${PIGEAN_EAGGL_OUT_DIR}" \
   --tissue "${TISSUE_ID}" \
-  --model_group tissue_models
+  --model_group continuous_age

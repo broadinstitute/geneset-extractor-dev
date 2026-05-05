@@ -31,8 +31,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--model_groups",
-        default="models,tissue_models",
-        help="comma-separated list drawn from models,tissue_models",
+        default="age_binned,continuous_age",
+        help="comma-separated list drawn from age_binned,continuous_age,tissue_versus",
     )
     parser.add_argument(
         "--top_n",
@@ -133,7 +133,10 @@ def parse_model_catalog(path: Path) -> dict[str, str]:
             pieces.append("workflow: " + "; ".join(workflow_parts))
         if extractor_parts:
             pieces.append("extractor: " + "; ".join(extractor_parts))
-        definitions[model_id] = " | ".join(pieces) if pieces else ""
+        definition = " | ".join(pieces) if pieces else ""
+        definitions[model_id] = definition
+        if model_id.startswith("M") and model_id[1:].isdigit():
+            definitions[f"AB{model_id[1:]}"] = definition
     return definitions
 
 
@@ -343,21 +346,25 @@ def main() -> int:
         raise SystemExit("No model_groups requested")
 
     definition_maps = {
-        "models": parse_model_catalog(planning_root / "gtex_model_step1" / "model_catalog.md"),
-        "tissue_models": load_manifest_definitions(planning_root / "gtex_tissue_model_step1" / "model_manifest.tsv"),
+        "age_binned": parse_model_catalog(planning_root / "gtex_model_step1" / "model_catalog.md"),
+        "continuous_age": load_manifest_definitions(planning_root / "gtex_tissue_model_step1" / "model_manifest.tsv"),
+        "tissue_versus": {},
     }
 
     group_paths = {
-        "models": genesets_root / args.tissue / "identical_model_check" / "identical_model_groups.tsv",
-        "tissue_models": genesets_root / args.tissue / "tissue_identical_model_check" / "identical_model_groups.tsv",
+        "age_binned": genesets_root / args.tissue / "age_binned_identical_model_check" / "identical_model_groups.tsv",
+        "continuous_age": genesets_root / args.tissue / "continuous_age_identical_model_check" / "identical_model_groups.tsv",
+        "tissue_versus": genesets_root / args.tissue / "tissue_versus_identical_model_check" / "identical_model_groups.tsv",
     }
     model_summary_paths = {
-        "models": pigean_root / "runs" / args.tissue / "comparison_models_biology_model_summary.tsv.gz",
-        "tissue_models": pigean_root / "runs" / args.tissue / "tissue_models_biology_model_summary.tsv.gz",
+        "age_binned": pigean_root / "runs" / args.tissue / "age_binned_models_biology_model_summary.tsv.gz",
+        "continuous_age": pigean_root / "runs" / args.tissue / "continuous_age_models_biology_model_summary.tsv.gz",
+        "tissue_versus": pigean_root / "runs" / args.tissue / "tissue_versus_models_biology_model_summary.tsv.gz",
     }
     query_summary_paths = {
-        "models": pigean_root / "runs" / args.tissue / "comparison_models_biology_query_summary.tsv.gz",
-        "tissue_models": pigean_root / "runs" / args.tissue / "tissue_models_biology_query_summary.tsv.gz",
+        "age_binned": pigean_root / "runs" / args.tissue / "age_binned_models_biology_query_summary.tsv.gz",
+        "continuous_age": pigean_root / "runs" / args.tissue / "continuous_age_models_biology_query_summary.tsv.gz",
+        "tissue_versus": pigean_root / "runs" / args.tissue / "tissue_versus_models_biology_query_summary.tsv.gz",
     }
 
     fieldnames = [

@@ -22,19 +22,24 @@ Model families:
 - `ranked`: top-k ranked directional signatures
 
 Recommended starting subset:
-- `T1`: canonical ranked default
-- `T5`: canonical thresholded directional model
-- `T6`: stricter significance model
-- `T8`: ranked-by-stat alternative
+- `AC1`: canonical ranked default
+- `AC5`: canonical thresholded directional model
+- `AC6`: stricter significance model
+- `AC8`: ranked-by-stat alternative
 
 Full panel:
-- `T1`: linear age + `SEX`; harmonizome ranked; `gct_symbols_only`; protein-coding GMT
-- `T2`: same as `T1` without `SEX`
-- `T3`: same as `T1` with `gtf_annotated`
-- `T4`: same as `T3` but broader GMT gene space
-- `T5`: thresholded legacy signed `-log10(padj)` model
-- `T6`: stricter version of `T5`
-- `T7`: stricter threshold variant using a higher score floor
-- `T8`: top-k ranked-by-stat model
-- `T9`: top-k ranked by `logFC * -log10(p)`
-- `T10`: top-k ranked by `logFC`
+- `AC1`: linear age + `SEX`; harmonizome ranked; `gct_symbols_only`; protein-coding GMT
+- `AC2`: same as `AC1` without `SEX`
+- `AC3`: same as `AC1` with `gtf_annotated`
+- `AC4`: same as `AC3` but broader GMT gene space
+- `AC5`: thresholded legacy signed `-log10(padj)` model
+- `AC6`: stricter version of `AC5`
+- `AC7`: stricter threshold variant using a higher score floor
+- `AC8`: top-k ranked-by-stat model
+- `AC9`: top-k ranked by `logFC * -log10(p)`
+- `AC10`: top-k ranked by `logFC`
+
+Naming convention:
+- `AB*`: age-binned contrast models
+- `AC*`: continuous-age models
+- `TV*`: reserved for future tissue-versus-reference models

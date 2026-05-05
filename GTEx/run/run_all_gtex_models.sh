@@ -27,7 +27,7 @@ if [[ -z "${PREPARED_DIR}" || -z "${RUN_ROOT}" ]]; then
   exit 1
 fi
 
-for model_id in M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M12 M13 M14 M15 M16 M17 M18 M19 M20 M21 M22; do
+for model_id in AB1 AB2 AB3 AB4 AB5 AB6 AB7 AB8 AB9 AB10 AB11 AB12 AB13 AB14 AB15 AB16 AB17 AB18 AB19 AB20 AB21 AB22; do
   cmd=(
     bash "${SCRIPT_DIR}/run_gtex_model.sh"
     --model_id "${model_id}"

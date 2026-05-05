@@ -12,6 +12,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--models_root", required=True)
     parser.add_argument("--out_dir", required=True)
     parser.add_argument("--model_manifest")
+    parser.add_argument("--model_prefixes", default=None)
     return parser.parse_args()
 
 
@@ -146,11 +147,14 @@ def build_reports(
     models_root: Path,
     *,
     model_manifest: dict[str, dict[str, str]],
+    allowed_prefixes: set[str] | None,
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     geneset_rows: list[dict[str, str]] = []
     by_geneset_hash: dict[str, list[tuple[str, str]]] = defaultdict(list)
 
     for model_dir in sorted(path for path in models_root.iterdir() if path.is_dir()):
+        if allowed_prefixes is not None and not any(model_dir.name.startswith(prefix) for prefix in allowed_prefixes):
+            continue
         extractor_dir = model_dir / "extractor"
         tissue_extractor_dir = model_dir / "tissue_extractor"
         if extractor_dir.exists():
@@ -189,6 +193,8 @@ def build_reports(
 
     model_signature_members: dict[tuple[tuple[str, str], ...], list[str]] = defaultdict(list)
     for model_dir in sorted(path for path in models_root.iterdir() if path.is_dir()):
+        if allowed_prefixes is not None and not any(model_dir.name.startswith(prefix) for prefix in allowed_prefixes):
+            continue
         extractor_dir = model_dir / "extractor"
         tissue_extractor_dir = model_dir / "tissue_extractor"
         signature_parts: list[tuple[str, str]] = []
@@ -287,8 +293,15 @@ def main() -> int:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     model_manifest = read_model_manifest(Path(args.model_manifest) if args.model_manifest else None)
+    allowed_prefixes = None
+    if args.model_prefixes:
+        allowed_prefixes = {item.strip() for item in args.model_prefixes.split(",") if item.strip()}
 
-    duplicate_geneset_rows, duplicate_model_rows = build_reports(models_root, model_manifest=model_manifest)
+    duplicate_geneset_rows, duplicate_model_rows = build_reports(
+        models_root,
+        model_manifest=model_manifest,
+        allowed_prefixes=allowed_prefixes,
+    )
 
     geneset_tsv = out_dir / "identical_genesets.tsv"
     write_tsv(
