@@ -1,6 +1,11 @@
+import random
+
 import requests
 import csv
 import sys
+
+
+OUT_FILE = "../../data/gtex/output/random_genes_validation_results.txt"
 
 
 def read_all_loc_genes():
@@ -15,6 +20,19 @@ def read_all_loc_genes():
     #     print(gene, file=sys.stdout)
     print("Total genes in gene locations file:", len(all_loc_genes), file=sys.stderr)
     return all_loc_genes
+
+
+def save_results(out_f, gene_set_name, gene_set_size, genesets):
+    # Extract model from gene_set_name (prefix before first "__")
+    model = gene_set_name.split("__")[0] if "__" in gene_set_name else gene_set_name
+    gene_set_name_suffix = gene_set_name.split("__", 1)[1] if "__" in gene_set_name else ""
+    
+    for i, gene_set in enumerate(genesets):
+        enriched_gene_sets_name = gene_set['gene_set']
+        enriched_gene_set_size = gene_set['gene_set_size']
+        enriched_gene_set_p_value = gene_set['p_value']
+        out_f.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(model, gene_set_name_suffix, gene_set_name, gene_set_size, i, enriched_gene_sets_name, enriched_gene_set_size, enriched_gene_set_p_value))
+        out_f.flush()
 
 
 def run_eaggl(genes):
@@ -44,18 +62,18 @@ def run_eaggl(genes):
         print(gene_set['gene_set'], gene_set['gene_set_size'], gene_set['p_value'])
     return response_json['gene_sets']
 
+
 def main():
     all_loc_genes = read_all_loc_genes()
     print("loaded {} genes".format(len(all_loc_genes)))
-
-    random_genes = [
-        "WDR25",
-        "RECQL",
-        "RGPD3",
-        "WNT16",
-        "HOXA7"
-    ]
-    run_eaggl(random_genes)
+    n_simulations = 100
+    n_random_genes = 250
+    with open(OUT_FILE, 'a') as out_f:
+        for i in range(n_simulations):
+            random_genes = sorted(random.sample(all_loc_genes, n_random_genes))
+            print("\nSimulation {}: Running EAGGL with {} random genes".format(i+1, n_random_genes))
+            genesets = run_eaggl(random_genes)
+            save_results(out_f, "random_genes", n_random_genes, genesets)
 
 
 if __name__ == '__main__':

@@ -1,6 +1,6 @@
 import os
 
-from run_eaggl import run_eaggl
+from run_eaggl import run_eaggl, save_results
 
 BASE_FOLDER = "/humgen/diabetes2/users/ryank/geneset_extractors/GTEx/outputs/genesets/adipose_subcutaneous/models"
 OUT_FILE = "../../data/gtex/output/adipose_subcutaneous_validation_results.txt"
@@ -18,19 +18,6 @@ def parse_gmt_file(gmt_file):
                 "genes": gene_set_genes
             })
     return gene_sets
-
-
-def save_results(out_f, gene_set_name, gene_set_size, genesets):
-    # Extract model from gene_set_name (prefix before first "__")
-    model = gene_set_name.split("__")[0] if "__" in gene_set_name else gene_set_name
-    gene_set_name_suffix = gene_set_name.split("__", 1)[1] if "__" in gene_set_name else ""
-    
-    for i, gene_set in enumerate(genesets):
-        enriched_gene_sets_name = gene_set['gene_set']
-        enriched_gene_set_size = gene_set['gene_set_size']
-        enriched_gene_set_p_value = gene_set['p_value']
-        out_f.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(model, gene_set_name_suffix, gene_set_name, gene_set_size, i, enriched_gene_sets_name, enriched_gene_set_size, enriched_gene_set_p_value))
-        out_f.flush()
 
 
 def run_validation(folder_path):
