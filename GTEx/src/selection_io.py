@@ -17,6 +17,18 @@ def planning_root() -> Path:
     return gtex_root() / "planning"
 
 
+def default_out_root() -> Path:
+    return Path.cwd() / "gtex_outputs"
+
+
+def default_genesets_root() -> Path:
+    return default_out_root() / "genesets"
+
+
+def default_pigean_eaggl_root() -> Path:
+    return default_out_root() / "pigean_eaggl"
+
+
 def default_model_list_path() -> Path:
     return planning_root() / "model_list.tsv"
 

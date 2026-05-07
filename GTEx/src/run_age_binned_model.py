@@ -21,7 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--organism", default="human", choices=["human", "mouse"])
     parser.add_argument("--genome_build", default="hg38")
     parser.add_argument("--gtf")
-    parser.add_argument("--dig_dir")
+    parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--write_commands_only", action="store_true")
     return parser.parse_args()
 
@@ -259,7 +259,7 @@ def main() -> int:
     repo = repo_root()
     prepared_dir = Path(args.prepared_dir).resolve()
     run_root = Path(args.run_root).resolve()
-    dig_dir = Path(args.dig_dir).resolve() if args.dig_dir else repo / "dig-gene-set-extractors"
+    dig_dir = Path(args.dig_dir).resolve()
     resolved_gtf = resolve_input_path(args.gtf, base_dir=repo)
     model_settings = load_model_settings()
     if args.model_id not in model_settings:

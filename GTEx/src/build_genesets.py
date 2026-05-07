@@ -8,9 +8,9 @@ import sys
 from pathlib import Path
 
 from selection_io import (
+    default_out_root,
     default_model_list_path,
     default_tissue_list_path,
-    gtex_root,
     load_model_rows,
     load_tissue_rows,
     model_group_for,
@@ -28,13 +28,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tissues", default="all")
     parser.add_argument("--tissues_file")
     parser.add_argument("--model_list", default=str(default_model_list_path()))
-    parser.add_argument("--tissue_list", default=str(default_tissue_list_path()))
+    parser.add_argument("--tissue_list", required=True)
     parser.add_argument("--python_bin", default=sys.executable or "python3")
     parser.add_argument("--rscript_bin", default="Rscript")
-    parser.add_argument("--sample_metadata_tsv", default=str(repo_root() / "inputs" / "GTEx" / "v10" / "GTEx_Analysis_v10_Annotations_SampleAttributesDS.txt"))
-    parser.add_argument("--subject_metadata_tsv", default=str(repo_root() / "inputs" / "GTEx" / "v10" / "GTEx_Analysis_v10_Annotations_SubjectPhenotypesDS.txt"))
-    parser.add_argument("--gtf", default=str(repo_root() / "inputs" / "GTEx" / "v10" / "gencode.v26.annotation.gtf.gz"))
-    parser.add_argument("--outputs_root", default=str(gtex_root() / "outputs" / "genesets"))
+    parser.add_argument("--sample_metadata_tsv", required=True)
+    parser.add_argument("--subject_metadata_tsv", required=True)
+    parser.add_argument("--gtf")
+    parser.add_argument("--dig_dir", required=True)
+    parser.add_argument("--out_root", default=str(default_out_root()))
     parser.add_argument("--overwrite", action="store_true")
     return parser
 
@@ -64,6 +65,20 @@ def existing_output_message(*, tissue_id: str, model_id: str | None, path: Path)
     )
 
 
+def model_requires_gtf(row: dict[str, str]) -> bool:
+    annotation_mode = str(row.get("annotation_mode", "")).strip().lower()
+    return annotation_mode == "gtf_annotated"
+
+
+def require_existing_file(path_text: str, label: str) -> Path:
+    path = relative_or_absolute_path(path_text)
+    if not path.exists():
+        raise SystemExit(f"Missing {label}: {path}")
+    if not path.is_file():
+        raise SystemExit(f"Expected {label} to be a file: {path}")
+    return path
+
+
 def main() -> int:
     args = build_parser().parse_args()
     model_rows = load_model_rows(Path(args.model_list))
@@ -81,14 +96,32 @@ def main() -> int:
         key_field="tissue_id",
     )
     tissue_by_id = row_map(tissue_rows, "tissue_id")
-    outputs_root = Path(args.outputs_root).resolve()
-    src_root = gtex_root() / "src"
+    model_by_id = row_map(model_rows, "model_id")
+    out_root = Path(args.out_root).resolve()
+    outputs_root = out_root / "genesets"
+    src_root = repo_root() / "geneset-extractor-dev" / "GTEx" / "src"
+    sample_metadata_tsv = require_existing_file(args.sample_metadata_tsv, "sample metadata TSV")
+    subject_metadata_tsv = require_existing_file(args.subject_metadata_tsv, "subject metadata TSV")
+    dig_dir = Path(relative_or_absolute_path(args.dig_dir)).resolve()
+    if not dig_dir.exists():
+        raise SystemExit(f"Missing dig-gene-set-extractors directory: {dig_dir}")
+    if not dig_dir.is_dir():
+        raise SystemExit(f"Expected dig-gene-set-extractors path to be a directory: {dig_dir}")
 
     age_binned_models = [model_id for model_id in selected_models if model_group_for(model_id) == "age_binned"]
     continuous_age_models = [model_id for model_id in selected_models if model_group_for(model_id) == "continuous_age"]
     unsupported_models = [model_id for model_id in selected_models if model_group_for(model_id) == "tissue_versus"]
     if unsupported_models:
         raise SystemExit("TV* geneset building is not implemented yet")
+    gtf_required_models = [model_id for model_id in selected_models if model_requires_gtf(model_by_id[model_id])]
+    if gtf_required_models and not args.gtf:
+        raise SystemExit(
+            "The selected models require --gtf but none was provided: "
+            + ", ".join(gtf_required_models)
+        )
+    resolved_gtf: Path | None = None
+    if args.gtf:
+        resolved_gtf = require_existing_file(args.gtf, "GTF")
 
     conflicts: list[str] = []
     for tissue_id in selected_tissues:
@@ -105,7 +138,12 @@ def main() -> int:
 
     for tissue_id in selected_tissues:
         tissue_row = tissue_by_id[tissue_id]
-        counts_gct = relative_or_absolute_path(str(tissue_row.get("counts_gct", "")).strip())
+        counts_gct_value = str(tissue_row.get("counts_gct", "")).strip()
+        if not counts_gct_value:
+            raise SystemExit(
+                f"Missing counts_gct for tissue={tissue_id} in tissue list {Path(args.tissue_list).resolve()}"
+            )
+        counts_gct = relative_or_absolute_path(counts_gct_value)
         if not counts_gct.exists():
             raise SystemExit(f"Missing counts file for {tissue_id}: {counts_gct}")
         tissue_label = str(tissue_row.get("tissue_label", "")).strip()
@@ -126,9 +164,9 @@ def main() -> int:
                 "--counts_gct",
                 str(counts_gct),
                 "--sample_metadata_tsv",
-                str(relative_or_absolute_path(args.sample_metadata_tsv)),
+                str(sample_metadata_tsv),
                 "--subject_metadata_tsv",
-                str(relative_or_absolute_path(args.subject_metadata_tsv)),
+                str(subject_metadata_tsv),
                 "--tissue_label",
                 tissue_label,
                 "--out_dir",
@@ -149,9 +187,14 @@ def main() -> int:
                     str(models_root),
                     "--python_bin",
                     str(Path(args.python_bin).resolve()),
-                    "--gtf",
-                    str(relative_or_absolute_path(args.gtf)),
+                    "--dig_dir",
+                    str(dig_dir),
                 ]
+                + (
+                    ["--gtf", str(resolved_gtf)]
+                    if resolved_gtf is not None
+                    else []
+                )
             )
 
         if continuous_age_models:
@@ -169,11 +212,16 @@ def main() -> int:
                     str(prepared_dir),
                     "--run_root",
                     str(models_root),
+                    "--dig_dir",
+                    str(dig_dir),
                     "--model_ids",
                     ",".join(continuous_age_models),
-                    "--gtf",
-                    str(relative_or_absolute_path(args.gtf)),
                 ]
+                + (
+                    ["--gtf", str(resolved_gtf)]
+                    if resolved_gtf is not None
+                    else []
+                )
             )
     return 0
 

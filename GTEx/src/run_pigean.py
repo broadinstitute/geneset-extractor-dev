@@ -24,8 +24,8 @@ from run_model_enrichment import (
 )
 from selection_io import (
     default_model_list_path,
+    default_out_root,
     default_tissue_list_path,
-    gtex_root,
     load_model_rows,
     load_tissue_rows,
     repo_root,
@@ -41,11 +41,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tissues_file")
     parser.add_argument("--model_list", default=str(default_model_list_path()))
     parser.add_argument("--tissue_list", default=str(default_tissue_list_path()))
-    parser.add_argument("--outputs_root", default=str(gtex_root() / "outputs" / "genesets"))
-    parser.add_argument("--out_dir", default=str(gtex_root() / "outputs" / "pigean_eaggl"))
+    parser.add_argument("--out_root", default=str(default_out_root()))
+    parser.add_argument("--outputs_root")
+    parser.add_argument("--out_dir")
     parser.add_argument("--python_bin", default=sys.executable or "python3")
-    parser.add_argument("--pigean_src", default=str(repo_root() / "pigean" / "src"))
-    parser.add_argument("--bundle_data_dir", default=str(repo_root() / "pigean" / "bundles" / "model_small-2026.02.22" / "data"))
+    parser.add_argument("--pigean_src", required=True)
+    parser.add_argument("--bundle_data_dir", required=True)
     parser.add_argument("--pigean_mode", choices=["betas", "gibbs"], default="betas")
     parser.add_argument("--comparisons", default=None)
     parser.add_argument("--query_limit", type=int, default=None)
@@ -152,10 +153,19 @@ def main() -> int:
     tissue_rows = load_tissue_rows(Path(args.tissue_list))
     selected_models = resolve_requested_ids(csv_text=args.models, file_path=args.models_file, rows=model_rows, key_field="model_id")
     selected_tissues = resolve_requested_ids(csv_text=args.tissues, file_path=args.tissues_file, rows=tissue_rows, key_field="tissue_id")
-    outputs_root = Path(args.outputs_root).resolve()
-    out_dir = Path(args.out_dir).resolve()
+    out_root = Path(args.out_root).resolve()
+    outputs_root = Path(args.outputs_root).resolve() if args.outputs_root else (out_root / "genesets")
+    out_dir = Path(args.out_dir).resolve() if args.out_dir else (out_root / "pigean_eaggl")
     bundle_data_dir = Path(args.bundle_data_dir).resolve()
     pigean_src = Path(args.pigean_src).resolve()
+    if not pigean_src.exists():
+        raise SystemExit(f"Missing pigean src directory: {pigean_src}")
+    if not pigean_src.is_dir():
+        raise SystemExit(f"Expected pigean src path to be a directory: {pigean_src}")
+    if not bundle_data_dir.exists():
+        raise SystemExit(f"Missing bundle data directory: {bundle_data_dir}")
+    if not bundle_data_dir.is_dir():
+        raise SystemExit(f"Expected bundle data path to be a directory: {bundle_data_dir}")
     allowed_comparisons = parse_optional_csv(args.comparisons)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -195,6 +205,7 @@ def main() -> int:
         )
 
     manifest = {
+        "out_root": str(out_root),
         "outputs_root": str(outputs_root),
         "out_dir": str(out_dir),
         "stage": "pigean",

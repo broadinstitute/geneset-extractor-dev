@@ -24,14 +24,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--tissue_id", required=True)
     parser.add_argument("--model_ids", default="all", help="comma-separated model IDs or 'all'")
-    parser.add_argument("--prepared_dir")
-    parser.add_argument("--run_root")
+    parser.add_argument("--prepared_dir", required=True)
+    parser.add_argument("--run_root", required=True)
     parser.add_argument("--python_bin", default=sys.executable or "python3")
-    parser.add_argument("--rscript_bin", default="Rscript")
+    parser.add_argument("--rscript_bin", required=True)
     parser.add_argument("--organism", default="human", choices=["human", "mouse"])
     parser.add_argument("--genome_build", default="hg38")
     parser.add_argument("--gtf")
-    parser.add_argument("--dig_dir")
+    parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--write_commands_only", action="store_true")
     return parser.parse_args()
 
@@ -42,14 +42,6 @@ def repo_root() -> Path:
 
 def default_tissue_model_manifest() -> Path:
     return repo_root() / "geneset-extractor-dev" / "GTEx" / "planning" / "geneset_build" / "continuous_age_models" / "model_manifest.tsv"
-
-
-def default_prepared_dir(tissue_id: str) -> Path:
-    return repo_root() / "geneset-extractor-dev" / "GTEx" / "outputs" / "genesets" / tissue_id / "prepared"
-
-
-def default_run_root(tissue_id: str) -> Path:
-    return repo_root() / "geneset-extractor-dev" / "GTEx" / "outputs" / "genesets" / tissue_id / "models"
 
 
 def resolve_input_path(path_value: str | None, *, base_dir: Path) -> str | None:
@@ -496,9 +488,9 @@ def write_run_outputs(
 def main() -> int:
     args = parse_args()
     repo = repo_root()
-    prepared_dir = Path(args.prepared_dir) if args.prepared_dir else default_prepared_dir(args.tissue_id)
-    run_root = Path(args.run_root) if args.run_root else default_run_root(args.tissue_id)
-    dig_dir = Path(args.dig_dir) if args.dig_dir else repo / "dig-gene-set-extractors"
+    prepared_dir = Path(args.prepared_dir)
+    run_root = Path(args.run_root)
+    dig_dir = Path(args.dig_dir).resolve()
     rscript_bin = resolve_rscript_bin(args.rscript_bin)
     resolved_gtf = resolve_input_path(args.gtf, base_dir=repo)
     model_settings = load_tissue_model_settings()
