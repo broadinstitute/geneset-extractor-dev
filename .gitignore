@@ -10,6 +10,8 @@
 !GTEx/planning/geneset_build/age_binned_models/model_manifest.tsv
 !GTEx/planning/model_list.tsv
 !GTEx/planning/tissue_list.tsv
+!GTEx/planning/geneset_build/age_binned_models/model_manifest.tsv
+!GTEx/planning/geneset_build/continuous_age_models/model_manifest.tsv
 
 # Allow traversing these subdirectories
 !LINCS_L1000/
