@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -34,12 +35,33 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--subject_metadata_tsv", default=str(repo_root() / "inputs" / "GTEx" / "v10" / "GTEx_Analysis_v10_Annotations_SubjectPhenotypesDS.txt"))
     parser.add_argument("--gtf", default=str(repo_root() / "inputs" / "GTEx" / "v10" / "gencode.v26.annotation.gtf.gz"))
     parser.add_argument("--outputs_root", default=str(gtex_root() / "outputs" / "genesets"))
+    parser.add_argument("--overwrite", action="store_true")
     return parser
 
 
 def run_command(command: list[str]) -> None:
     print("$ " + " ".join(command), flush=True)
     subprocess.run(command, check=True)
+
+
+def dir_nonempty(path: Path) -> bool:
+    return path.exists() and path.is_dir() and any(path.iterdir())
+
+
+def overwrite_dir(path: Path) -> None:
+    if path.exists():
+        shutil.rmtree(path)
+
+
+def existing_output_message(*, tissue_id: str, model_id: str | None, path: Path) -> str:
+    header = f"Output already exists for tissue={tissue_id}"
+    if model_id is not None:
+        header += f" model={model_id}"
+    return (
+        f"{header}:\n{path}\n\n"
+        "Refusing to continue because --overwrite was not provided.\n"
+        "Re-run with --overwrite to replace this output."
+    )
 
 
 def main() -> int:
@@ -68,6 +90,19 @@ def main() -> int:
     if unsupported_models:
         raise SystemExit("TV* geneset building is not implemented yet")
 
+    conflicts: list[str] = []
+    for tissue_id in selected_tissues:
+        tissue_root = outputs_root / tissue_id
+        prepared_dir = tissue_root / "prepared"
+        if dir_nonempty(prepared_dir):
+            conflicts.append(existing_output_message(tissue_id=tissue_id, model_id=None, path=prepared_dir))
+        for model_id in [*age_binned_models, *continuous_age_models]:
+            model_out = tissue_root / "models" / model_id
+            if dir_nonempty(model_out):
+                conflicts.append(existing_output_message(tissue_id=tissue_id, model_id=model_id, path=model_out))
+    if conflicts and not args.overwrite:
+        raise SystemExit("\n\n".join(conflicts))
+
     for tissue_id in selected_tissues:
         tissue_row = tissue_by_id[tissue_id]
         counts_gct = relative_or_absolute_path(str(tissue_row.get("counts_gct", "")).strip())
@@ -79,6 +114,10 @@ def main() -> int:
         tissue_root = outputs_root / tissue_id
         prepared_dir = tissue_root / "prepared"
         models_root = tissue_root / "models"
+        if args.overwrite:
+            overwrite_dir(prepared_dir)
+            for model_id in [*age_binned_models, *continuous_age_models]:
+                overwrite_dir(models_root / model_id)
 
         run_command(
             [

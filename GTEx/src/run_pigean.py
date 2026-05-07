@@ -6,6 +6,7 @@ import csv
 import gzip
 import json
 import os
+import shutil
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -49,6 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--comparisons", default=None)
     parser.add_argument("--query_limit", type=int, default=None)
     parser.add_argument("--force_rerun", action="store_true")
+    parser.add_argument("--overwrite", action="store_true")
     return parser
 
 
@@ -64,6 +66,20 @@ def write_tsv_gz(path: Path, rows: list[dict[str, object]], fieldnames: list[str
             writer.writerow({field: row.get(field, "") for field in fieldnames})
 
 
+def dir_nonempty(path: Path) -> bool:
+    return path.exists() and path.is_dir() and any(path.iterdir())
+
+
+def existing_query_output_message(query: QueryRecord, query_dir: Path) -> str:
+    return (
+        "Output already exists for "
+        f"tissue={query.tissue_id} model={query.model_id} comparison={query.comparison} direction={query.direction}:\n"
+        f"{query_dir}\n\n"
+        "Refusing to continue because --overwrite was not provided.\n"
+        "Re-run with --overwrite to replace this output."
+    )
+
+
 def execute_pigean(
     query: QueryRecord,
     *,
@@ -73,8 +89,11 @@ def execute_pigean(
     bundle_data_dir: Path,
     pigean_mode: str,
     force_rerun: bool,
+    overwrite: bool,
 ) -> dict[str, object]:
     query_dir = query_dir_for(out_dir, query)
+    if overwrite and query_dir.exists():
+        shutil.rmtree(query_dir)
     query_dir.mkdir(parents=True, exist_ok=True)
     status_path = query_dir / "pigean_status.json"
     existing_status = load_existing_status(status_path)
@@ -148,6 +167,14 @@ def main() -> int:
     )
     if args.query_limit is not None:
         queries = queries[: args.query_limit]
+    if not args.overwrite:
+        conflicts = [
+            existing_query_output_message(query, query_dir_for(out_dir, query))
+            for query in queries
+            if dir_nonempty(query_dir_for(out_dir, query))
+        ]
+        if conflicts:
+            raise SystemExit("\n\n".join(conflicts))
 
     env = os.environ.copy()
     env["PYTHONPATH"] = str(pigean_src)
@@ -163,6 +190,7 @@ def main() -> int:
                 bundle_data_dir=bundle_data_dir,
                 pigean_mode=args.pigean_mode,
                 force_rerun=args.force_rerun,
+                overwrite=args.overwrite,
             )
         )
 
