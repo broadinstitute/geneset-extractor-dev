@@ -4,6 +4,7 @@
 # Except these base files...
 !.gitignore
 !environment.yml
+!requirements.txt
 
 # Allow traversing these subdirectories
 !LINCS_L1000/

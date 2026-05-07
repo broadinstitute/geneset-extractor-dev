@@ -1,0 +1,198 @@
+# Pipeline Inputs
+
+This document lists the current inputs and environment requirements needed to run the GTEx pipeline end to end.
+
+## Scope
+
+The current top-level flow is:
+
+1. `build_genesets.sh`
+2. `run_pigean.sh`
+3. `run_eaggl.sh`
+4. `summarize_model_enrichment.sh`
+5. `summarize_top_models.sh`
+
+This file covers:
+
+- biological data inputs
+- planning/config inputs
+- external repository inputs
+- Python requirements
+- R requirements
+
+## Biological Data Inputs
+
+These are the scientific input files needed to build GTEx gene sets.
+
+### 1. Tissue counts file for each selected tissue
+
+Each selected tissue must have a `counts_gct` entry in the supplied tissue list file.
+
+Example for adipose subcutaneous:
+
+- `inputs/GTEx/v10/gene_reads_v10_adipose_subcutaneous.gct.gz`
+
+### 2. Sample metadata TSV
+
+Required by `build_genesets.sh`.
+
+Example:
+
+- `inputs/GTEx/v10/GTEx_Analysis_v10_Annotations_SampleAttributesDS.txt`
+
+### 3. Subject metadata TSV
+
+Required by `build_genesets.sh`.
+
+Example:
+
+- `inputs/GTEx/v10/GTEx_Analysis_v10_Annotations_SubjectPhenotypesDS.txt`
+
+### 4. GTF annotation file
+
+Required only when the selected models use `gtf_annotated` mode.
+
+Example:
+
+- `inputs/GTEx/v10/gencode.v39.annotation.gtf.gz`
+
+## Planning And Config Inputs
+
+These files are part of the runtime configuration surface.
+
+### 1. Model list
+
+Used to define valid selectable model IDs and their enabled/default state.
+
+- `geneset-extractor-dev/GTEx/planning/model_list.tsv`
+
+### 2. Tissue list
+
+Used to define valid selectable tissue IDs and per-tissue counts file paths.
+
+- `geneset-extractor-dev/GTEx/planning/tissue_list.tsv`
+
+### 3. Continuous-age model manifest
+
+Used by the continuous-age model runner.
+
+- `geneset-extractor-dev/GTEx/planning/geneset_build/continuous_age_models/model_manifest.tsv`
+
+### 4. Age-binned model manifest
+
+Used by the age-binned model runner.
+
+- `geneset-extractor-dev/GTEx/planning/geneset_build/age_binned_models/model_manifest.tsv`
+
+## External Repository Inputs
+
+These are required directories supplied explicitly at runtime.
+
+### 1. `dig-gene-set-extractors`
+
+Required by `build_genesets.sh`, which passes the path through to:
+
+- `run_age_binned_model.py`
+- `run_continuous_age_model.py`
+
+Required CLI argument:
+
+- `--dig_dir /path/to/dig-gene-set-extractors`
+
+### 2. `pigean/src`
+
+Required by:
+
+- `run_pigean.sh`
+- `run_eaggl.sh`
+
+Required CLI argument:
+
+- `--pigean_src /path/to/pigean/src`
+
+### 3. PIGEAN bundle data directory
+
+Required by:
+
+- `run_pigean.sh`
+- `run_eaggl.sh`
+
+Required CLI argument:
+
+- `--bundle_data_dir /path/to/pigean/bundles/model_small-2026.02.22/data`
+
+## Python Requirements
+
+### GTEx-local Python scripts
+
+The active Python scripts under `geneset-extractor-dev/GTEx/src/` currently use only the Python standard library.
+
+The main modules used are:
+
+- `argparse`
+- `csv`
+- `gzip`
+- `json`
+- `math`
+- `os`
+- `re`
+- `shlex`
+- `shutil`
+- `subprocess`
+- `sys`
+- `pathlib`
+- `dataclasses`
+- `datetime`
+- `collections`
+- `typing`
+
+So there is no separate third-party Python package requirement for the GTEx-local wrappers themselves.
+
+### Upstream Python dependencies
+
+The pipeline also invokes external Python code from other repositories:
+
+- `dig-gene-set-extractors`
+- `pigean`
+
+Those repositories may have their own Python package requirements. This planning document does not duplicate them; it assumes their environments are already installed and runnable.
+
+## R Requirements
+
+Continuous-age model generation requires:
+
+- an explicit `Rscript` path supplied via `--rscript_bin`
+- an R environment with these packages installed:
+  - `edgeR`
+  - `limma`
+
+## Non-Input Runtime Defaults
+
+These are not external scientific inputs, but they still affect execution:
+
+- `--python_bin`
+- `--rscript_bin`
+- `--out_root`
+
+If `--out_root` is omitted on the active top-level scripts, outputs default to:
+
+- `./gtex_outputs/genesets`
+- `./gtex_outputs/pigean_eaggl`
+
+relative to the current working directory.
+
+## Canonical Checklist
+
+To run the full current pipeline, make sure you have:
+
+- a model list TSV
+- a tissue list TSV
+- a counts GCT file for each selected tissue
+- a GTEx sample metadata TSV
+- a GTEx subject metadata TSV
+- a GTF file if the selected models require it
+- a `dig-gene-set-extractors` checkout
+- a `pigean/src` checkout
+- a PIGEAN bundle data directory
+- a Python interpreter that can run the GTEx and external Python code
+- an `Rscript` binary with `edgeR` and `limma` installed

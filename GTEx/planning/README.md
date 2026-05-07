@@ -41,6 +41,7 @@ Selection inputs for models and tissues are maintained directly under planning:
 - `geneset-extractor-dev/GTEx/planning/model_list.tsv`
 - `geneset-extractor-dev/GTEx/planning/tissue_list.tsv`
 - `geneset-extractor-dev/GTEx/planning/selection_inputs.md`
+- `geneset-extractor-dev/GTEx/planning/pipeline_inputs.md`
 
 Age-binned wrapper notes and per-model provenance are folded into:
 
