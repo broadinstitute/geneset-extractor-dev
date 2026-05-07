@@ -12,14 +12,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
-LONG_TOPK_PATTERN = re.compile(
-    r"rna_deg__signature=(.+?)__score_mode=[A-Za-z0-9_]+__(pos|neg|abs)__topk=\d+"
-)
-LONG_MASS_PATTERN = re.compile(
-    r"rna_deg__signature=(.+?)__score_mode=[A-Za-z0-9_]+__(pos|neg|abs)__hpd_mass=[A-Za-z0-9.]+__k=\d+"
-)
-LONG_BASE_PATTERN = re.compile(r"rna_deg__signature=(.+?)__score_mode=[A-Za-z0-9_]+")
 AGE_BIN_PATTERN = re.compile(r"^\s*(\d+)\s*-\s*(\d+)\s*$")
 
 
@@ -361,36 +353,6 @@ def run_command(cmd: list[str], *, cwd: Path, env: dict[str, str], log_path: Pat
         raise subprocess.CalledProcessError(completed.returncode, cmd)
 
 
-def shorten_text(text: str) -> str:
-    text = LONG_TOPK_PATTERN.sub(lambda match: f"{match.group(1)}__{match.group(2)}", text)
-    text = LONG_MASS_PATTERN.sub(lambda match: f"{match.group(1)}__{match.group(2)}", text)
-    text = LONG_BASE_PATTERN.sub(lambda match: match.group(1), text)
-    return text
-
-
-def rewrite_text_file(path: Path) -> bool:
-    raw = path.read_bytes()
-    had_crlf = b"\r\n" in raw
-    try:
-        original = path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        return False
-    updated = shorten_text(original)
-    if updated == original and not had_crlf:
-        return False
-    path.write_text(updated, encoding="utf-8", newline="\n")
-    return True
-
-
-def compact_tissue_outputs(extractor_out: Path, model_out: Path) -> None:
-    for path in extractor_out.rglob("*"):
-        if path.is_file():
-            rewrite_text_file(path)
-    for path in model_out.rglob("*"):
-        if path.is_file():
-            rewrite_text_file(path)
-
-
 def write_model_commands(
     *,
     model_out: Path,
@@ -634,7 +596,6 @@ def main() -> int:
             write_text(tissue_deg_tsv.with_suffix(".log"), f"continuous age workflow completed for {model_id}\n")
             write_tissue_method_note(extractor_out / "naming_reference.md", args.tissue_id, model_id)
             run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
-            compact_tissue_outputs(extractor_out, model_out)
             status_row["status"] = "complete"
             log_line(top_log, f"[run_gtex_tissue_gmt] complete model={model_id}")
         except subprocess.CalledProcessError as exc:

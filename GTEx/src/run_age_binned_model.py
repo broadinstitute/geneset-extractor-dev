@@ -12,7 +12,7 @@ from pathlib import Path
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run one GTEx age-binned model and emit compacted extractor outputs."
+        description="Run one GTEx age-binned model and emit extractor outputs."
     )
     parser.add_argument("--model_id", required=True)
     parser.add_argument("--prepared_dir", required=True)
@@ -317,17 +317,6 @@ def main() -> int:
     log_line(model_log, f"[run_age_binned_model] model_id={args.model_id}")
     run_command(workflow_cmd, cwd=dig_dir, env=env, log_path=model_log)
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
-    compact_cmd = [
-        args.python_bin,
-        str(repo / "geneset-extractor-dev" / "GTEx" / "src" / "compact_age_binned_outputs.py"),
-        "--extractor_out",
-        str(extractor_out),
-        "--model_id",
-        args.model_id,
-        "--model_out",
-        str(model_out),
-    ]
-    run_command(compact_cmd, cwd=repo, env=env, log_path=model_log)
     return 0
 
 
