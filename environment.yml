@@ -1,11 +1,42 @@
-name: geneset-extractor
+# Create from the repository root:
+#   conda env create -f environment.geneset_extractors.yml
+#
+# This environment is intended to support:
+# - geneset-extractor-dev/GTEx/src/*
+# - dig-gene-set-extractors
+# - PIGEAN/EAGGL runs invoked through the GTEx wrappers
+#
+# Notes:
+# - The GTEx wrappers pass PYTHONPATH explicitly for `pigean/src`.
+# - `dig-gene-set-extractors` is installed editable below so
+#   `python -m geneset_extractors.cli` works directly in this environment.
+
+name: geneset-extractors
+
 channels:
-  - bioconda
   - conda-forge
+  - bioconda
   - defaults
+
 dependencies:
-  - python
-  - r-essentials
-  - bioconductor-limma
+  - python=3.11
+  - pip
+  - setuptools>=61
+  - wheel
+
+  # Core Python dependencies used by GTEx-local code and dig-gene-set-extractors.
+  - numpy>=1.23
+  - pandas>=1.5
+  - scipy>=1.10
+  - scikit-learn>=1.2
+  - statsmodels>=0.14
+  - jsonschema>=4.0
+  - pytest>=8
+
+  # R runtime plus packages used by GTEx continuous-age runs and
+  # the R-based DE backends in dig-gene-set-extractors.
+  - r-base>=4.3
+  - r-lme4
   - bioconductor-edger
-prefix: /path/to/miniconda3/envs/geneset-extractor
+  - bioconductor-limma
+  - bioconductor-variancepartition
