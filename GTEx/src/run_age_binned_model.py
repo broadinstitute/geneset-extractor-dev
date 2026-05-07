@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from selection_io import default_age_binned_model_manifest_path
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -22,24 +24,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--genome_build", default="hg38")
     parser.add_argument("--gtf")
     parser.add_argument("--dig_dir", required=True)
+    parser.add_argument("--age_binned_model_manifest", default=str(default_age_binned_model_manifest_path()))
     parser.add_argument("--write_commands_only", action="store_true")
     return parser.parse_args()
 
 
 def repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
-
-
-def default_manifest_path() -> Path:
-    return (
-        repo_root()
-        / "geneset-extractor-dev"
-        / "GTEx"
-        / "planning"
-        / "geneset_build"
-        / "age_binned_models"
-        / "model_manifest.tsv"
-    )
 
 
 def resolve_input_path(path_value: str | None, *, base_dir: Path) -> str | None:
@@ -51,8 +42,7 @@ def resolve_input_path(path_value: str | None, *, base_dir: Path) -> str | None:
     return str(path)
 
 
-def load_model_settings() -> dict[str, dict[str, str]]:
-    manifest_path = default_manifest_path()
+def load_model_settings(manifest_path: Path) -> dict[str, dict[str, str]]:
     with manifest_path.open("r", encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle, delimiter="\t"))
     settings: dict[str, dict[str, str]] = {}
@@ -260,8 +250,9 @@ def main() -> int:
     prepared_dir = Path(args.prepared_dir).resolve()
     run_root = Path(args.run_root).resolve()
     dig_dir = Path(args.dig_dir).resolve()
+    manifest_path = Path(args.age_binned_model_manifest).resolve()
     resolved_gtf = resolve_input_path(args.gtf, base_dir=repo)
-    model_settings = load_model_settings()
+    model_settings = load_model_settings(manifest_path)
     if args.model_id not in model_settings:
         raise SystemExit(f"Unsupported model_id: {args.model_id}")
     settings = model_settings[args.model_id]

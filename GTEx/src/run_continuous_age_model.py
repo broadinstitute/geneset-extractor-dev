@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from selection_io import default_continuous_age_model_manifest_path
+
 AGE_BIN_PATTERN = re.compile(r"^\s*(\d+)\s*-\s*(\d+)\s*$")
 
 
@@ -32,16 +34,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--genome_build", default="hg38")
     parser.add_argument("--gtf")
     parser.add_argument("--dig_dir", required=True)
+    parser.add_argument("--continuous_age_model_manifest", default=str(default_continuous_age_model_manifest_path()))
     parser.add_argument("--write_commands_only", action="store_true")
     return parser.parse_args()
 
 
 def repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
-
-
-def default_tissue_model_manifest() -> Path:
-    return repo_root() / "geneset-extractor-dev" / "GTEx" / "planning" / "geneset_build" / "continuous_age_models" / "model_manifest.tsv"
 
 
 def resolve_input_path(path_value: str | None, *, base_dir: Path) -> str | None:
@@ -59,8 +58,7 @@ def _model_sort_key(model_id: str) -> tuple[str, int]:
     return prefix, int(suffix or "0")
 
 
-def load_tissue_model_settings() -> dict[str, dict[str, str]]:
-    manifest_path = default_tissue_model_manifest()
+def load_tissue_model_settings(manifest_path: Path) -> dict[str, dict[str, str]]:
     with manifest_path.open("r", encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle, delimiter="\t"))
     if not rows:
@@ -491,9 +489,10 @@ def main() -> int:
     prepared_dir = Path(args.prepared_dir)
     run_root = Path(args.run_root)
     dig_dir = Path(args.dig_dir).resolve()
+    manifest_path = Path(args.continuous_age_model_manifest).resolve()
     rscript_bin = resolve_rscript_bin(args.rscript_bin)
     resolved_gtf = resolve_input_path(args.gtf, base_dir=repo)
-    model_settings = load_tissue_model_settings()
+    model_settings = load_tissue_model_settings(manifest_path)
     model_ids = parse_model_ids(args.model_ids, model_settings)
 
     if not (prepared_dir / "tissue_counts.tsv").exists() or not (prepared_dir / "sample_metadata.tsv").exists():

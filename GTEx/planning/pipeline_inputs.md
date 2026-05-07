@@ -72,6 +72,8 @@ Used to define valid selectable tissue IDs and per-tissue counts file paths.
 
 - `geneset-extractor-dev/GTEx/planning/tissue_list.tsv`
 
+This now defaults from the repo-relative planning path in the active Python entrypoints unless overridden explicitly.
+
 ### 3. Continuous-age model manifest
 
 Used by the continuous-age model runner.
@@ -196,3 +198,12 @@ To run the full current pipeline, make sure you have:
 - a PIGEAN bundle data directory
 - a Python interpreter that can run the GTEx and external Python code
 - an `Rscript` binary with `edgeR` and `limma` installed
+
+## Default Planning Paths
+
+Unless overridden on the CLI, the active Python entrypoints currently default these planning/config files from the checked-out `geneset-extractor-dev/GTEx/planning/` tree:
+
+- `--model_list`
+- `--tissue_list`
+- `--age_binned_model_manifest`
+- `--continuous_age_model_manifest`

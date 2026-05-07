@@ -37,6 +37,14 @@ def default_tissue_list_path() -> Path:
     return planning_root() / "tissue_list.tsv"
 
 
+def default_age_binned_model_manifest_path() -> Path:
+    return planning_root() / "geneset_build" / "age_binned_models" / "model_manifest.tsv"
+
+
+def default_continuous_age_model_manifest_path() -> Path:
+    return planning_root() / "geneset_build" / "continuous_age_models" / "model_manifest.tsv"
+
+
 def read_tsv(path: Path) -> list[dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle, delimiter="\t"))

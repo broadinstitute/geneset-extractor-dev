@@ -8,6 +8,11 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from selection_io import (
+    default_age_binned_model_manifest_path,
+    default_continuous_age_model_manifest_path,
+)
+
 
 def build_parser() -> argparse.ArgumentParser:
     repo_root = Path(__file__).resolve().parents[3]
@@ -24,6 +29,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--planning_root",
         default=str(gtex_root / "planning"),
+    )
+    parser.add_argument(
+        "--age_binned_model_manifest",
+        default=str(default_age_binned_model_manifest_path()),
+    )
+    parser.add_argument(
+        "--continuous_age_model_manifest",
+        default=str(default_continuous_age_model_manifest_path()),
     )
     parser.add_argument(
         "--tissue",
@@ -96,55 +109,6 @@ def model_sort_key(model_id: str) -> tuple[str, int]:
     return prefix, int(digits or "0")
 
 
-def parse_model_catalog(path: Path) -> dict[str, str]:
-    text = path.read_text(encoding="utf-8")
-    matches = list(re.finditer(r"^###\s+([A-Z]\d+)\s+`[^`]+`\n", text, flags=re.MULTILINE))
-    definitions: dict[str, str] = {}
-    for index, match in enumerate(matches):
-        model_id = match.group(1)
-        start = match.end()
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
-        block = text[start:end]
-        block_lines = [line.rstrip() for line in block.splitlines()]
-        intent = ""
-        workflow_parts: list[str] = []
-        extractor_parts: list[str] = []
-        section = None
-        for line in block_lines:
-            stripped = line.strip()
-            if stripped.startswith("- Intent:"):
-                intent = stripped.split(":", 1)[1].strip()
-            elif stripped == "- Workflow:":
-                section = "workflow"
-            elif stripped == "- Extractor:":
-                section = "extractor"
-            elif stripped.startswith("- Expected effect on gene inclusion:"):
-                section = None
-            elif stripped.startswith("- `") or stripped.startswith("- "):
-                if section == "workflow":
-                    workflow_parts.append(stripped[2:].strip())
-                elif section == "extractor":
-                    extractor_parts.append(stripped[2:].strip())
-            elif stripped.startswith("  - "):
-                value = stripped[4:].strip()
-                if section == "workflow":
-                    workflow_parts.append(value)
-                elif section == "extractor":
-                    extractor_parts.append(value)
-        pieces: list[str] = []
-        if intent:
-            pieces.append(intent)
-        if workflow_parts:
-            pieces.append("workflow: " + "; ".join(workflow_parts))
-        if extractor_parts:
-            pieces.append("extractor: " + "; ".join(extractor_parts))
-        definition = " | ".join(pieces) if pieces else ""
-        definitions[model_id] = definition
-        if model_id.startswith("M") and model_id[1:].isdigit():
-            definitions[f"AB{model_id[1:]}"] = definition
-    return definitions
-
-
 def load_manifest_definitions(path: Path) -> dict[str, str]:
     rows = load_tsv(path)
     definitions: dict[str, str] = {}
@@ -152,10 +116,18 @@ def load_manifest_definitions(path: Path) -> dict[str, str]:
         model_id = row.get("model_id", "").strip()
         if not model_id:
             continue
-        summary = row.get("summary", "").strip()
+        summary = row.get("summary", "").strip() or row.get("family", "").strip()
         rationale = row.get("rationale", "").strip()
         settings = []
         for key in (
+            "workflow_de_mode",
+            "workflow_backend",
+            "workflow_covariates",
+            "annotation_mode",
+            "extractor_postprocess_mode",
+            "extractor_score_mode",
+            "extractor_select",
+            "extractor_gmt_biotype_allowlist",
             "WORKFLOW_COVARIATES",
             "ANNOTATION_MODE",
             "EXTRACTOR_POSTPROCESS_MODE",
@@ -352,8 +324,8 @@ def main() -> int:
         raise SystemExit("No model_groups requested")
 
     definition_maps = {
-        "age_binned": parse_model_catalog(planning_root / "geneset_build" / "age_binned_models" / "model_catalog.md"),
-        "continuous_age": load_manifest_definitions(planning_root / "geneset_build" / "continuous_age_models" / "model_manifest.tsv"),
+        "age_binned": load_manifest_definitions(Path(args.age_binned_model_manifest).resolve()),
+        "continuous_age": load_manifest_definitions(Path(args.continuous_age_model_manifest).resolve()),
         "tissue_versus": {},
     }
 

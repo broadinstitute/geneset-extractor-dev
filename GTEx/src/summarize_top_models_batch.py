@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 
 from selection_io import (
+    default_age_binned_model_manifest_path,
+    default_continuous_age_model_manifest_path,
     default_out_root,
     default_model_list_path,
     default_tissue_list_path,
@@ -30,6 +32,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pigean_root")
     parser.add_argument("--genesets_root")
     parser.add_argument("--planning_root", default=str(planning_root()))
+    parser.add_argument("--age_binned_model_manifest", default=str(default_age_binned_model_manifest_path()))
+    parser.add_argument("--continuous_age_model_manifest", default=str(default_continuous_age_model_manifest_path()))
     parser.add_argument("--python_bin", default=sys.executable or "python3")
     parser.add_argument("--top_n", type=int, default=5)
     return parser
@@ -62,6 +66,10 @@ def main() -> int:
                 str(genesets_root),
                 "--planning_root",
                 str(Path(args.planning_root).resolve()),
+                "--age_binned_model_manifest",
+                str(Path(args.age_binned_model_manifest).resolve()),
+                "--continuous_age_model_manifest",
+                str(Path(args.continuous_age_model_manifest).resolve()),
                 "--tissue",
                 tissue_id,
                 "--model_groups",

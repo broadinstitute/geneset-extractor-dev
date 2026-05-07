@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 
 from selection_io import (
+    default_age_binned_model_manifest_path,
+    default_continuous_age_model_manifest_path,
     default_out_root,
     default_model_list_path,
     default_tissue_list_path,
@@ -28,12 +30,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tissues", default="all")
     parser.add_argument("--tissues_file")
     parser.add_argument("--model_list", default=str(default_model_list_path()))
-    parser.add_argument("--tissue_list", required=True)
+    parser.add_argument("--tissue_list", default=str(default_tissue_list_path()))
     parser.add_argument("--python_bin", default=sys.executable or "python3")
     parser.add_argument("--rscript_bin", default="Rscript")
     parser.add_argument("--sample_metadata_tsv", required=True)
     parser.add_argument("--subject_metadata_tsv", required=True)
     parser.add_argument("--gtf")
+    parser.add_argument("--age_binned_model_manifest", default=str(default_age_binned_model_manifest_path()))
+    parser.add_argument("--continuous_age_model_manifest", default=str(default_continuous_age_model_manifest_path()))
     parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--out_root", default=str(default_out_root()))
     parser.add_argument("--overwrite", action="store_true")
@@ -102,6 +106,8 @@ def main() -> int:
     src_root = repo_root() / "geneset-extractor-dev" / "GTEx" / "src"
     sample_metadata_tsv = require_existing_file(args.sample_metadata_tsv, "sample metadata TSV")
     subject_metadata_tsv = require_existing_file(args.subject_metadata_tsv, "subject metadata TSV")
+    age_binned_model_manifest = require_existing_file(args.age_binned_model_manifest, "age-binned model manifest")
+    continuous_age_model_manifest = require_existing_file(args.continuous_age_model_manifest, "continuous-age model manifest")
     dig_dir = Path(relative_or_absolute_path(args.dig_dir)).resolve()
     if not dig_dir.exists():
         raise SystemExit(f"Missing dig-gene-set-extractors directory: {dig_dir}")
@@ -189,6 +195,8 @@ def main() -> int:
                     str(Path(args.python_bin).resolve()),
                     "--dig_dir",
                     str(dig_dir),
+                    "--age_binned_model_manifest",
+                    str(age_binned_model_manifest),
                 ]
                 + (
                     ["--gtf", str(resolved_gtf)]
@@ -214,6 +222,8 @@ def main() -> int:
                     str(models_root),
                     "--dig_dir",
                     str(dig_dir),
+                    "--continuous_age_model_manifest",
+                    str(continuous_age_model_manifest),
                     "--model_ids",
                     ",".join(continuous_age_models),
                 ]
