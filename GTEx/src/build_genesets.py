@@ -70,8 +70,8 @@ def existing_output_message(*, tissue_id: str, model_id: str | None, path: Path)
 
 
 def model_requires_gtf(row: dict[str, str]) -> bool:
-    annotation_mode = str(row.get("annotation_mode", "")).strip().lower()
-    return annotation_mode == "gtf_annotated"
+    value = str(row.get("require_gtf", "")).strip().lower()
+    return value in {"true", "1", "yes"}
 
 
 def require_existing_file(path_text: str, label: str) -> Path:
@@ -120,14 +120,19 @@ def main() -> int:
     if unsupported_models:
         raise SystemExit("TV* geneset building is not implemented yet")
     gtf_required_models = [model_id for model_id in selected_models if model_requires_gtf(model_by_id[model_id])]
-    if gtf_required_models and not args.gtf:
-        raise SystemExit(
-            "The selected models require --gtf but none was provided: "
-            + ", ".join(gtf_required_models)
-        )
+    model_list_gtf_required_models = [
+        str(row["model_id"]).strip()
+        for row in model_rows
+        if model_requires_gtf(row)
+    ]
     resolved_gtf: Path | None = None
     if args.gtf:
         resolved_gtf = require_existing_file(args.gtf, "GTF")
+    if model_list_gtf_required_models and resolved_gtf is None:
+        raise SystemExit(
+            "The active model_list contains models that require --gtf but none was provided: "
+            + ", ".join(model_list_gtf_required_models)
+        )
 
     conflicts: list[str] = []
     for tissue_id in selected_tissues:
@@ -177,6 +182,7 @@ def main() -> int:
             )
 
         for model_id in age_binned_models:
+            needs_gtf = model_requires_gtf(model_by_id[model_id])
             run_command(
                 [
                     str(Path(args.python_bin).resolve()),
@@ -196,12 +202,15 @@ def main() -> int:
                 ]
                 + (
                     ["--gtf", str(resolved_gtf)]
-                    if resolved_gtf is not None
+                    if resolved_gtf is not None and needs_gtf
                     else []
                 )
             )
 
         if continuous_age_models:
+            any_continuous_age_needs_gtf = any(
+                model_requires_gtf(model_by_id[model_id]) for model_id in continuous_age_models
+            )
             run_command(
                 [
                     str(Path(args.python_bin).resolve()),
@@ -225,7 +234,7 @@ def main() -> int:
                 ]
                 + (
                     ["--gtf", str(resolved_gtf)]
-                    if resolved_gtf is not None
+                    if resolved_gtf is not None and any_continuous_age_needs_gtf
                     else []
                 )
             )
