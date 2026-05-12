@@ -132,9 +132,6 @@ def main() -> int:
     conflicts: list[str] = []
     for tissue_id in selected_tissues:
         tissue_root = outputs_root / tissue_id
-        prepared_dir = tissue_root / "prepared"
-        if dir_nonempty(prepared_dir):
-            conflicts.append(existing_output_message(tissue_id=tissue_id, model_id=None, path=prepared_dir))
         for model_id in [*age_binned_models, *continuous_age_models]:
             model_out = tissue_root / "models" / model_id
             if dir_nonempty(model_out):
@@ -159,26 +156,25 @@ def main() -> int:
         prepared_dir = tissue_root / "prepared"
         models_root = tissue_root / "models"
         if args.overwrite:
-            overwrite_dir(prepared_dir)
             for model_id in [*age_binned_models, *continuous_age_models]:
                 overwrite_dir(models_root / model_id)
-
-        run_command(
-            [
-                str(Path(args.python_bin).resolve()),
-                str(src_root / "build_tissue_inputs.py"),
-                "--counts_gct",
-                str(counts_gct),
-                "--sample_metadata_tsv",
-                str(sample_metadata_tsv),
-                "--subject_metadata_tsv",
-                str(subject_metadata_tsv),
-                "--tissue_label",
-                tissue_label,
-                "--out_dir",
-                str(prepared_dir),
-            ]
-        )
+        if not dir_nonempty(prepared_dir):
+            run_command(
+                [
+                    str(Path(args.python_bin).resolve()),
+                    str(src_root / "build_tissue_inputs.py"),
+                    "--counts_gct",
+                    str(counts_gct),
+                    "--sample_metadata_tsv",
+                    str(sample_metadata_tsv),
+                    "--subject_metadata_tsv",
+                    str(subject_metadata_tsv),
+                    "--tissue_label",
+                    tissue_label,
+                    "--out_dir",
+                    str(prepared_dir),
+                ]
+            )
 
         for model_id in age_binned_models:
             run_command(

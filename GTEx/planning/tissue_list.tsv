@@ -1,71 +1,55 @@
 tissue_id	tissue_label	primary_tissue	counts_gct	enabled	available_locally
-adipose_subcutaneous	Adipose - Subcutaneous	Adipose Tissue	inputs/GTEx/v10/gene_reads_v10_adipose_subcutaneous.gct.gz	true	true
-adipose_visceral_omentum	Adipose - Visceral (Omentum)	Adipose Tissue	inputs/GTEx/v10/gene_reads_v10_adipose_visceral_omentum.gct.gz	false	false
-adrenal_gland	Adrenal Gland	Adrenal Gland	inputs/GTEx/v10/gene_reads_v10_adrenal_gland.gct.gz	false	false
-artery_aorta	Artery - Aorta	Blood Vessel	inputs/GTEx/v10/gene_reads_v10_artery_aorta.gct.gz	false	false
-artery_coronary	Artery - Coronary	Blood Vessel	inputs/GTEx/v10/gene_reads_v10_artery_coronary.gct.gz	false	false
-artery_pulmonary	Artery - Pulmonary	Blood Vessel	inputs/GTEx/v10/gene_reads_v10_artery_pulmonary.gct.gz	false	false
-artery_tibial	Artery - Tibial	Blood Vessel	inputs/GTEx/v10/gene_reads_v10_artery_tibial.gct.gz	false	false
-bladder	Bladder	Bladder	inputs/GTEx/v10/gene_reads_v10_bladder.gct.gz	false	false
-brain_amygdala	Brain - Amygdala	Brain	inputs/GTEx/v10/gene_reads_v10_brain_amygdala.gct.gz	false	false
-brain_anterior_cingulate_cortex_ba24	Brain - Anterior cingulate cortex (BA24)	Brain	inputs/GTEx/v10/gene_reads_v10_brain_anterior_cingulate_cortex_ba24.gct.gz	false	false
-brain_caudate_basal_ganglia	Brain - Caudate (basal ganglia)	Brain	inputs/GTEx/v10/gene_reads_v10_brain_caudate_basal_ganglia.gct.gz	false	false
-brain_cerebellar_hemisphere	Brain - Cerebellar Hemisphere	Brain	inputs/GTEx/v10/gene_reads_v10_brain_cerebellar_hemisphere.gct.gz	false	false
-brain_cerebellum	Brain - Cerebellum	Brain	inputs/GTEx/v10/gene_reads_v10_brain_cerebellum.gct.gz	false	false
-brain_cortex	Brain - Cortex	Brain	inputs/GTEx/v10/gene_reads_v10_brain_cortex.gct.gz	false	false
-brain_frontal_cortex_ba9	Brain - Frontal Cortex (BA9)	Brain	inputs/GTEx/v10/gene_reads_v10_brain_frontal_cortex_ba9.gct.gz	false	false
-brain_hippocampus	Brain - Hippocampus	Brain	inputs/GTEx/v10/gene_reads_v10_brain_hippocampus.gct.gz	false	false
-brain_hypothalamus	Brain - Hypothalamus	Brain	inputs/GTEx/v10/gene_reads_v10_brain_hypothalamus.gct.gz	false	false
-brain_nucleus_accumbens_basal_ganglia	Brain - Nucleus accumbens (basal ganglia)	Brain	inputs/GTEx/v10/gene_reads_v10_brain_nucleus_accumbens_basal_ganglia.gct.gz	false	false
-brain_putamen_basal_ganglia	Brain - Putamen (basal ganglia)	Brain	inputs/GTEx/v10/gene_reads_v10_brain_putamen_basal_ganglia.gct.gz	false	false
-brain_spinal_cord_cervical_c_1	Brain - Spinal cord (cervical c-1)	Brain	inputs/GTEx/v10/gene_reads_v10_brain_spinal_cord_cervical_c_1.gct.gz	false	false
-brain_substantia_nigra	Brain - Substantia nigra	Brain	inputs/GTEx/v10/gene_reads_v10_brain_substantia_nigra.gct.gz	false	false
-breast_mammary_tissue	Breast - Mammary Tissue	Breast	inputs/GTEx/v10/gene_reads_v10_breast_mammary_tissue.gct.gz	false	false
-cells_cultured_fibroblasts	Cells - Cultured fibroblasts	Skin	inputs/GTEx/v10/gene_reads_v10_cells_cultured_fibroblasts.gct.gz	false	false
-cells_ebv_transformed_lymphocytes	Cells - EBV-transformed lymphocytes	Blood	inputs/GTEx/v10/gene_reads_v10_cells_ebv_transformed_lymphocytes.gct.gz	false	false
-cells_leukemia_cell_line_cml	Cells - Leukemia cell line (CML)	Bone Marrow	inputs/GTEx/v10/gene_reads_v10_cells_leukemia_cell_line_cml.gct.gz	false	false
-cervix_ectocervix	Cervix - Ectocervix	Cervix Uteri	inputs/GTEx/v10/gene_reads_v10_cervix_ectocervix.gct.gz	false	false
-cervix_endocervix	Cervix - Endocervix	Cervix Uteri	inputs/GTEx/v10/gene_reads_v10_cervix_endocervix.gct.gz	false	false
-colon_sigmoid	Colon - Sigmoid	Colon	inputs/GTEx/v10/gene_reads_v10_colon_sigmoid.gct.gz	false	false
-colon_transverse	Colon - Transverse	Colon	inputs/GTEx/v10/gene_reads_v10_colon_transverse.gct.gz	false	false
-colon_transverse_mixed_cell	Colon - Transverse - Mixed Cell	Colon	inputs/GTEx/v10/gene_reads_v10_colon_transverse_mixed_cell.gct.gz	false	false
-colon_transverse_mucosa	Colon - Transverse - Mucosa	Colon	inputs/GTEx/v10/gene_reads_v10_colon_transverse_mucosa.gct.gz	false	false
-colon_transverse_muscularis	Colon - Transverse - Muscularis	Colon	inputs/GTEx/v10/gene_reads_v10_colon_transverse_muscularis.gct.gz	false	false
-esophagus_gastroesophageal_junction	Esophagus - Gastroesophageal Junction	Esophagus	inputs/GTEx/v10/gene_reads_v10_esophagus_gastroesophageal_junction.gct.gz	false	false
-esophagus_mucosa	Esophagus - Mucosa	Esophagus	inputs/GTEx/v10/gene_reads_v10_esophagus_mucosa.gct.gz	false	false
-esophagus_muscularis	Esophagus - Muscularis	Esophagus	inputs/GTEx/v10/gene_reads_v10_esophagus_muscularis.gct.gz	false	false
-fallopian_tube	Fallopian Tube	Fallopian Tube	inputs/GTEx/v10/gene_reads_v10_fallopian_tube.gct.gz	false	false
-heart_atrial_appendage	Heart - Atrial Appendage	Heart	inputs/GTEx/v10/gene_reads_v10_heart_atrial_appendage.gct.gz	false	false
-heart_left_ventricle	Heart - Left Ventricle	Heart	inputs/GTEx/v10/gene_reads_v10_heart_left_ventricle.gct.gz	false	false
-kidney_cortex	Kidney - Cortex	Kidney	inputs/GTEx/v10/gene_reads_v10_kidney_cortex.gct.gz	false	false
-kidney_medulla	Kidney - Medulla	Kidney	inputs/GTEx/v10/gene_reads_v10_kidney_medulla.gct.gz	false	false
-liver	Liver	Liver	inputs/GTEx/v10/gene_reads_v10_liver.gct.gz	false	false
-liver_hepatocyte	Liver - Hepatocyte	Liver	inputs/GTEx/v10/gene_reads_v10_liver_hepatocyte.gct.gz	false	false
-liver_mixed_cell	Liver - Mixed Cell	Liver	inputs/GTEx/v10/gene_reads_v10_liver_mixed_cell.gct.gz	false	false
-liver_portal_tract	Liver - Portal Tract	Liver	inputs/GTEx/v10/gene_reads_v10_liver_portal_tract.gct.gz	false	false
-lung	Lung	Lung	inputs/GTEx/v10/gene_reads_v10_lung.gct.gz	false	false
-minor_salivary_gland	Minor Salivary Gland	Salivary Gland	inputs/GTEx/v10/gene_reads_v10_minor_salivary_gland.gct.gz	false	false
-muscle_skeletal	Muscle - Skeletal	Muscle	inputs/GTEx/v10/gene_reads_v10_muscle_skeletal.gct.gz	false	false
-nerve_tibial	Nerve - Tibial	Nerve	inputs/GTEx/v10/gene_reads_v10_nerve_tibial.gct.gz	false	false
-ovary	Ovary	Ovary	inputs/GTEx/v10/gene_reads_v10_ovary.gct.gz	false	false
-pancreas	Pancreas	Pancreas	inputs/GTEx/v10/gene_reads_v10_pancreas.gct.gz	false	false
-pancreas_acini	Pancreas - Acini	Pancreas	inputs/GTEx/v10/gene_reads_v10_pancreas_acini.gct.gz	false	false
-pancreas_islets	Pancreas - Islets	Pancreas	inputs/GTEx/v10/gene_reads_v10_pancreas_islets.gct.gz	false	false
-pancreas_mixed_cell	Pancreas - Mixed Cell	Pancreas	inputs/GTEx/v10/gene_reads_v10_pancreas_mixed_cell.gct.gz	false	false
-pituitary	Pituitary	Pituitary	inputs/GTEx/v10/gene_reads_v10_pituitary.gct.gz	false	false
-prostate	Prostate	Prostate	inputs/GTEx/v10/gene_reads_v10_prostate.gct.gz	false	false
-skin_not_sun_exposed_suprapubic	Skin - Not Sun Exposed (Suprapubic)	Skin	inputs/GTEx/v10/gene_reads_v10_skin_not_sun_exposed_suprapubic.gct.gz	false	false
-skin_sun_exposed_lower_leg	Skin - Sun Exposed (Lower leg)	Skin	inputs/GTEx/v10/gene_reads_v10_skin_sun_exposed_lower_leg.gct.gz	false	false
-small_intestine_terminal_ileum	Small Intestine - Terminal Ileum	Small Intestine	inputs/GTEx/v10/gene_reads_v10_small_intestine_terminal_ileum.gct.gz	false	false
-small_intestine_terminal_ileum_lymphoid_aggregate	Small Intestine - Terminal Ileum - Lymphoid Aggregate	Small Intestine	inputs/GTEx/v10/gene_reads_v10_small_intestine_terminal_ileum_lymphoid_aggregate.gct.gz	false	false
-small_intestine_terminal_ileum_mixed_cell	Small Intestine - Terminal Ileum - Mixed Cell	Small Intestine	inputs/GTEx/v10/gene_reads_v10_small_intestine_terminal_ileum_mixed_cell.gct.gz	false	false
-spleen	Spleen	Spleen	inputs/GTEx/v10/gene_reads_v10_spleen.gct.gz	false	false
-stomach	Stomach	Stomach	inputs/GTEx/v10/gene_reads_v10_stomach.gct.gz	false	false
-stomach_mixed_cell	Stomach - Mixed Cell	Stomach	inputs/GTEx/v10/gene_reads_v10_stomach_mixed_cell.gct.gz	false	false
-stomach_mucosa	Stomach - Mucosa	Stomach	inputs/GTEx/v10/gene_reads_v10_stomach_mucosa.gct.gz	false	false
-stomach_muscularis	Stomach - Muscularis	Stomach	inputs/GTEx/v10/gene_reads_v10_stomach_muscularis.gct.gz	false	false
-testis	Testis	Testis	inputs/GTEx/v10/gene_reads_v10_testis.gct.gz	false	false
-thyroid	Thyroid	Thyroid	inputs/GTEx/v10/gene_reads_v10_thyroid.gct.gz	false	false
-uterus	Uterus	Uterus	inputs/GTEx/v10/gene_reads_v10_uterus.gct.gz	false	false
-vagina	Vagina	Vagina	inputs/GTEx/v10/gene_reads_v10_vagina.gct.gz	false	false
-whole_blood	Whole Blood	Blood	inputs/GTEx/v10/gene_reads_v10_whole_blood.gct.gz	false	false
+adipose_subcutaneous	Adipose - Subcutaneous	Adipose Tissue	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_adipose_subcutaneous.gct.gz	true	true
+adipose_visceral_omentum	Adipose - Visceral (Omentum)	Adipose Tissue	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_adipose_visceral_omentum.gct.gz	true	true
+adrenal_gland	Adrenal Gland	Adrenal Gland	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_adrenal_gland.gct.gz	true	true
+artery_aorta	Artery - Aorta	Blood Vessel	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_artery_aorta.gct.gz	true	true
+artery_coronary	Artery - Coronary	Blood Vessel	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_artery_coronary.gct.gz	true	true
+artery_tibial	Artery - Tibial	Blood Vessel	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_artery_tibial.gct.gz	true	true
+bladder	Bladder	Bladder	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_bladder.gct.gz	true	true
+brain_amygdala	Brain - Amygdala	Brain	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_brain_amygdala.gct.gz	true	true
+brain_anterior_cingulate_cortex_ba24	Brain - Anterior cingulate cortex (BA24)	Brain	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_brain_anterior_cingulate_cortex_ba24.gct.gz	true	true
+brain_caudate_basal_ganglia	Brain - Caudate (basal ganglia)	Brain	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_brain_caudate_basal_ganglia.gct.gz	true	true
+brain_cerebellar_hemisphere	Brain - Cerebellar Hemisphere	Brain	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_brain_cerebellar_hemisphere.gct.gz	true	true
+brain_cerebellum	Brain - Cerebellum	Brain	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_brain_cerebellum.gct.gz	true	true
+brain_cortex	Brain - Cortex	Brain	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_brain_cortex.gct.gz	true	true
+brain_frontal_cortex_ba9	Brain - Frontal Cortex (BA9)	Brain	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_brain_frontal_cortex_ba9.gct.gz	true	true
+brain_hippocampus	Brain - Hippocampus	Brain	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_brain_hippocampus.gct.gz	true	true
+brain_hypothalamus	Brain - Hypothalamus	Brain	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_brain_hypothalamus.gct.gz	true	true
+brain_nucleus_accumbens_basal_ganglia	Brain - Nucleus accumbens (basal ganglia)	Brain	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_brain_nucleus_accumbens_basal_ganglia.gct.gz	true	true
+brain_putamen_basal_ganglia	Brain - Putamen (basal ganglia)	Brain	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_brain_putamen_basal_ganglia.gct.gz	true	true
+brain_spinal_cord_cervical_c_1	Brain - Spinal cord (cervical c-1)	Brain	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_brain_spinal_cord_cervical_c-1.gct.gz	true	true
+brain_substantia_nigra	Brain - Substantia nigra	Brain	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_brain_substantia_nigra.gct.gz	true	true
+breast_mammary_tissue	Breast - Mammary Tissue	Breast	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_breast_mammary_tissue.gct.gz	true	true
+cells_cultured_fibroblasts	Cells - Cultured fibroblasts	Skin	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_cells_cultured_fibroblasts.gct.gz	true	true
+cells_ebv_transformed_lymphocytes	Cells - EBV-transformed lymphocytes	Blood	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_cells_ebv-transformed_lymphocytes.gct.gz	true	true
+cervix_ectocervix	Cervix - Ectocervix	Cervix Uteri	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_cervix_ectocervix.gct.gz	true	true
+cervix_endocervix	Cervix - Endocervix	Cervix Uteri	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_cervix_endocervix.gct.gz	true	true
+colon_sigmoid	Colon - Sigmoid	Colon	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_colon_sigmoid.gct.gz	true	true
+colon_transverse	Colon - Transverse	Colon	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_colon_transverse.gct.gz	true	true
+esophagus_gastroesophageal_junction	Esophagus - Gastroesophageal Junction	Esophagus	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_esophagus_gastroesophageal_junction.gct.gz	true	true
+esophagus_mucosa	Esophagus - Mucosa	Esophagus	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_esophagus_mucosa.gct.gz	true	true
+esophagus_muscularis	Esophagus - Muscularis	Esophagus	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_esophagus_muscularis.gct.gz	true	true
+fallopian_tube	Fallopian Tube	Fallopian Tube	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_fallopian_tube.gct.gz	true	true
+heart_atrial_appendage	Heart - Atrial Appendage	Heart	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_heart_atrial_appendage.gct.gz	true	true
+heart_left_ventricle	Heart - Left Ventricle	Heart	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_heart_left_ventricle.gct.gz	true	true
+kidney_cortex	Kidney - Cortex	Kidney	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_kidney_cortex.gct.gz	true	true
+kidney_medulla	Kidney - Medulla	Kidney	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_kidney_medulla.gct.gz	true	true
+liver	Liver	Liver	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_liver.gct.gz	true	true
+lung	Lung	Lung	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_lung.gct.gz	true	true
+minor_salivary_gland	Minor Salivary Gland	Salivary Gland	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_minor_salivary_gland.gct.gz	true	true
+muscle_skeletal	Muscle - Skeletal	Muscle	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_muscle_skeletal.gct.gz	true	true
+nerve_tibial	Nerve - Tibial	Nerve	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_nerve_tibial.gct.gz	true	true
+ovary	Ovary	Ovary	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_ovary.gct.gz	true	true
+pancreas	Pancreas	Pancreas	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_pancreas.gct.gz	true	true
+pituitary	Pituitary	Pituitary	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_pituitary.gct.gz	true	true
+prostate	Prostate	Prostate	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_prostate.gct.gz	true	true
+skin_not_sun_exposed_suprapubic	Skin - Not Sun Exposed (Suprapubic)	Skin	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_skin_not_sun_exposed_suprapubic.gct.gz	true	true
+skin_sun_exposed_lower_leg	Skin - Sun Exposed (Lower leg)	Skin	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_skin_sun_exposed_lower_leg.gct.gz	true	true
+small_intestine_terminal_ileum	Small Intestine - Terminal Ileum	Small Intestine	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_small_intestine_terminal_ileum.gct.gz	true	true
+spleen	Spleen	Spleen	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_spleen.gct.gz	true	true
+stomach	Stomach	Stomach	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_stomach.gct.gz	true	true
+testis	Testis	Testis	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_testis.gct.gz	true	true
+thyroid	Thyroid	Thyroid	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_thyroid.gct.gz	true	true
+uterus	Uterus	Uterus	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_uterus.gct.gz	true	true
+vagina	Vagina	Vagina	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_vagina.gct.gz	true	true
+whole_blood	Whole Blood	Blood	inputs/GTEx/v10/gtex_v10_gene_reads_by_tissue/gene_reads_v10_whole_blood.gct.gz	true	true
