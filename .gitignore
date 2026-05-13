@@ -5,6 +5,7 @@
 !.gitignore
 !environment.yml
 !requirements.txt
+!geneset-extractor.Dockerfile
 
 # or these needed files
 !GTEx/planning/geneset_build/age_binned_models/model_manifest.tsv
