@@ -36,6 +36,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sample_metadata_tsv", required=True)
     parser.add_argument("--subject_metadata_tsv", required=True)
     parser.add_argument("--gtf")
+    parser.add_argument("--provenance_mirror_local_prefix")
+    parser.add_argument("--provenance_mirror_remote_prefix")
     parser.add_argument("--age_binned_model_manifest", default=str(default_age_binned_model_manifest_path()))
     parser.add_argument("--continuous_age_model_manifest", default=str(default_continuous_age_model_manifest_path()))
     parser.add_argument("--dig_dir", required=True)
@@ -201,6 +203,16 @@ def main() -> int:
                     str(age_binned_model_manifest),
                 ]
                 + (
+                    ["--provenance_mirror_local_prefix", args.provenance_mirror_local_prefix]
+                    if args.provenance_mirror_local_prefix
+                    else []
+                )
+                + (
+                    ["--provenance_mirror_remote_prefix", args.provenance_mirror_remote_prefix]
+                    if args.provenance_mirror_remote_prefix
+                    else []
+                )
+                + (
                     ["--gtf", str(resolved_gtf)]
                     if resolved_gtf is not None and needs_gtf
                     else []
@@ -232,6 +244,16 @@ def main() -> int:
                     "--model_ids",
                     ",".join(continuous_age_models),
                 ]
+                + (
+                    ["--provenance_mirror_local_prefix", args.provenance_mirror_local_prefix]
+                    if args.provenance_mirror_local_prefix
+                    else []
+                )
+                + (
+                    ["--provenance_mirror_remote_prefix", args.provenance_mirror_remote_prefix]
+                    if args.provenance_mirror_remote_prefix
+                    else []
+                )
                 + (
                     ["--gtf", str(resolved_gtf)]
                     if resolved_gtf is not None and any_continuous_age_needs_gtf

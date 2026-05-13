@@ -33,6 +33,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--organism", default="human", choices=["human", "mouse"])
     parser.add_argument("--genome_build", default="hg38")
     parser.add_argument("--gtf")
+    parser.add_argument("--provenance_mirror_local_prefix")
+    parser.add_argument("--provenance_mirror_remote_prefix")
     parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--continuous_age_model_manifest", default=str(default_continuous_age_model_manifest_path()))
     parser.add_argument("--write_commands_only", action="store_true")
@@ -265,6 +267,8 @@ def build_extractor_cmd(
     settings: dict[str, str],
     signature_name: str,
     gtf_path: str | None,
+    provenance_mirror_local_prefix: str | None,
+    provenance_mirror_remote_prefix: str | None,
 ) -> list[str]:
     cmd = [
         python_bin,
@@ -323,6 +327,10 @@ def build_extractor_cmd(
         if not gtf_path:
             raise SystemExit("Models AC3 and AC4 require --gtf")
         cmd.extend(["--gtf", gtf_path])
+    if provenance_mirror_local_prefix:
+        cmd.extend(["--provenance_mirror_local_prefix", provenance_mirror_local_prefix])
+    if provenance_mirror_remote_prefix:
+        cmd.extend(["--provenance_mirror_remote_prefix", provenance_mirror_remote_prefix])
     return cmd
 
 
@@ -555,6 +563,8 @@ def main() -> int:
             settings=settings,
             signature_name=f"{model_id}__{args.tissue_id}",
             gtf_path=resolved_gtf,
+            provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
+            provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
         )
         write_model_commands(
             model_out=model_out,

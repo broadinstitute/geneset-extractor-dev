@@ -23,6 +23,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--organism", default="human", choices=["human", "mouse"])
     parser.add_argument("--genome_build", default="hg38")
     parser.add_argument("--gtf")
+    parser.add_argument("--provenance_mirror_local_prefix")
+    parser.add_argument("--provenance_mirror_remote_prefix")
     parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--age_binned_model_manifest", default=str(default_age_binned_model_manifest_path()))
     parser.add_argument("--write_commands_only", action="store_true")
@@ -78,6 +80,8 @@ def build_workflow_cmd(
     organism: str,
     genome_build: str,
     settings: dict[str, str],
+    provenance_mirror_local_prefix: str | None,
+    provenance_mirror_remote_prefix: str | None,
 ) -> list[str]:
     cmd = [
         python_bin,
@@ -122,6 +126,10 @@ def build_workflow_cmd(
     ]
     if settings["workflow_covariates"] != "none":
         cmd.extend(["--covariates", settings["workflow_covariates"]])
+    if provenance_mirror_local_prefix:
+        cmd.extend(["--provenance_mirror_local_prefix", provenance_mirror_local_prefix])
+    if provenance_mirror_remote_prefix:
+        cmd.extend(["--provenance_mirror_remote_prefix", provenance_mirror_remote_prefix])
     return cmd
 
 
@@ -135,6 +143,8 @@ def build_extractor_cmd(
     model_id: str,
     settings: dict[str, str],
     gtf_path: str | None,
+    provenance_mirror_local_prefix: str | None,
+    provenance_mirror_remote_prefix: str | None,
 ) -> list[str]:
     cmd = [
         python_bin,
@@ -193,6 +203,10 @@ def build_extractor_cmd(
         cmd.extend(["--gmt_biotype_allowlist", settings["extractor_gmt_biotype_allowlist"]])
     if gtf_path:
         cmd.extend(["--gtf", gtf_path])
+    if provenance_mirror_local_prefix:
+        cmd.extend(["--provenance_mirror_local_prefix", provenance_mirror_local_prefix])
+    if provenance_mirror_remote_prefix:
+        cmd.extend(["--provenance_mirror_remote_prefix", provenance_mirror_remote_prefix])
     return cmd
 
 
@@ -281,6 +295,8 @@ def main() -> int:
         organism=args.organism,
         genome_build=args.genome_build,
         settings=settings,
+        provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
+        provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
     )
     extractor_cmd = build_extractor_cmd(
         python_bin=args.python_bin,
@@ -291,6 +307,8 @@ def main() -> int:
         model_id=args.model_id,
         settings=settings,
         gtf_path=resolved_gtf,
+        provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
+        provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
     )
     write_model_commands(
         model_out=model_out,
