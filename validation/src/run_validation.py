@@ -2,8 +2,8 @@ import os
 
 from run_eaggl import run_eaggl, save_results
 
-BASE_FOLDER = "/humgen/diabetes2/users/ryank/geneset_extractors/GTEx/outputs/genesets/adipose_subcutaneous/models"
-OUT_FILE = "../../data/gtex/output/adipose_subcutaneous_validation_results.txt"
+BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/gtex_outputs/genesets/lung/models"
+OUT_FILE = "../../data/gtex/output/lung_validation_results.txt"
 
 
 def parse_gmt_file(gmt_file):
@@ -20,9 +20,22 @@ def parse_gmt_file(gmt_file):
     return gene_sets
 
 
+def get_gmt_file(folder_path):
+    gmt_file = folder_path + "/extractor/genesets.gmt"
+    if os.path.exists(gmt_file):
+        return gmt_file
+    gmt_file = folder_path + "/tissue_extractor/genesets.gmt"
+    if os.path.exists(gmt_file):
+        return gmt_file
+    return None
+
+
 def run_validation(folder_path):
     print("Running validation for folder:", folder_path)
-    gmt_file = folder_path + "/extractor/genesets.gmt"
+    gmt_file = get_gmt_file(folder_path)
+    if gmt_file is None:
+        print("No GMT file found for folder:", folder_path)
+        return
     genesets = parse_gmt_file(gmt_file)
     print("Parsed {} gene sets from {}".format(len(genesets), gmt_file))
     with open(OUT_FILE, 'a') as out_f:

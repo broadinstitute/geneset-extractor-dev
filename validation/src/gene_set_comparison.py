@@ -4,7 +4,7 @@ from collections import defaultdict
 from run_validation import parse_gmt_file
 
 BASE_FOLDER = "/humgen/diabetes2/users/ryank/geneset_extractors/GTEx/outputs/genesets/adipose_subcutaneous/models"
-OUT_FILE = "../../data/gtex/output/adipose_subcutaneous_{}_comparison.txt"
+OUT_FILE = "../../data/gtex/output/adipose_subcutaneous_{}_comparison.tsv"
 
 def model_name(folder):
     if folder.startswith("M"):
@@ -41,8 +41,10 @@ def gene_set_overlap(geneset1, geneset2):
     return len(left_only), len(overlap), len(right_only)
 
 
-def compare_gene_sets(gene_set_name, genesets):
+def compare_gene_sets(gene_set_name, genesets, base_gene_sets):
     results = []
+    for base_name, base_gene_set in base_gene_sets.items():
+        genesets[base_name] = base_gene_set
     with open(OUT_FILE.format(gene_set_name), 'w') as out_f:
         models = sorted(genesets.keys())
         out_f.write("\t" + "\t".join(models) + "\n")
@@ -64,8 +66,37 @@ def compare_gene_sets(gene_set_name, genesets):
 
 def main():
     genesets = load_genesets()
-    comparison_results = compare_gene_sets('age70_20__neg', genesets['age70_20__neg'])
+    base_gene_sets = {}
+    dcc_gene_sets = read_gmt_file("../../GTEx/VD/inputs/GTEx_XMT_2022-06-06_GTEx_Aging_Signatures_2021.gmt")
+    base_gene_sets['DCC'] = set(dcc_gene_sets["GTEx AdiposeTissue 20-29 vs 70-79 Down"])
+    harmonizome_gene_sets = read_gmt_file("../../GTEx/VD/inputs/harmonizome_gtex_aging.gmt")
+    base_gene_sets['Harmo'] = set(harmonizome_gene_sets["GTEx AdiposeTissue 20-29 vs 70-79 Down"])
+    comparison_results = compare_gene_sets('age70_20__neg', genesets['age70_20__neg'], base_gene_sets) 
+
+def read_gmt_file(gmt_path):
+    """
+    Read GMT file and return a dictionary of gene sets.
     
+    Args:
+        gmt_path (str): Path to GMT file
+        
+    Returns:
+        dict: Dictionary with gene set names as keys and lists of genes as values
+    """
+    gene_sets = {}
+    
+    with open(gmt_path, 'r') as f:
+        for line in f:
+            parts = line.strip().split('\t')
+            if len(parts) >= 3:
+                gene_set_name = parts[0]
+                # Skip the description (parts[1])
+                genes = parts[2:]
+                gene_sets[gene_set_name] = genes
+    
+    return gene_sets
+
+
 
 if __name__ == "__main__":
     main()

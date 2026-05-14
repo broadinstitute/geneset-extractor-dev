@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 from gene_set_comparison import model_name
 
-IN_FILE = "../../data/gtex/output/adipose_subcutaneous_validation.txt"
+IN_FILE = "../../data/gtex/output/lung_validation_results.txt"
 
 
 
@@ -65,7 +65,7 @@ def main():
     # Extract model prefix from gene_set_name (everything before first "__")
     df['model'] = df['gene_set_name'].str.split('__').str[0]
     # Extract model index (remove "M" and convert to integer)
-    df['model_index'] = df['model'].str.replace('M', '').astype(int)
+    # df['model_index'] = df['model'].str.replace('M', '').astype(int)
     gene_set_name_suffix = df['gene_set_name'].str.split('__', n=1).str[1]
     df['gene_set_name_suffix'] = gene_set_name_suffix
     print(df.head())
@@ -76,7 +76,7 @@ def main():
     print(top_df.head(10))
     
     # Save to TSV file
-    output_path = "../../data/gtex/output/adipose_subcutaneous_top_gene_sets.tsv"
+    output_path = "../../data/gtex/output/lung_top_gene_sets.tsv"
     top_df.to_csv(output_path, sep='\t', index=False)
     print(f"\nSaved top gene sets to {output_path}")
 
