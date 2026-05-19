@@ -15,6 +15,7 @@
 !HuBMAP/
 !MoTrPAC/
 !KOMP2/
+!database
 
 !LINCS_L1000/**/
 !RummaGEO/**/
@@ -26,6 +27,7 @@
 !HuBMAP/**/
 !MoTrPAC/**/
 !KOMP2/**/
+!database/**/
 
 # Allow certain filetypes
 !LINCS_L1000/**/*.py
@@ -98,3 +100,7 @@
 !KOMP2/**/*.md
 !KOMP2/**/*.pdf
 !KOMP2/**/*.png
+!database/**/*.py
+!database/**/*.sql
+!database/**/*.sh
+!database/**/*.md
