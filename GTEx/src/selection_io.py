@@ -37,6 +37,10 @@ def default_tissue_list_path() -> Path:
     return planning_root() / "tissue_list.tsv"
 
 
+def default_broad_tissue_list_path() -> Path:
+    return planning_root() / "broad_tissue_list.tsv"
+
+
 def default_age_binned_model_manifest_path() -> Path:
     return planning_root() / "geneset_build" / "age_binned_models" / "model_manifest.tsv"
 
@@ -131,6 +135,8 @@ def model_group_for(model_id: str) -> str:
         return "age_binned"
     if model_id.startswith("AC"):
         return "continuous_age"
+    if model_id.startswith("CFDE"):
+        return "cfde_notebook"
     if model_id.startswith("TV"):
         return "tissue_versus"
     raise SystemExit(f"Unsupported model prefix for {model_id}")

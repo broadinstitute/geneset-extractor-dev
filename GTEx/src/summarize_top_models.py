@@ -44,8 +44,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--model_groups",
-        default="age_binned,continuous_age",
-        help="comma-separated list drawn from age_binned,continuous_age,tissue_versus",
+        default="age_binned,continuous_age,cfde_notebook",
+        help="comma-separated list drawn from age_binned,continuous_age,cfde_notebook,tissue_versus",
     )
     parser.add_argument(
         "--top_n",
@@ -326,22 +326,26 @@ def main() -> int:
     definition_maps = {
         "age_binned": load_manifest_definitions(Path(args.age_binned_model_manifest).resolve()),
         "continuous_age": load_manifest_definitions(Path(args.continuous_age_model_manifest).resolve()),
+        "cfde_notebook": {},
         "tissue_versus": {},
     }
 
     group_paths = {
         "age_binned": genesets_root / args.tissue / "age_binned_identical_model_check" / "identical_model_groups.tsv",
         "continuous_age": genesets_root / args.tissue / "continuous_age_identical_model_check" / "identical_model_groups.tsv",
+        "cfde_notebook": genesets_root / args.tissue / "cfde_notebook_identical_model_check" / "identical_model_groups.tsv",
         "tissue_versus": genesets_root / args.tissue / "tissue_versus_identical_model_check" / "identical_model_groups.tsv",
     }
     model_summary_paths = {
         "age_binned": pigean_root / "runs" / args.tissue / "age_binned_models_biology_model_summary.tsv.gz",
         "continuous_age": pigean_root / "runs" / args.tissue / "continuous_age_models_biology_model_summary.tsv.gz",
+        "cfde_notebook": pigean_root / "runs" / args.tissue / "cfde_notebook_models_biology_model_summary.tsv.gz",
         "tissue_versus": pigean_root / "runs" / args.tissue / "tissue_versus_models_biology_model_summary.tsv.gz",
     }
     query_summary_paths = {
         "age_binned": pigean_root / "runs" / args.tissue / "age_binned_models_biology_query_summary.tsv.gz",
         "continuous_age": pigean_root / "runs" / args.tissue / "continuous_age_models_biology_query_summary.tsv.gz",
+        "cfde_notebook": pigean_root / "runs" / args.tissue / "cfde_notebook_models_biology_query_summary.tsv.gz",
         "tissue_versus": pigean_root / "runs" / args.tissue / "tissue_versus_models_biology_query_summary.tsv.gz",
     }
 
@@ -397,7 +401,7 @@ def main() -> int:
             raise SystemExit(f"Missing biology model summary: {model_summary_path}")
         if not query_summary_path.exists():
             raise SystemExit(f"Missing biology query summary: {query_summary_path}")
-        if not group_path.exists():
+        if not group_path.exists() and model_group != "cfde_notebook":
             raise SystemExit(f"Missing identical-model groups: {group_path}")
         summary_rows = load_tsv_gz(model_summary_path)
         if allowed_models is not None:
@@ -409,7 +413,10 @@ def main() -> int:
                 for key, value in query_rows.items()
                 if key[0] in allowed_models
             }
-        group_map, _ = load_group_info(group_path)
+        if group_path.exists():
+            group_map, _ = load_group_info(group_path)
+        else:
+            group_map = {}
         report_rows, md_text = summarize_group(
             model_group=model_group,
             summary_rows=summary_rows,

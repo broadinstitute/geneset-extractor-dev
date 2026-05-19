@@ -133,6 +133,7 @@ def discover_queries(
             continue
         gmt_paths = sorted(models_dir.glob("AB*/extractor/genesets.gmt"))
         gmt_paths.extend(sorted(models_dir.glob("AC*/tissue_extractor/genesets.gmt")))
+        gmt_paths.extend(sorted(models_dir.glob("CFDE*/extractor/genesets.gmt")))
         gmt_paths.extend(sorted(models_dir.glob("TV*/tissue_extractor/genesets.gmt")))
         for gmt_path in gmt_paths:
             model_id = gmt_path.parent.parent.name
@@ -140,6 +141,8 @@ def discover_queries(
                 model_group = "age_binned"
             elif model_id.startswith("AC"):
                 model_group = "continuous_age"
+            elif model_id.startswith("CFDE"):
+                model_group = "cfde_notebook"
             elif model_id.startswith("TV"):
                 model_group = "tissue_versus"
             else:
@@ -223,7 +226,7 @@ def is_complete_status(status_payload: dict[str, object] | None, query_dir: Path
 
 
 def query_dir_for(out_dir: Path, query: QueryRecord) -> Path:
-    if query.model_group not in {"age_binned", "continuous_age", "tissue_versus"}:
+    if query.model_group not in {"age_binned", "continuous_age", "cfde_notebook", "tissue_versus"}:
         raise ValueError(f"unexpected model_group: {query.model_group}")
     return out_dir / "runs" / query.tissue_id / "models" / query.model_id / query.query_slug
 

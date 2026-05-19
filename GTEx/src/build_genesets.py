@@ -9,6 +9,7 @@ from pathlib import Path
 
 from selection_io import (
     default_age_binned_model_manifest_path,
+    default_broad_tissue_list_path,
     default_continuous_age_model_manifest_path,
     default_out_root,
     default_model_list_path,
@@ -29,8 +30,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--models_file")
     parser.add_argument("--tissues", default="all")
     parser.add_argument("--tissues_file")
+    parser.add_argument("--tissue_granularity", choices=["detailed", "broad"], default="detailed")
     parser.add_argument("--model_list", default=str(default_model_list_path()))
     parser.add_argument("--tissue_list", default=str(default_tissue_list_path()))
+    parser.add_argument("--broad_tissue_list", default=str(default_broad_tissue_list_path()))
     parser.add_argument("--python_bin", default=sys.executable or "python3")
     parser.add_argument("--rscript_bin", default="Rscript")
     parser.add_argument("--sample_metadata_tsv", required=True)
@@ -88,7 +91,8 @@ def require_existing_file(path_text: str, label: str) -> Path:
 def main() -> int:
     args = build_parser().parse_args()
     model_rows = load_model_rows(Path(args.model_list))
-    tissue_rows = load_tissue_rows(Path(args.tissue_list))
+    tissue_list_path_text = args.tissue_list if args.tissue_granularity == "detailed" else args.broad_tissue_list
+    tissue_rows = load_tissue_rows(Path(tissue_list_path_text))
     selected_models = resolve_requested_ids(
         csv_text=args.models,
         file_path=args.models_file,
@@ -108,6 +112,10 @@ def main() -> int:
     src_root = repo_root() / "geneset-extractor-dev" / "GTEx" / "src"
     sample_metadata_tsv = require_existing_file(args.sample_metadata_tsv, "sample metadata TSV")
     subject_metadata_tsv = require_existing_file(args.subject_metadata_tsv, "subject metadata TSV")
+    selected_tissue_list_path = require_existing_file(
+        tissue_list_path_text,
+        "broad tissue list" if args.tissue_granularity == "broad" else "tissue list",
+    )
     age_binned_model_manifest = require_existing_file(args.age_binned_model_manifest, "age-binned model manifest")
     continuous_age_model_manifest = require_existing_file(args.continuous_age_model_manifest, "continuous-age model manifest")
     dig_dir = Path(relative_or_absolute_path(args.dig_dir)).resolve()
@@ -118,6 +126,7 @@ def main() -> int:
 
     age_binned_models = [model_id for model_id in selected_models if model_group_for(model_id) == "age_binned"]
     continuous_age_models = [model_id for model_id in selected_models if model_group_for(model_id) == "continuous_age"]
+    cfde_notebook_models = [model_id for model_id in selected_models if model_group_for(model_id) == "cfde_notebook"]
     unsupported_models = [model_id for model_id in selected_models if model_group_for(model_id) == "tissue_versus"]
     if unsupported_models:
         raise SystemExit("TV* geneset building is not implemented yet")
@@ -139,7 +148,7 @@ def main() -> int:
     conflicts: list[str] = []
     for tissue_id in selected_tissues:
         tissue_root = outputs_root / tissue_id
-        for model_id in [*age_binned_models, *continuous_age_models]:
+        for model_id in [*age_binned_models, *continuous_age_models, *cfde_notebook_models]:
             model_out = tissue_root / "models" / model_id
             if dir_nonempty(model_out):
                 conflicts.append(existing_output_message(tissue_id=tissue_id, model_id=model_id, path=model_out))
@@ -151,7 +160,7 @@ def main() -> int:
         counts_gct_value = str(tissue_row.get("counts_gct", "")).strip()
         if not counts_gct_value:
             raise SystemExit(
-                f"Missing counts_gct for tissue={tissue_id} in tissue list {Path(args.tissue_list).resolve()}"
+                f"Missing counts_gct for tissue={tissue_id} in tissue list {selected_tissue_list_path.resolve()}"
             )
         counts_gct = relative_or_absolute_path(counts_gct_value)
         if not counts_gct.exists():
@@ -163,25 +172,53 @@ def main() -> int:
         prepared_dir = tissue_root / "prepared"
         models_root = tissue_root / "models"
         if args.overwrite:
-            for model_id in [*age_binned_models, *continuous_age_models]:
+            for model_id in [*age_binned_models, *continuous_age_models, *cfde_notebook_models]:
                 overwrite_dir(models_root / model_id)
         if not dir_nonempty(prepared_dir):
-            run_command(
-                [
-                    str(Path(args.python_bin).resolve()),
-                    str(src_root / "build_tissue_inputs.py"),
-                    "--counts_gct",
-                    str(counts_gct),
-                    "--sample_metadata_tsv",
-                    str(sample_metadata_tsv),
-                    "--subject_metadata_tsv",
-                    str(subject_metadata_tsv),
-                    "--tissue_label",
-                    tissue_label,
-                    "--out_dir",
-                    str(prepared_dir),
-                ]
-            )
+            if args.tissue_granularity == "broad":
+                metadata_group_column = str(tissue_row.get("metadata_group_column", "")).strip() or "SMTS"
+                metadata_group_value = str(tissue_row.get("metadata_group_value", "")).strip()
+                if not metadata_group_value:
+                    raise SystemExit(
+                        f"Missing metadata_group_value for tissue={tissue_id} in tissue list {selected_tissue_list_path.resolve()}"
+                    )
+                run_command(
+                    [
+                        str(Path(args.python_bin).resolve()),
+                        str(src_root / "build_broad_tissue_inputs.py"),
+                        "--counts_gct",
+                        str(counts_gct),
+                        "--sample_metadata_tsv",
+                        str(sample_metadata_tsv),
+                        "--subject_metadata_tsv",
+                        str(subject_metadata_tsv),
+                        "--tissue_label",
+                        tissue_label,
+                        "--metadata_group_column",
+                        metadata_group_column,
+                        "--metadata_group_value",
+                        metadata_group_value,
+                        "--out_dir",
+                        str(prepared_dir),
+                    ]
+                )
+            else:
+                run_command(
+                    [
+                        str(Path(args.python_bin).resolve()),
+                        str(src_root / "build_tissue_inputs.py"),
+                        "--counts_gct",
+                        str(counts_gct),
+                        "--sample_metadata_tsv",
+                        str(sample_metadata_tsv),
+                        "--subject_metadata_tsv",
+                        str(subject_metadata_tsv),
+                        "--tissue_label",
+                        tissue_label,
+                        "--out_dir",
+                        str(prepared_dir),
+                    ]
+                )
 
         for model_id in age_binned_models:
             needs_gtf = model_requires_gtf(model_by_id[model_id])
@@ -259,6 +296,28 @@ def main() -> int:
                     if resolved_gtf is not None and any_continuous_age_needs_gtf
                     else []
                 )
+            )
+
+        for model_id in cfde_notebook_models:
+            run_command(
+                [
+                    str(Path(args.python_bin).resolve()),
+                    str(src_root / "run_cfde_notebook_model.py"),
+                    "--model_id",
+                    model_id,
+                    "--tissue_id",
+                    tissue_id,
+                    "--tissue_label",
+                    tissue_label,
+                    "--prepared_dir",
+                    str(prepared_dir),
+                    "--run_root",
+                    str(models_root),
+                    "--python_bin",
+                    str(Path(args.python_bin).resolve()),
+                    "--rscript_bin",
+                    args.rscript_bin,
+                ]
             )
     return 0
 
