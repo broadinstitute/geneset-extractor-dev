@@ -155,6 +155,7 @@ CREATE TABLE provenance (
     gene_set_id       INTEGER,
     provenance_graph  TEXT    NOT NULL,
     geneset_metadata  TEXT    NOT NULL,
+    run_summary       TEXT,
     PRIMARY KEY (
         gene_set_id
     ),
@@ -162,6 +163,53 @@ CREATE TABLE provenance (
         gene_set_id
     )
     REFERENCES gene_set (gene_set_id) ON DELETE CASCADE
+);
+
+
+-- Table: provenance_node
+CREATE TABLE provenance_node (
+    provenance_node_id INTEGER,
+    gene_set_id        INTEGER NOT NULL,
+    node_type          TEXT    NOT NULL,
+    name               TEXT,
+    description        TEXT,
+    dcc_url            TEXT,
+    drc_url            TEXT,
+    additional_properties TEXT NOT NULL,
+    PRIMARY KEY (
+        provenance_node_id
+    ),
+    FOREIGN KEY (
+        gene_set_id
+    )
+    REFERENCES gene_set (gene_set_id) ON DELETE CASCADE
+);
+
+
+-- Table: provenance_edge
+CREATE TABLE provenance_edge (
+    provenance_edge_id INTEGER,
+    gene_set_id        INTEGER NOT NULL,
+    source_node_id     INTEGER NOT NULL,
+    target_node_id     INTEGER NOT NULL,
+    label              TEXT,
+    description        TEXT,
+    additional_properties TEXT,
+    PRIMARY KEY (
+        provenance_edge_id
+    ),
+    FOREIGN KEY (
+        gene_set_id
+    )
+    REFERENCES gene_set (gene_set_id) ON DELETE CASCADE,
+    FOREIGN KEY (
+        source_node_id
+    )
+    REFERENCES provenance_node (provenance_node_id) ON DELETE CASCADE,
+    FOREIGN KEY (
+        target_node_id
+    )
+    REFERENCES provenance_node (provenance_node_id) ON DELETE CASCADE
 );
 
 
