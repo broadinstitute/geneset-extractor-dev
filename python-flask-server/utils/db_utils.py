@@ -72,6 +72,13 @@ def get_gene_set_data(gene_set_id: int) -> dict | None:
         if provenance_error is not None:
             gene_set_data["provenance_graph_error"] = provenance_error
 
+        geneset_metadata, geneset_metadata_error = _parse_json_field(
+            "geneset_metadata", gene_set_data.get("geneset_metadata")
+        )
+        gene_set_data["geneset_metadata"] = geneset_metadata
+        if geneset_metadata_error is not None:
+            gene_set_data["geneset_metadata_error"] = geneset_metadata_error
+
         gene_set_data["gene_symbols"] = [_row_to_dict(row) for row in gene_symbol_rows]
         return gene_set_data
     finally:
