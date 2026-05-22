@@ -14,6 +14,7 @@
 !python-flask-server/
 !python-flask-server/**/
 !python-flask-server/**/*.py
+!python-flask-server/**/*.txt
 !python-flask-server/**/*.sqlite
 python-flask-server/**/__init__.py
 
