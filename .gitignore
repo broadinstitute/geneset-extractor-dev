@@ -7,7 +7,15 @@
 # adding webservices and notes
 !notes/
 !notes/**/
+!notes/**/*.txt
+!notes/**/*.pdf
+!notes/**/*.sql
+
 !python-flask-server/
+!python-flask-server/**/
+!python-flask-server/**/*.py
+!python-flask-server/**/*.sqlite
+python-flask-server/**/__init__.py
 
 
 # Allow traversing these subdirectories

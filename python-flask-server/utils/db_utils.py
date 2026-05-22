@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -9,6 +10,16 @@ DB_PATH = Path(__file__).resolve().parents[1] / "data" / "genseco_v0.sqlite"
 
 def _row_to_dict(row: sqlite3.Row) -> dict:
     return {key: row[key] for key in row.keys()}
+
+
+def _parse_json_field(field_name: str, raw_value: str | None) -> tuple[object | None, str | None]:
+    if raw_value is None:
+        return None, None
+
+    try:
+        return json.loads(raw_value), None
+    except json.JSONDecodeError as exc:
+        return None, f"{field_name} contains invalid JSON: {exc.msg}"
 
 
 def get_gene_set_data(gene_set_id: int) -> dict | None:
@@ -54,6 +65,13 @@ def get_gene_set_data(gene_set_id: int) -> dict | None:
         ).fetchall()
 
         gene_set_data = _row_to_dict(gene_set_row)
+        provenance_graph, provenance_error = _parse_json_field(
+            "provenance_graph", gene_set_data.get("provenance_graph")
+        )
+        gene_set_data["provenance_graph"] = provenance_graph
+        if provenance_error is not None:
+            gene_set_data["provenance_graph_error"] = provenance_error
+
         gene_set_data["gene_symbols"] = [_row_to_dict(row) for row in gene_symbol_rows]
         return gene_set_data
     finally:
