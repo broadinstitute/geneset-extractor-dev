@@ -4,6 +4,12 @@
 # Except these base files...
 !.gitignore
 
+# adding webservices and notes
+!notes/
+!notes/**/
+!python-flask-server/
+
+
 # Allow traversing these subdirectories
 !LINCS_L1000/
 !RummaGEO/
