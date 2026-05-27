@@ -2,8 +2,8 @@ import os
 
 from run_eaggl import run_eaggl, save_results
 
-BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/gtex_outputs/genesets"
-OUT_FILE = "../../data/gtex/output/{}_validation_results.txt"
+BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/gtex/genesets"
+OUT_FILE = "../../data/gtex/output.tissue/{}_validation_results.txt"
 
 
 def parse_gmt_file(gmt_file):

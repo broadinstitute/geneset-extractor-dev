@@ -5,8 +5,9 @@ import matplotlib.pyplot as plt
 
 from gene_set_comparison import model_name
 
-BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/gtex_outputs/genesets"
-IN_FILE = "../../data/gtex/output/{}_validation_results.txt"
+
+BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/gtex/genesets"
+IN_FILE = "../../data/gtex/output.tissue/{}_validation_results.txt"
 
 
 def plot_gene_set_by_model(df, gene_set_name_suffix):
@@ -128,9 +129,9 @@ def create_pivot_tables(df):
 
 
 def main():
-    output_path = "../../data/gtex/output/top_gene_sets.tsv"
-    pivot_ab_output_path = "../../data/gtex/output/negative_control_counts_AB.tsv"
-    pivot_ac_output_path = "../../data/gtex/output/negative_control_counts_AC.tsv"
+    output_path = "../../data/gtex/output.tissue/top_gene_sets.tsv"
+    pivot_ab_output_path = "../../data/gtex/output.tissue/negative_control_counts_AB.tsv"
+    pivot_ac_output_path = "../../data/gtex/output.tissue/negative_control_counts_AC.tsv"
     df = None
     for tissue in sorted(os.listdir(BASE_FOLDER)):
         tissue_path = os.path.join(BASE_FOLDER, tissue)

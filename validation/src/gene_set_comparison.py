@@ -4,7 +4,8 @@ from collections import defaultdict
 from run_validation import parse_gmt_file
 
 BASE_FOLDER = "/humgen/diabetes2/users/ryank/geneset_extractors/GTEx/outputs/genesets/adipose_subcutaneous/models"
-OUT_FILE = "../../data/gtex/output/adipose_subcutaneous_{}_comparison.tsv"
+BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/gtex/genesets/adipose_tissue/models"
+OUT_FILE = "../../data/gtex/output.tissue/adipose_tissue_{}_comparison.tsv"
 
 def model_name(folder):
     if folder.startswith("M"):
@@ -22,13 +23,16 @@ def load_genesets():
     for folder in os.listdir(BASE_FOLDER):
         folder_path = os.path.join(BASE_FOLDER, folder)
         if os.path.isdir(folder_path):
-            print("Loading gene sets for folder:", folder_path)
+            print("Loading gene sets for model:", folder)
             gmt_file = folder_path + "/extractor/genesets.gmt"
-            for gene_set in parse_gmt_file(gmt_file):
-                gene_set_name = gene_set['gene_set']
-                if gene_set_name.startswith("M"):
-                    gene_set_name = gene_set_name.split("__", 1)[1] if "__" in gene_set_name else gene_set_name
-                genesets[gene_set_name][model_name(folder)] = gene_set['genes']
+            if os.path.exists(gmt_file):
+                for gene_set in parse_gmt_file(gmt_file):
+                    gene_set_name = gene_set['gene_set']
+                    if gene_set_name.startswith("A"):
+                        gene_set_name = gene_set_name.split("__", 1)[1] if "__" in gene_set_name else gene_set_name
+                    genesets[gene_set_name][model_name(folder)] = gene_set['genes']
+            else:
+                print("No GMT file found for model:", folder)
     return genesets
 
 
@@ -71,7 +75,8 @@ def main():
     base_gene_sets['DCC'] = set(dcc_gene_sets["GTEx AdiposeTissue 20-29 vs 70-79 Down"])
     harmonizome_gene_sets = read_gmt_file("../../GTEx/VD/inputs/harmonizome_gtex_aging.gmt")
     base_gene_sets['Harmo'] = set(harmonizome_gene_sets["GTEx AdiposeTissue 20-29 vs 70-79 Down"])
-    comparison_results = compare_gene_sets('age70_20__neg', genesets['age70_20__neg'], base_gene_sets) 
+    gene_set_name = "age70_20__neg"
+    comparison_results = compare_gene_sets(gene_set_name, genesets[gene_set_name], base_gene_sets) 
 
 def read_gmt_file(gmt_path):
     """
