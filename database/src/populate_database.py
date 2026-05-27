@@ -108,7 +108,7 @@ class GeneSeCoDatabasePopulator:
                     
                     gene_sets.append((gene_set_name, genes))
             
-            logger.info(f"Parsed {len(gene_sets)} gene sets from {gmt_path.name}")
+            logger.info(f"Parsed {len(gene_sets)} gene sets from {gmt_path}")
             return gene_sets
         except Exception as e:
             logger.error(f"Error parsing {gmt_path}: {e}")
@@ -339,6 +339,88 @@ class GeneSeCoDatabasePopulator:
             logger.debug(f"Error loading provenance/metadata for {gene_set_name}: {e}")
             return None
 
+    def insert_gene_set_details(
+        self,
+        gene_set_id: int,
+        gene_set_name: str,
+        metadata_json_str: str,
+        species_code: str,
+        primary_namespace_id: int,
+        contrib_organization: str = None
+    ):
+        """
+        Insert gene_set_details record from parsed metadata JSON.
+        
+        Maps fields from geneset.meta.json into the gene_set_details table:
+        - systematic_name: gene_set_name (unique, e.g. AC10__blood__pos)
+        - description_brief / description_full: from gene_set.description
+        - exact_source: signature_name + variant + geneset_id
+        - external_details_URL: converter.code.repo_url (or notebook_url)
+        - source_species_code, primary_namespace_id, num_namespaces: provided
+        """
+        try:
+            try:
+                metadata = json.loads(metadata_json_str) if metadata_json_str else {}
+            except json.JSONDecodeError:
+                metadata = {}
+            
+            gene_set_meta = metadata.get('gene_set', {}) if isinstance(metadata, dict) else {}
+            converter = metadata.get('converter', {}) if isinstance(metadata, dict) else {}
+            code = converter.get('code', {}) if isinstance(converter, dict) else {}
+            params = converter.get('parameters', {}) if isinstance(converter, dict) else {}
+            
+            description_full = gene_set_meta.get('description') or ''
+            # Brief description: first sentence or first 250 chars
+            description_brief = description_full.split('. ')[0].strip()
+            if description_brief and not description_brief.endswith('.'):
+                description_brief += '.'
+            if len(description_brief) > 250:
+                description_brief = description_brief[:247] + '...'
+            
+            # exact_source: identifier from upstream (signature + emitted variant)
+            signature_name = params.get('signature_name') if isinstance(params, dict) else None
+            geneset_uid = metadata.get('geneset_id') if isinstance(metadata, dict) else None
+            exact_source_parts = []
+            if signature_name:
+                exact_source_parts.append(signature_name)
+            # Derive variant suffix from gene_set_name (e.g. AC10__blood__pos -> pos)
+            if signature_name and gene_set_name.startswith(signature_name):
+                suffix = gene_set_name[len(signature_name):].lstrip('_')
+                if suffix:
+                    exact_source_parts.append(suffix)
+            if geneset_uid:
+                exact_source_parts.append(f"geneset:{geneset_uid}")
+            exact_source = ' | '.join(exact_source_parts) if exact_source_parts else None
+            
+            # external URL: prefer notebook_url, fall back to repo_url
+            external_url = (code.get('notebook_url')
+                            or code.get('script_url')
+                            or code.get('repo_url')) if isinstance(code, dict) else None
+            
+            self.cursor.execute(
+                '''INSERT OR REPLACE INTO gene_set_details
+                   (gene_set_id, description_brief, description_full, systematic_name,
+                    exact_source, external_details_URL, source_species_code,
+                    primary_namespace_id, num_namespaces, contrib_organization)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (
+                    gene_set_id,
+                    description_brief or None,
+                    description_full or None,
+                    gene_set_name,
+                    exact_source,
+                    external_url,
+                    species_code,
+                    primary_namespace_id,
+                    1,
+                    contrib_organization,
+                )
+            )
+        except sqlite3.IntegrityError as e:
+            logger.warning(f"gene_set_details insert error for {gene_set_name} (id={gene_set_id}): {e}")
+        except Exception as e:
+            logger.error(f"Error inserting gene_set_details for {gene_set_name}: {e}")
+
     def insert_provenance(
         self,
         gene_set_id: int,
@@ -358,7 +440,9 @@ class GeneSeCoDatabasePopulator:
     def insert_provenance_nodes_and_edges(
         self,
         gene_set_id: int,
-        provenance_json_str: str
+        provenance_json_str: str,
+        geneset_node_name: str = None,
+        geneset_node_name_match: str = None
     ) -> int:
         """
         Insert provenance nodes and edges from provenance JSON string.
@@ -366,12 +450,15 @@ class GeneSeCoDatabasePopulator:
         The GeneSet node gets provenance_node_id = gene_set_id.
         Other nodes get sequential auto-assigned IDs.
         
-        Returns:
-            The maximum provenance_node_id used, or 0 if no nodes/edges were inserted.
-        
         Args:
             gene_set_id: ID of the gene set (also used for the GeneSet node)
             provenance_json_str: Full provenance JSON as string (parsed from geneset.provenance.json)
+            geneset_node_name: If provided, override the GeneSet node's `name` field with this value
+                (used to keep gene_set.standard_name and provenance_node.name in sync).
+            geneset_node_name_match: Reserved for future variant-disambiguation; currently unused.
+        
+        Returns:
+            The maximum provenance_node_id used, or 0 if no nodes/edges were inserted.
         """
         max_node_id_used = 0
         
@@ -414,6 +501,9 @@ class GeneSeCoDatabasePopulator:
                 original_id = node.get('id')
                 node_type = node.get('type', '')
                 name = node.get('name', '')
+                # Override GeneSet node name to keep it in sync with gene_set.standard_name
+                if node_type == 'GeneSet' and geneset_node_name:
+                    name = geneset_node_name
                 description = node.get('description', '')
                 dcc_url = node.get('dcc_url')
                 drc_url = node.get('drc_url')
@@ -518,7 +608,8 @@ class GeneSeCoDatabasePopulator:
         species_name: str = 'Homo sapiens',
         namespace_label: str = 'HGNC',
         license_code: str = 'CC-BY-4.0',
-        require_provenance: bool = True
+        require_provenance: bool = True,
+        contrib_organization: str = None
     ):
         """Populate database from GMT files."""
         try:
@@ -543,10 +634,24 @@ class GeneSeCoDatabasePopulator:
             skipped_gene_sets = 0
             
             for gmt_file in gmt_files:
+                logger.info(f"Processing GMT file: {gmt_file}")
                 gene_sets = self.parse_gmt_file(gmt_file)
                 
                 for gene_set_name, genes in gene_sets:
                     try:
+                        # Derive tissue from path: .../genesets/{tissue}/models/{model_id}/tissue_extractor/genesets.gmt
+                        tissue = None
+                        for ancestor in gmt_file.parents:
+                            if ancestor.name == 'models' and ancestor.parent is not None:
+                                tissue = ancestor.parent.name
+                                break
+                        
+                        # Build unified standard name: {collection}__{tissue}__{gene_set_name}
+                        if tissue:
+                            standard_name = f"{collection_name}__{tissue}__{gene_set_name}"
+                        else:
+                            standard_name = f"{collection_name}__{gene_set_name}"
+                        
                         # Load provenance and metadata if required
                         provenance_data = None
                         if require_provenance:
@@ -561,14 +666,14 @@ class GeneSeCoDatabasePopulator:
                         
                         # Insert gene set with explicit ID
                         gene_set_id = self.insert_gene_set(
-                            standard_name=gene_set_name,
+                            standard_name=standard_name,
                             collection_name=collection_name,
                             license_code=license_code,
                             gene_set_id=gene_set_id
                         )
                         
                         if not gene_set_id:
-                            logger.warning(f"Failed to insert gene set: {gene_set_name}")
+                            logger.warning(f"Failed to insert gene set: {standard_name}")
                             continue
                         
                         # Insert genes and create associations
@@ -583,18 +688,38 @@ class GeneSeCoDatabasePopulator:
                                 total_genes += 1
                         
                         # Insert provenance if available
+                        max_node_id = 0
                         if provenance_data:
                             provenance_graph, geneset_metadata, run_summary = provenance_data
                             self.insert_provenance(gene_set_id, provenance_graph, geneset_metadata, run_summary)
+                            # Populate gene_set_details from metadata JSON
+                            self.insert_gene_set_details(
+                                gene_set_id=gene_set_id,
+                                gene_set_name=standard_name,
+                                metadata_json_str=geneset_metadata,
+                                species_code=species_code,
+                                primary_namespace_id=namespace_id,
+                                contrib_organization=contrib_organization,
+                            )
                             if provenance_graph:
-                                max_node_id = self.insert_provenance_nodes_and_edges(gene_set_id, provenance_graph)
-                                # Update next_available_node_id for the next gene set
-                                self.next_available_node_id = max_node_id + 1
+                                max_node_id = self.insert_provenance_nodes_and_edges(
+                                    gene_set_id, provenance_graph,
+                                    geneset_node_name=standard_name,
+                                    geneset_node_name_match=gene_set_name
+                                )
+                        
+                        # Always advance next_available_node_id past this gene set's used IDs,
+                        # so the next gene set never collides (even if provenance was missing/empty).
+                        self.next_available_node_id = max(gene_set_id, max_node_id) + 1
                         
                         total_gene_sets += 1
+                        logger.info(
+                            f"Loaded gene set '{standard_name}' (id={gene_set_id}, "
+                            f"{len(genes)} genes) from {gmt_file}"
+                        )
                         
                         if total_gene_sets % 100 == 0:
-                            logger.info(f"Processed {total_gene_sets} gene sets, {total_genes} gene associations")
+                            logger.info(f"Progress: {total_gene_sets} gene sets, {total_genes} gene associations so far")
                             self.conn.commit()
                     
                     except Exception as e:
@@ -657,6 +782,11 @@ def main():
         help='License code (default: CC-BY-4.0)'
     )
     parser.add_argument(
+        '--contrib-organization',
+        default='GTEx Consortium',
+        help='Contributing organization for gene_set_details (default: GTEx Consortium)'
+    )
+    parser.add_argument(
         '--require-provenance',
         action='store_true',
         default=True,
@@ -689,7 +819,8 @@ def main():
             species_name=args.species_name,
             namespace_label=args.namespace_label,
             license_code=args.license_code,
-            require_provenance=require_provenance
+            require_provenance=require_provenance,
+            contrib_organization=args.contrib_organization,
         )
     finally:
         populator.disconnect()
