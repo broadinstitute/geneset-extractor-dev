@@ -84,6 +84,63 @@ def log_line(path: Path, text: str) -> None:
         handle.write(text.rstrip("\n") + "\n")
 
 
+def read_tsv_rows(path: Path) -> list[dict[str, str]]:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))
+
+
+def write_tsv_rows(path: Path, rows: list[dict[str, str]], fieldnames: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, delimiter="\t", fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+
+def ensure_gmt_comparison_labels(*, prepared_dir: Path, workflow_out: Path, log_path: Path) -> Path:
+    deg_path = workflow_out / "deg_long.tsv"
+    deg_rows = read_tsv_rows(deg_path)
+    if not deg_rows:
+        return deg_path
+    fieldnames = list(deg_rows[0].keys())
+    if "gmt_comparison_label" in fieldnames:
+        return deg_path
+
+    comparison_rows = read_tsv_rows(prepared_dir / "comparisons.tsv")
+    label_by_comparison = {
+        str(row.get("comparison_id", "")).strip(): str(row.get("gmt_comparison_label", "")).strip()
+        for row in comparison_rows
+        if str(row.get("comparison_id", "")).strip()
+    }
+    missing = sorted(
+        {
+            str(row.get("comparison_id", "")).strip()
+            for row in deg_rows
+            if str(row.get("comparison_id", "")).strip() not in label_by_comparison
+        }
+    )
+    if missing:
+        joined = ", ".join(missing[:5])
+        suffix = "" if len(missing) <= 5 else ", ..."
+        raise SystemExit(
+            "Missing gmt_comparison_label mapping for comparison_id values: "
+            f"{joined}{suffix}"
+        )
+
+    augmented_rows: list[dict[str, str]] = []
+    for row in deg_rows:
+        updated = dict(row)
+        updated["gmt_comparison_label"] = label_by_comparison[str(row.get("comparison_id", "")).strip()]
+        augmented_rows.append(updated)
+
+    augmented_fieldnames = [*fieldnames, "gmt_comparison_label"]
+    augmented_path = workflow_out / "deg_long.with_gmt_labels.tsv"
+    write_tsv_rows(augmented_path, augmented_rows, augmented_fieldnames)
+    log_line(log_path, f"[run_age_binned_model] wrote augmented DEG table {augmented_path}")
+    return augmented_path
+
+
 def build_workflow_cmd(
     *,
     python_bin: str,
@@ -148,7 +205,7 @@ def build_workflow_cmd(
 def build_extractor_cmd(
     *,
     python_bin: str,
-    workflow_out: Path,
+    deg_tsv: Path,
     extractor_out: Path,
     organism: str,
     genome_build: str,
@@ -165,7 +222,7 @@ def build_extractor_cmd(
         "convert",
         "rna_deg_multi",
         "--deg_tsv",
-        str(workflow_out / "deg_long.tsv"),
+        str(deg_tsv),
         "--comparison_column",
         "comparison_id",
         "--comparison_name_column",
@@ -317,9 +374,13 @@ def main() -> int:
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
     )
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(dig_dir / "src")
+    log_line(model_log, f"[run_age_binned_model] model_id={args.model_id}")
+    deg_tsv_for_extractor = workflow_out / "deg_long.with_gmt_labels.tsv"
     extractor_cmd = build_extractor_cmd(
         python_bin=args.python_bin,
-        workflow_out=workflow_out,
+        deg_tsv=deg_tsv_for_extractor,
         extractor_out=extractor_out,
         organism=args.organism,
         genome_build=args.genome_build,
@@ -340,10 +401,24 @@ def main() -> int:
     if args.write_commands_only:
         return 0
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(dig_dir / "src")
-    log_line(model_log, f"[run_age_binned_model] model_id={args.model_id}")
     run_command(workflow_cmd, cwd=dig_dir, env=env, log_path=model_log)
+    deg_tsv_for_extractor = ensure_gmt_comparison_labels(
+        prepared_dir=prepared_dir,
+        workflow_out=workflow_out,
+        log_path=model_log,
+    )
+    extractor_cmd = build_extractor_cmd(
+        python_bin=args.python_bin,
+        deg_tsv=deg_tsv_for_extractor,
+        extractor_out=extractor_out,
+        organism=args.organism,
+        genome_build=args.genome_build,
+        tissue_id=tissue_id,
+        settings=settings,
+        gtf_path=resolved_gtf,
+        provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
+        provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
+    )
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
     return 0
 
