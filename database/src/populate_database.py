@@ -492,6 +492,15 @@ class GeneSeCoDatabasePopulator:
                 logger.debug(f"No nodes or edges found in provenance JSON for gene_set_id {gene_set_id}")
                 return max_node_id_used
             
+            # Reorder: insert GeneSet nodes FIRST so their reserved provenance_node_id
+            # (= gene_set_id) is taken before any non-GeneSet node gets auto-assigned.
+            # Otherwise, a non-GeneSet node processed first would receive id=gene_set_id
+            # and then be overwritten by the GeneSet node's INSERT OR REPLACE.
+            nodes_to_process = sorted(
+                nodes_to_process,
+                key=lambda n: 0 if n.get('type') == 'GeneSet' else 1
+            )
+            
             # Mapping from original JSON node ID to new provenance_node_id
             node_id_mapping = {}
             
