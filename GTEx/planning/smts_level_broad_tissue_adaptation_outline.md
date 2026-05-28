@@ -92,7 +92,7 @@ That way:
 
 - `run_age_binned_model.py`
 - `run_continuous_age_model.py`
-- `run_cfde_notebook_model.py`
+- `run_hz_notebook_model.py`
 
 can continue to operate on prepared bundles without large structural changes.
 
@@ -147,7 +147,7 @@ Once the prepared bundle exists, most model families can still be reused:
 
 - `AB*` age-binned models
 - `AC*` continuous-age models
-- `CFDE1`
+- `HZ1`
 
 The main difference is the sample cohort being analyzed.
 

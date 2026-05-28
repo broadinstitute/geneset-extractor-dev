@@ -107,6 +107,7 @@ def discover_gmts(outputs_root: Path) -> list[Path]:
             gmts.extend(sorted(models_dir.glob("AB*/extractor/genesets.gmt")))
             gmts.extend(sorted(models_dir.glob("AB*/extractor/age*/genesets.gmt")))
             gmts.extend(sorted(models_dir.glob("AC*/tissue_extractor/genesets.gmt")))
+            gmts.extend(sorted(models_dir.glob("HZ*/extractor/genesets.gmt")))
             gmts.extend(sorted(models_dir.glob("TV*/tissue_extractor/genesets.gmt")))
     return gmts
 
@@ -143,7 +144,7 @@ def model_context(gmt_path: Path) -> dict[str, str | Path]:
         scope = "comparison"
         scope_label = gmt_path.parent.name
     return {
-        "model_group": "age_binned",
+        "model_group": ("hz_notebook" if model_dir.name.startswith("HZ") else "age_binned"),
         "tissue_id": tissue_root.name,
         "model_id": model_dir.name,
         "model_dir": model_dir,

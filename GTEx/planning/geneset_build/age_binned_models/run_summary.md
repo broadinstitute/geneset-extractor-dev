@@ -13,7 +13,7 @@
 
 ## Key Decision
 
-The current latest GTEx bulk-expression release referenced for planning is `v10`, verified from the current Adult GTEx CFDE index on April 23, 2026. The concrete counts target is `GTEx_Analysis_v10_RNASeQCv2.4.2_gene_reads.gct.gz`, with a current counts-by-tissue collection also present for `v10`.
+The current latest GTEx bulk-expression release referenced for planning is `v10`, verified from the current Adult GTEx file index on April 23, 2026. The concrete counts target is `GTEx_Analysis_v10_RNASeQCv2.4.2_gene_reads.gct.gz`, with a current counts-by-tissue collection also present for `v10`.
 
 ## What This Planning Bundle Produced
 

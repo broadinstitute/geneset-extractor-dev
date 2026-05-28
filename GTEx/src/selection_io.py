@@ -135,8 +135,8 @@ def model_group_for(model_id: str) -> str:
         return "age_binned"
     if model_id.startswith("AC"):
         return "continuous_age"
-    if model_id.startswith("CFDE"):
-        return "cfde_notebook"
+    if model_id.startswith("HZ"):
+        return "hz_notebook"
     if model_id.startswith("TV"):
         return "tissue_versus"
     raise SystemExit(f"Unsupported model prefix for {model_id}")

@@ -12,7 +12,7 @@ This catalog intentionally ignores everything under `geneset-extractor-dev/GTEx/
 ## Current Inputs And Constraints
 
 - The plan points to `https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression`.
-- That GTEx downloads page is JavaScript-heavy, so the latest release was verified indirectly from the current Adult GTEx CFDE index on April 23, 2026.
+- That GTEx downloads page is JavaScript-heavy, so the latest release was verified indirectly from the current Adult GTEx file index on April 23, 2026.
 - The current indexed bulk RNA-seq counts release is `GTEx_Analysis_v10_RNASeQCv2.4.2_gene_reads.gct.gz`.
 - The current indexed per-tissue collection is `gs://adult-gtex/bulk-gex/v10/rna-seq/counts-by-tissue/`.
 - The current DIG workflow boundary is:

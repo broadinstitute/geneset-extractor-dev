@@ -21,4 +21,4 @@ sed -n '360,430p' dig-gene-set-extractors/src/geneset_extractors/preprocessing/r
 External verification used for the release target:
 
 - GTEx portal downloads page named in the plan
-- CFDE Adult GTEx v10 file index pages for the current bulk gene-reads file and counts-by-tissue collection
+- Adult GTEx v10 file index pages for the current bulk gene-reads file and counts-by-tissue collection

@@ -38,6 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rscript_bin", default="Rscript")
     parser.add_argument("--sample_metadata_tsv", required=True)
     parser.add_argument("--subject_metadata_tsv", required=True)
+    parser.add_argument("--human_gene_info")
     parser.add_argument("--gtf")
     parser.add_argument("--provenance_mirror_local_prefix")
     parser.add_argument("--provenance_mirror_remote_prefix")
@@ -112,6 +113,9 @@ def main() -> int:
     src_root = repo_root() / "geneset-extractor-dev" / "GTEx" / "src"
     sample_metadata_tsv = require_existing_file(args.sample_metadata_tsv, "sample metadata TSV")
     subject_metadata_tsv = require_existing_file(args.subject_metadata_tsv, "subject metadata TSV")
+    human_gene_info: Path | None = None
+    if args.human_gene_info:
+        human_gene_info = require_existing_file(args.human_gene_info, "human_gene_info")
     selected_tissue_list_path = require_existing_file(
         tissue_list_path_text,
         "broad tissue list" if args.tissue_granularity == "broad" else "tissue list",
@@ -126,10 +130,14 @@ def main() -> int:
 
     age_binned_models = [model_id for model_id in selected_models if model_group_for(model_id) == "age_binned"]
     continuous_age_models = [model_id for model_id in selected_models if model_group_for(model_id) == "continuous_age"]
-    cfde_notebook_models = [model_id for model_id in selected_models if model_group_for(model_id) == "cfde_notebook"]
+    hz_notebook_models = [model_id for model_id in selected_models if model_group_for(model_id) == "hz_notebook"]
     unsupported_models = [model_id for model_id in selected_models if model_group_for(model_id) == "tissue_versus"]
     if unsupported_models:
         raise SystemExit("TV* geneset building is not implemented yet")
+    if hz_notebook_models and args.tissue_granularity != "broad":
+        raise SystemExit("HZ* notebook-style models require --tissue_granularity broad")
+    if hz_notebook_models and human_gene_info is None:
+        raise SystemExit("HZ* notebook-style models require --human_gene_info")
     gtf_required_models = [model_id for model_id in selected_models if model_requires_gtf(model_by_id[model_id])]
     model_list_gtf_required_models = [
         str(row["model_id"]).strip()
@@ -148,7 +156,7 @@ def main() -> int:
     conflicts: list[str] = []
     for tissue_id in selected_tissues:
         tissue_root = outputs_root / tissue_id
-        for model_id in [*age_binned_models, *continuous_age_models, *cfde_notebook_models]:
+        for model_id in [*age_binned_models, *continuous_age_models, *hz_notebook_models]:
             model_out = tissue_root / "models" / model_id
             if dir_nonempty(model_out):
                 conflicts.append(existing_output_message(tissue_id=tissue_id, model_id=model_id, path=model_out))
@@ -172,7 +180,7 @@ def main() -> int:
         prepared_dir = tissue_root / "prepared"
         models_root = tissue_root / "models"
         if args.overwrite:
-            for model_id in [*age_binned_models, *continuous_age_models, *cfde_notebook_models]:
+            for model_id in [*age_binned_models, *continuous_age_models, *hz_notebook_models]:
                 overwrite_dir(models_root / model_id)
         if not dir_nonempty(prepared_dir):
             if args.tissue_granularity == "broad":
@@ -300,17 +308,25 @@ def main() -> int:
                 )
             )
 
-        for model_id in cfde_notebook_models:
+        for model_id in hz_notebook_models:
             run_command(
                 [
                     str(Path(args.python_bin).resolve()),
-                    str(src_root / "run_cfde_notebook_model.py"),
+                    str(src_root / "run_hz_notebook_model.py"),
                     "--model_id",
                     model_id,
                     "--tissue_id",
                     tissue_id,
                     "--tissue_label",
                     tissue_label,
+                    "--expression_gct",
+                    str(counts_gct),
+                    "--sample_attributes_tsv",
+                    str(sample_metadata_tsv),
+                    "--subject_phenotypes_tsv",
+                    str(subject_metadata_tsv),
+                    "--human_gene_info",
+                    str(human_gene_info),
                     "--prepared_dir",
                     str(prepared_dir),
                     "--run_root",
@@ -319,7 +335,19 @@ def main() -> int:
                     str(Path(args.python_bin).resolve()),
                     "--rscript_bin",
                     args.rscript_bin,
+                    "--dig_dir",
+                    str(dig_dir),
                 ]
+                + (
+                    ["--provenance_mirror_local_prefix", args.provenance_mirror_local_prefix]
+                    if args.provenance_mirror_local_prefix
+                    else []
+                )
+                + (
+                    ["--provenance_mirror_remote_prefix", args.provenance_mirror_remote_prefix]
+                    if args.provenance_mirror_remote_prefix
+                    else []
+                )
             )
     return 0
 

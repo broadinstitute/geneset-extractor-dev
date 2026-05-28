@@ -111,7 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--model_group",
-        choices=["age_binned", "continuous_age", "cfde_notebook", "tissue_versus"],
+        choices=["age_binned", "continuous_age", "hz_notebook", "tissue_versus"],
         default=None,
         help="optional model-group filter",
     )
@@ -187,8 +187,8 @@ def resolve_output_prefix(args: argparse.Namespace) -> str:
         return "age_binned_models"
     if args.model_group == "continuous_age":
         return "continuous_age_models"
-    if args.model_group == "cfde_notebook":
-        return "cfde_notebook_models"
+    if args.model_group == "hz_notebook":
+        return "hz_notebook_models"
     if args.model_group == "tissue_versus":
         return "tissue_versus_models"
     return "all_models"

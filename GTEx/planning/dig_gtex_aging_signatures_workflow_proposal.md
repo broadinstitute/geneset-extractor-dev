@@ -1,6 +1,6 @@
-# Proposal: Add A Notebook-Equivalent GTEx Aging-Signature Workflow To `dig-gene-set-extractors`
+# Implemented Direction: Notebook-Equivalent GTEx Aging-Signature Workflow In `dig-gene-set-extractors`
 
-This note proposes what would need to be added to `dig-gene-set-extractors` so that `CFDE1` can use notebook-equivalent GTEx aging-signature logic while producing outputs in standard `dig` workflow/converter format.
+This note records the `dig-gene-set-extractors` workflow/converter additions needed so that `HZ1` can use notebook-equivalent GTEx aging-signature logic while producing outputs in standard `dig` workflow/converter format.
 
 The goal is:
 
@@ -37,13 +37,13 @@ Current GTEx-local notebook-style logic and current `dig` logic differ in two ma
 1. biological workflow behavior
 2. output contract
 
-If `CFDE1` is to fit naturally into the rest of the GTEx model system and still use `dig` as the authoritative output layer, then the notebook-style biology needs to be implemented inside `dig`, not just wrapped outside it.
+If `HZ1` is to fit naturally into the rest of the GTEx model system and still use `dig` as the authoritative output layer, then the notebook-style biology needs to be implemented inside `dig`, not just wrapped outside it.
 
-## Recommended Additions To `dig-gene-set-extractors`
+## Implemented Additions In `dig-gene-set-extractors`
 
 ### 1. New workflow: `gtex_aging_signatures`
 
-Add a workflow such as:
+Added workflow:
 
 - `geneset_extractors.cli workflows gtex_aging_signatures`
 
@@ -119,7 +119,7 @@ The combined table should be compatible with downstream `rna_deg_multi`-style ex
 
 Current generic GMT extraction behavior is not sufficient to match the notebook-style `top-per-direction` logic.
 
-Add a new GMT selection/extraction mode such as:
+Added new GMT selection/extraction mode:
 
 - `--gmt_mode top_per_direction`
 
@@ -160,27 +160,27 @@ The workflow should write:
 - `deg_long.tsv`
 - provenance graph
 
-This would let GTEx-local wrappers treat `CFDE1` more like the other models.
+This would let GTEx-local wrappers treat `HZ1` more like the other models.
 
 ## Recommended GTEx-Local Usage After `dig` Changes
 
-If the new `dig` workflow exists, GTEx-local `CFDE1` can become a thin wrapper:
+With the new `dig` workflow in place, GTEx-local `HZ1` becomes a thin wrapper:
 
 - choose broad tissue
 - choose notebook-faithful parameters
 - call `workflows gtex_aging_signatures`
 - call the corresponding converter with notebook-style GMT mode
 
-Then `CFDE1` would naturally write into the existing GTEx-style model tree, for example:
+Then `HZ1` would naturally write into the existing GTEx-style model tree, for example:
 
-- `outputs/genesets/<broad_tissue>/models/CFDE1/workflow/`
-- `outputs/genesets/<broad_tissue>/models/CFDE1/extractor/`
+- `outputs/genesets/<broad_tissue>/models/HZ1/workflow/`
+- `outputs/genesets/<broad_tissue>/models/HZ1/extractor/`
 
 This is a much cleaner fit than maintaining GTEx-local notebook-specific GMT generation as the authoritative path.
 
-## Proposed `CFDE1` Parameter Profile
+## Proposed `HZ1` Parameter Profile
 
-Once supported by `dig`, `CFDE1` would likely fix:
+Once supported by `dig`, `HZ1` would likely fix:
 
 - tissue grouping: `broad`
 - mapping mode: `human_gene_info`
@@ -227,11 +227,11 @@ Recommended comparisons:
 - top-250 per-direction gene sets
 - tissue-by-comparison signature sizes
 
-The `dig`-based workflow should only replace the standalone script for `CFDE1` after those comparisons are satisfactory.
+The `dig`-based workflow should only replace the standalone script for `HZ1` after those comparisons are satisfactory.
 
-## Summary
+## Current Status
 
-The cleanest way to have `CFDE1` use notebook-style logic while producing standard `dig` outputs is to add to `dig-gene-set-extractors`:
+The GTEx-side `HZ1` path now targets the `dig` workflow/converter design described here:
 
 - a new GTEx aging-signature workflow
 - `human_gene_info` mapping mode
@@ -239,4 +239,4 @@ The cleanest way to have `CFDE1` use notebook-style logic while producing standa
 - notebook-style limma/voom DEA path
 - notebook-style `top_per_direction` GMT extraction mode
 
-Then GTEx-local code can keep `CFDE1` as a thin wrapper and let `dig` own both the biology and the output structure.
+GTEx-local code can now keep `HZ1` as a thin wrapper and let `dig` own both the biology and the output structure.

@@ -4,7 +4,7 @@ This note proposes a prep abstraction that would allow:
 
 - `AB*`
 - `AC*`
-- notebook-faithful `CFDE1`
+- notebook-faithful `HZ1`
 
 to become special cases of one broader GTEx model-prep system.
 
@@ -27,7 +27,7 @@ Today:
 - `AB*` additionally depends on:
   - `comparisons.tsv`
 - `AC*` derives continuous-age behavior later in workflow
-- notebook-faithful `CFDE1` would need a different prep path:
+- notebook-faithful `HZ1` would need a different prep path:
   - GTEx V8 raw reads
   - broad `SMTS` tissue grouping
   - `human_gene_info` mapping
@@ -109,7 +109,7 @@ Examples:
     - no comparison manifest at prep time
     - continuous-age metadata can be derived later
 
-- notebook-faithful `CFDE1`
+- notebook-faithful `HZ1`
   - requires:
     - broad tissue
     - notebook-faithful mapped counts
@@ -182,7 +182,7 @@ Possible examples:
 - `comparison_manifest_mode = none`
 - `count_matrix_mode = raw_selected_samples`
 
-### notebook-faithful `CFDE1`
+### notebook-faithful `HZ1`
 
 - `prep_family = notebook_aging_signature`
 - `tissue_grouping = broad`
@@ -215,7 +215,7 @@ Current scripts should become lower-level helpers or prep-family implementations
 - `build_tissue_inputs.py`
 - `build_broad_tissue_inputs.py`
 - future:
-  - `build_cfde1_tissue_inputs.py`
+  - `build_hz1_tissue_inputs.py`
 
 Rather than each being a top-level prep concept on its own, they would become implementations selected by the prep coordinator.
 
@@ -232,7 +232,7 @@ to:
 - requesting the appropriate prepared bundle configuration
 - then dispatching workflows
 
-This is the point where `AB`, `AC`, and `CFDE1` become special cases of one broader prep system.
+This is the point where `AB`, `AC`, and `HZ1` become special cases of one broader prep system.
 
 ## Workflow Implications
 
@@ -255,7 +255,7 @@ Examples:
     - `tissue_counts.tsv`
     - `sample_metadata.tsv`
 
-- notebook-faithful `CFDE1`
+- notebook-faithful `HZ1`
   - consumes:
     - notebook-faithful mapped `tissue_counts.tsv`
     - notebook-faithful `sample_metadata.tsv`
@@ -283,7 +283,7 @@ Refactor:
 
 - `AB*`
 - `AC*`
-- `CFDE1`
+- `HZ1`
 
 to declare prep requirements through configuration rather than ad hoc branching.
 
@@ -293,7 +293,7 @@ Deprecate direct use of the current prep scripts as top-level concepts if the co
 
 ## Summary
 
-Yes, `AB`, `AC`, and notebook-faithful `CFDE1` can become special cases of one broader prep system, but only if prep is treated as:
+Yes, `AB`, `AC`, and notebook-faithful `HZ1` can become special cases of one broader prep system, but only if prep is treated as:
 
 - one shared base
 - plus explicit configurable transforms

@@ -56,6 +56,18 @@ Example:
 
 - `inputs/GTEx/v10/gencode.v39.annotation.gtf.gz`
 
+### 5. `human_gene_info`
+
+Required when the selected models include notebook-style `HZ*` aging-signature models.
+
+This file is used for notebook-style Ensembl-to-symbol mapping inside the `dig` workflow:
+
+- `geneset_extractors.cli workflows gtex_aging_signatures`
+
+Example:
+
+- `inputs/GTEx/v8/human_gene_info`
+
 ## Planning And Config Inputs
 
 These files are part of the runtime configuration surface.
@@ -96,6 +108,7 @@ Required by `build_genesets.sh`, which passes the path through to:
 
 - `run_age_binned_model.py`
 - `run_continuous_age_model.py`
+- `run_hz_notebook_model.py`
 
 Required CLI argument:
 
@@ -192,6 +205,7 @@ To run the full current pipeline, make sure you have:
 - a counts GCT file for each selected tissue
 - a GTEx sample metadata TSV
 - a GTEx subject metadata TSV
+- a `human_gene_info` file when running `HZ*` notebook-style models
 - a GTF file if the selected models require it
 - a `dig-gene-set-extractors` checkout
 - a `pigean/src` checkout
@@ -207,3 +221,21 @@ Unless overridden on the CLI, the active Python entrypoints currently default th
 - `--tissue_list`
 - `--age_binned_model_manifest`
 - `--continuous_age_model_manifest`
+
+## `HZ1` Notes
+
+`HZ1` now uses the `dig-gene-set-extractors` workflow:
+
+- `geneset_extractors.cli workflows gtex_aging_signatures`
+
+through the GTEx wrapper:
+
+- `geneset-extractor-dev/GTEx/src/run_hz_notebook_model.py`
+
+Important constraints:
+
+- `HZ1` requires `--tissue_granularity broad`
+- `HZ1` requires `--human_gene_info`
+- `HZ1` uses the `counts_gct` path from the active broad tissue list as the raw expression GCT input
+
+To match the original GTEx aging-signature notebook as closely as possible, the broad tissue list used for `HZ1` should point at the GTEx V8 raw reads GCT rather than a V10 counts matrix.

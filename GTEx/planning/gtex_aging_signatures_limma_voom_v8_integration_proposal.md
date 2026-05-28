@@ -1,6 +1,6 @@
-# Proposal: Integrating `build_gtex_aging_signatures_limma_voom_v10_lowmem.py`
+# Historical Proposal: Integrating `build_gtex_aging_signatures_limma_voom_v10_lowmem.py`
 
-This note proposes how to integrate:
+This note captures an earlier integration direction for:
 
 - `geneset-extractor-dev/GTEx/planning/build_gtex_aging_signatures_limma_voom_v10_lowmem.py`
 
@@ -22,13 +22,24 @@ python build_gtex_aging_signatures_limma_voom_v10_lowmem.py \
 
 This updated proposal assumes the integration should **not** rely on Ma'ayan Lab limma-voom helper functions at runtime.
 
+## Status
+
+This proposal has effectively been superseded by the `dig`-based `HZ1` direction documented in:
+
+- [dig_gtex_aging_signatures_workflow_proposal.md](/home/ryank/software/geneset_extractors/geneset-extractor-dev/GTEx/planning/dig_gtex_aging_signatures_workflow_proposal.md)
+
+The active implementation direction is now:
+
+- notebook-faithful biology inside `dig-gene-set-extractors`
+- GTEx-local `HZ1` as a thin wrapper around the new `dig` workflow and converter
+
 ## Recommendation
 
 Integrate this as a new, separate GTEx model family rather than as a variant of:
 
 - `AB*`
 - `AC*`
-- `CFDE*`
+- `HZ*`
 
 Suggested family/model ID:
 
@@ -57,7 +68,7 @@ The current `build_genesets.sh` pipeline instead assumes:
 - model runners that emit per-model/per-tissue outputs
 - optional use of `dig-gene-set-extractors` for gene-set conversion
 
-Trying to force this script into the `AB`/`AC`/`CFDE` build path would add special cases and increase the chance of output drift.
+Trying to force this script into the `AB`/`AC`/`HZ` build path would add special cases and increase the chance of output drift.
 
 ## Exact-Output Requirement
 

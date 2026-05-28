@@ -1,16 +1,22 @@
-# Proposal: Redefine `CFDE1` With Specialized Prep/Workflow Inside The Existing GTEx Model Structure
+# Proposal And Implemented Direction: Redefine `HZ1` With Specialized Prep/Workflow Inside The Existing GTEx Model Structure
 
-This note proposes an update to the current GTEx code so that `CFDE1` can be redefined as a notebook-faithful aging-signature model while still fitting into the existing GTEx output structure.
+This note describes the design direction for redefining `HZ1` as a notebook-faithful aging-signature model while still fitting into the existing GTEx output structure.
+
+The current implementation path now delegates the notebook-faithful biology to:
+
+- `geneset_extractors.cli workflows gtex_aging_signatures`
+
+inside `dig-gene-set-extractors`, while the GTEx-local `HZ1` runner remains the thin wrapper that places the outputs under the existing GTEx model tree.
 
 The core idea is:
 
 - keep the current GTEx-style outer model layout
-- give `CFDE1` its own specialized prep and workflow implementation
+- give `HZ1` its own specialized prep and workflow implementation
 - make prep more configurable so future models can request additional behavior without forcing all models through the same assumptions
 
 ## Goal
 
-Support a `CFDE1` model that:
+Support a `HZ1` model that:
 
 - runs one broad tissue at a time
 - uses notebook-faithful tissue-specific aging-signature logic
@@ -23,11 +29,11 @@ while also improving the prep layer so other future models can request:
 - different sample-balance behavior
 - different prefilter behavior
 
-## Why `CFDE1` Needs Specialized Prep/Workflow
+## Why `HZ1` Needs Specialized Prep/Workflow
 
-`CFDE1` should not reuse the standard GTEx prep and workflow path unchanged because its intended logic differs materially from `AB*` and `AC*`.
+`HZ1` should not reuse the standard GTEx prep and workflow path unchanged because its intended logic differs materially from `AB*` and `AC*`.
 
-Notebook-faithful `CFDE1` behavior requires:
+Notebook-faithful `HZ1` behavior requires:
 
 - GTEx V8 raw gene reads input
 - broad-tissue grouping by `SMTS`
@@ -37,15 +43,15 @@ Notebook-faithful `CFDE1` behavior requires:
 - limma/voom differential expression per age comparison
 - notebook-faithful GMT extraction rules
 
-That means `CFDE1` should reuse the outer GTEx model interface and output conventions, but not the current generic prep semantics.
+That means `HZ1` should reuse the outer GTEx model interface and output conventions, but not the current generic prep semantics.
 
 ## Recommended High-Level Design
 
 Keep the current model location convention:
 
-- `outputs/genesets/<tissue>/models/CFDE1/`
+- `outputs/genesets/<tissue>/models/HZ1/`
 
-but let `CFDE1` use its own specialized prep and workflow stack under that structure.
+but let `HZ1` use its own specialized prep and workflow stack under that structure.
 
 ### Outer shape to preserve
 
@@ -78,7 +84,7 @@ Recommended pattern:
   - `build_tissue_inputs.py`
   - `build_broad_tissue_inputs.py`
 - add a new specialized prep path for notebook-faithful broad-tissue aging signatures, for example:
-  - `build_cfde1_tissue_inputs.py`
+  - `build_hz1_tissue_inputs.py`
 
 This specialized prep script should:
 
@@ -110,7 +116,7 @@ These do not all need to be exposed to every user-facing wrapper immediately, bu
 
 Extend the model planning/configuration so prep expectations are part of model definition.
 
-For example, extend `model_list.tsv` or add a dedicated `cfde_model_manifest.tsv` with fields such as:
+For example, extend `model_list.tsv` or add a dedicated `hz_model_manifest.tsv` with fields such as:
 
 - `prep_mode`
 - `tissue_grouping`
@@ -122,7 +128,7 @@ For example, extend `model_list.tsv` or add a dedicated `cfde_model_manifest.tsv
 - `gmt_sort_by`
 - `top_n`
 
-For notebook-faithful `CFDE1`, expected values would be approximately:
+For notebook-faithful `HZ1`, expected values would be approximately:
 
 - `prep_mode = notebook_aging_signature`
 - `tissue_grouping = broad`
@@ -136,9 +142,14 @@ For notebook-faithful `CFDE1`, expected values would be approximately:
 
 This makes the specialized prep/workflow part of the model definition instead of buried in code.
 
-### 4. Redefine `run_cfde_notebook_model.py`
+### 4. Redefine `run_hz_notebook_model.py`
 
-Replace the current `CFDE1` implementation with a notebook-faithful per-tissue runner.
+Replace the current `HZ1` implementation with a notebook-faithful per-tissue runner.
+
+Current implemented direction:
+
+- `run_hz_notebook_model.py` calls the `dig` workflow `gtex_aging_signatures`
+- `run_hz_notebook_model.py` then calls `convert rna_deg_multi` with notebook-style `top_per_direction` GMT emission
 
 Recommended new responsibilities:
 
@@ -155,7 +166,7 @@ Recommended new responsibilities:
 
 The authoritative outputs should remain the notebook-faithful up/down GMTs.
 
-### 5. Update `build_genesets.py` so `CFDE1` can request its own prep path
+### 5. Update `build_genesets.py` so `HZ1` can request its own prep path
 
 Instead of assuming all selected models for a tissue share the same prep contract, `build_genesets.py` should classify models by prep/workflow family.
 
@@ -165,7 +176,7 @@ Recommended behavior:
   - standard age-binned prep/workflow
 - `AC*`
   - continuous-age prep/workflow
-- `CFDE1`
+- `HZ1`
   - notebook-faithful aging-signature prep/workflow
 
 This means `build_genesets.py` should no longer think only in terms of:
@@ -176,11 +187,18 @@ It should also think in terms of:
 
 - prep family / workflow family
 
+Current implemented direction:
+
+- `build_genesets.py` treats `HZ1` as a distinct workflow family
+- `HZ1` requires `--tissue_granularity broad`
+- `HZ1` requires `--human_gene_info`
+- `HZ1` uses the broad tissue list `counts_gct` as the raw expression GCT for the `dig` workflow
+
 ### 6. Keep output placement consistent with other GTEx models
 
-Even with specialized internals, `CFDE1` should still land in the usual GTEx model tree, for example:
+Even with specialized internals, `HZ1` should still land in the usual GTEx model tree, for example:
 
-- `outputs/genesets/<broad_tissue>/models/CFDE1/`
+- `outputs/genesets/<broad_tissue>/models/HZ1/`
 
 Suggested contents:
 
@@ -197,7 +215,7 @@ Suggested contents:
 - `commands.md`
 - `run.log`
 
-This keeps `CFDE1` visually aligned with the rest of the GTEx outputs even though its internal logic is specialized.
+This keeps `HZ1` visually aligned with the rest of the GTEx outputs even though its internal logic is specialized.
 
 ## Recommended Prep Abstraction
 
@@ -243,8 +261,8 @@ This is preferable to relying only on model ID prefix conventions.
 The recommended update is:
 
 - preserve the current GTEx model/output structure
-- redefine `CFDE1` to use its own notebook-faithful prep/workflow path
+- redefine `HZ1` to use its own notebook-faithful prep/workflow path
 - make prep more parameterized so future models can request specialized behavior
 - move model-specific prep/workflow expectations into planning/configuration
 
-That would allow `CFDE1` to behave like the new script biologically while still fitting cleanly into the current GTEx codebase and output tree.
+That would allow `HZ1` to behave like the new script biologically while still fitting cleanly into the current GTEx codebase and output tree.

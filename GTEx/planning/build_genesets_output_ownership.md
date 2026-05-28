@@ -114,12 +114,52 @@ Important files:
 - `run_summary.json`
 - `run_summary.txt`
 
+### `HZ*` notebook-style workflow outputs
+
+Under:
+
+- `gtex_outputs/genesets/<tissue>/models/<model_id>/workflow/`
+
+Important files:
+
+- `sample_metadata.tsv`
+- `counts_gene_by_sample.tsv`
+- `comparison_manifest.tsv`
+- `comparison_audit.tsv`
+- `comparison_selected_samples.tsv`
+- `comparisons/<comparison_id>.tsv`
+- `deg_long.tsv`
+- `deg_long.provenance_graph.json`
+- `prepare_summary.json`
+
+### `HZ*` notebook-style extractor outputs
+
+Under:
+
+- `gtex_outputs/genesets/<tissue>/models/<model_id>/extractor/`
+
+Top-level files:
+
+- `manifest.tsv`
+- `genesets.gmt`
+
+Per-comparison files under directories such as `age30_20/`, `age40_20/`, `age50_20/`, `age60_20/`, `age70_20/`:
+
+- `geneset.tsv`
+- `geneset.full.tsv`
+- `geneset.meta.json`
+- `geneset.provenance.json`
+- `genesets.gmt`
+- `run_summary.json`
+- `run_summary.txt`
+
 ## Files Required To Run `build_genesets.sh`
 
 ### External inputs
 
 - sample metadata TSV
 - subject metadata TSV
+- `human_gene_info` when selected models include `HZ*`
 - `dig-gene-set-extractors` checkout
 - counts GCT path or paths referenced by `tissue_list.tsv`
 - `--gtf` when required by the active `model_list.tsv`
@@ -156,9 +196,21 @@ The prepared bundle must exist before any model runs:
 - `prepared/tissue_counts.tsv`
 - `prepared/sample_metadata.tsv`
 
+### `HZ*` model requirements
+
+`HZ*` runs use the GTEx outer model tree but do not depend on the standard prepared tissue bundle semantics.
+
+They require:
+
+- a broad-tissue `counts_gct` entry from the active broad tissue list
+- sample attributes TSV
+- subject phenotypes TSV
+- `human_gene_info`
+- `dig-gene-set-extractors`
+
 ## Summary
 
 The clean ownership split for `build_genesets.sh` is:
 
 - `geneset-extractor-dev` creates the prepared tissue bundle and the GTEx-local orchestration and logging files.
-- `dig-gene-set-extractors` creates the differential expression workflow outputs and extractor outputs from that prepared bundle.
+- `dig-gene-set-extractors` creates the differential expression workflow outputs and extractor outputs for `AB*` and `HZ*`, and the extractor outputs for `AC*`.
