@@ -54,6 +54,16 @@ def resolve_input_path(path_value: str | None, *, base_dir: Path) -> str | None:
     return str(path)
 
 
+def sanitize_name_token(value: str) -> str:
+    token = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value).strip())
+    token = re.sub(r"_+", "_", token).strip("_")
+    return token or "tissue"
+
+
+def gtex_tissue_signature_name(tissue_id: str) -> str:
+    return f"GTEx_tissue_{sanitize_name_token(tissue_id)}"
+
+
 def _model_sort_key(model_id: str) -> tuple[str, int]:
     prefix = "".join(ch for ch in model_id if not ch.isdigit())
     suffix = "".join(ch for ch in model_id if ch.isdigit())
@@ -300,6 +310,10 @@ def build_extractor_cmd(
         "true",
         "--gmt_split_signed",
         "true",
+        "--gmt_name_separator",
+        "_",
+        "--gmt_signed_labels",
+        "up_dn",
         "--gmt_require_symbol",
         settings["EXTRACTOR_GMT_REQUIRE_SYMBOL"],
         "--emit_small_gene_sets",
@@ -400,8 +414,8 @@ def write_tissue_method_note(path: Path, tissue_id: str, model_id: str) -> None:
 This extractor emits one combined GMT for `{tissue_id}` under model `{model_id}`.
 
 Examples:
-- `{model_id}__{tissue_id}__pos`: genes with positive age-associated scores
-- `{model_id}__{tissue_id}__neg`: genes with negative age-associated scores
+- `GTEx_tissue_{tissue_id}_up`: genes with positive age-associated scores
+- `GTEx_tissue_{tissue_id}_dn`: genes with negative age-associated scores
 
 These are derived from one continuous-age regression across all retained tissue samples, not from separate age-bin contrasts.
 """
@@ -561,7 +575,7 @@ def main() -> int:
             organism=args.organism,
             genome_build=args.genome_build,
             settings=settings,
-            signature_name=f"{model_id}__{args.tissue_id}",
+            signature_name=gtex_tissue_signature_name(args.tissue_id),
             gtf_path=resolved_gtf,
             provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
             provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,

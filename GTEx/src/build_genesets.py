@@ -228,6 +228,8 @@ def main() -> int:
                     str(src_root / "run_age_binned_model.py"),
                     "--model_id",
                     model_id,
+                    "--tissue_id",
+                    tissue_id,
                     "--prepared_dir",
                     str(prepared_dir),
                     "--run_root",

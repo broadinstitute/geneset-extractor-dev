@@ -5,55 +5,33 @@ import argparse
 import csv
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
-import re
+from typing import Any
 
-from selection_io import default_age_binned_model_manifest_path
+from motrpac_selection_io import default_model_manifest_path
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run one GTEx age-binned model and emit extractor outputs."
+        description="Run one MoTrPAC training model and emit human-mapped gene-set outputs."
     )
     parser.add_argument("--model_id", required=True)
-    parser.add_argument("--tissue_id")
+    parser.add_argument("--tissue_id", required=True)
     parser.add_argument("--prepared_dir", required=True)
     parser.add_argument("--run_root", required=True)
     parser.add_argument("--python_bin", default=sys.executable or "python3")
+    parser.add_argument("--rscript_bin", default="Rscript")
     parser.add_argument("--organism", default="human", choices=["human", "mouse"])
     parser.add_argument("--genome_build", default="hg38")
-    parser.add_argument("--gtf")
+    parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--provenance_mirror_local_prefix")
     parser.add_argument("--provenance_mirror_remote_prefix")
-    parser.add_argument("--dig_dir", required=True)
-    parser.add_argument("--age_binned_model_manifest", default=str(default_age_binned_model_manifest_path()))
+    parser.add_argument("--model_manifest", default=str(default_model_manifest_path()))
     parser.add_argument("--write_commands_only", action="store_true")
     return parser.parse_args()
-
-
-def repo_root() -> Path:
-    return Path(__file__).resolve().parents[3]
-
-
-def resolve_input_path(path_value: str | None, *, base_dir: Path) -> str | None:
-    if not path_value:
-        return None
-    path = Path(path_value)
-    if not path.is_absolute():
-        path = (base_dir / path).resolve()
-    return str(path)
-
-
-def sanitize_name_token(value: str) -> str:
-    token = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value).strip())
-    token = re.sub(r"_+", "_", token).strip("_")
-    return token or "tissue"
-
-
-def gtex_aging_signature_name(tissue_id: str) -> str:
-    return f"GTEx_aging_{sanitize_name_token(tissue_id)}"
 
 
 def load_model_settings(manifest_path: Path) -> dict[str, dict[str, str]]:
@@ -65,7 +43,7 @@ def load_model_settings(manifest_path: Path) -> dict[str, dict[str, str]]:
         if model_id:
             settings[model_id] = {str(key): str(value) for key, value in row.items()}
     if not settings:
-        raise SystemExit(f"No age-binned model settings found in {manifest_path}")
+        raise SystemExit(f"No model settings found in {manifest_path}")
     return settings
 
 
@@ -84,77 +62,94 @@ def log_line(path: Path, text: str) -> None:
         handle.write(text.rstrip("\n") + "\n")
 
 
-def build_workflow_cmd(
-    *,
-    python_bin: str,
-    prepared_dir: Path,
-    workflow_out: Path,
-    organism: str,
-    genome_build: str,
-    settings: dict[str, str],
-    provenance_mirror_local_prefix: str | None,
-    provenance_mirror_remote_prefix: str | None,
-) -> list[str]:
+def resolve_rscript_bin(rscript_bin: str) -> str:
+    resolved = shutil.which(rscript_bin) if not Path(rscript_bin).is_absolute() else rscript_bin
+    if not resolved or not Path(resolved).exists():
+        raise SystemExit(f"Rscript not found: {rscript_bin}")
+    return resolved
+
+
+def check_r_packages(rscript_bin: str) -> None:
     cmd = [
-        python_bin,
-        "-m",
-        "geneset_extractors.cli",
-        "workflows",
-        "rna_de_prepare",
-        "--modality",
-        "bulk",
-        "--counts_tsv",
-        str(prepared_dir / "tissue_counts.tsv"),
-        "--matrix_orientation",
-        "gene_by_sample",
-        "--feature_id_column",
-        "gene_id",
-        "--matrix_gene_symbol_column",
-        "gene_symbol",
-        "--sample_metadata_tsv",
-        str(prepared_dir / "sample_metadata.tsv"),
-        "--sample_id_column",
-        "sample_id",
-        "--group_column",
-        "age_bin",
-        "--comparisons_tsv",
-        str(prepared_dir / "comparisons.tsv"),
-        "--de_mode",
-        settings["workflow_de_mode"],
-        "--balance_groups",
-        settings["workflow_balance_groups"],
-        "--balance_seed",
-        settings["workflow_balance_seed"],
-        "--gene_filter_scope",
-        settings["workflow_gene_filter_scope"],
-        "--backend",
-        settings["workflow_backend"],
-        "--out_dir",
-        str(workflow_out),
-        "--organism",
-        organism,
-        "--genome_build",
-        genome_build,
+        rscript_bin,
+        "--vanilla",
+        "-e",
+        "quit(status=if (requireNamespace('edgeR', quietly=TRUE) && requireNamespace('limma', quietly=TRUE)) 0 else 1)",
     ]
-    if settings["workflow_covariates"] != "none":
-        cmd.extend(["--covariates", settings["workflow_covariates"]])
-    if provenance_mirror_local_prefix:
-        cmd.extend(["--provenance_mirror_local_prefix", provenance_mirror_local_prefix])
-    if provenance_mirror_remote_prefix:
-        cmd.extend(["--provenance_mirror_remote_prefix", provenance_mirror_remote_prefix])
-    return cmd
+    completed = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False)
+    if completed.returncode != 0:
+        raise SystemExit(
+            "R packages 'edgeR' and 'limma' are required for the MoTrPAC training workflow and were not found for "
+            f"{rscript_bin}."
+        )
+
+
+def write_workflow_script(
+    *,
+    script_path: Path,
+    counts_tsv: Path,
+    metadata_tsv: Path,
+    output_tsv: Path,
+) -> None:
+    script = f'''suppressPackageStartupMessages({{
+  library(edgeR)
+  library(limma)
+}})
+
+counts <- read.delim("{counts_tsv}", check.names=FALSE)
+meta <- read.delim("{metadata_tsv}", check.names=FALSE)
+count_cols <- setdiff(colnames(counts), c("gene_id", "gene_symbol"))
+count_mat <- as.matrix(counts[, count_cols, drop=FALSE])
+storage.mode(count_mat) <- "numeric"
+rownames(count_mat) <- counts$gene_id
+gene_ids <- counts$gene_id
+gene_symbols <- as.character(counts$gene_symbol)
+
+meta$sample_id <- as.character(meta$sample_id)
+meta$sex <- factor(as.character(meta$sex), levels=c("M", "F"))
+meta$intervention <- factor(as.character(meta$intervention), levels=c("control", "training"))
+count_mat <- count_mat[, meta$sample_id, drop=FALSE]
+y <- DGEList(counts=count_mat)
+design <- model.matrix(~ intervention + sex, data=meta)
+keep_genes <- filterByExpr(y, design=design)
+y <- y[keep_genes, , keep.lib.sizes=FALSE]
+gene_ids <- gene_ids[keep_genes]
+gene_symbols <- gene_symbols[keep_genes]
+y <- calcNormFactors(y)
+v <- voom(y, design, plot=FALSE)
+fit <- lmFit(v, design)
+fit <- eBayes(fit)
+tt <- topTable(fit, coef="interventiontraining", number=Inf, sort.by="none")
+tt$comparison_id <- "training_vs_control"
+tt$gene_id <- gene_ids
+tt$gene_symbol <- gene_symbols
+tt$group_a <- "training"
+tt$group_b <- "control"
+tt$stratum <- ""
+tt$backend <- "r_limma_voom_motrpac_training"
+tt$n_group_a <- sum(meta$intervention == "training")
+tt$n_group_b <- sum(meta$intervention == "control")
+tt$mean_expr <- tt$AveExpr
+tt$model_formula <- "intervention + sex"
+keep_cols <- c("comparison_id", "gene_id", "gene_symbol", "logFC", "t", "P.Value", "adj.P.Val", "group_a", "group_b", "stratum", "backend", "n_group_a", "n_group_b", "mean_expr", "model_formula")
+tt <- tt[, keep_cols, drop=FALSE]
+colnames(tt)[colnames(tt) == "t"] <- "stat"
+colnames(tt)[colnames(tt) == "P.Value"] <- "pvalue"
+colnames(tt)[colnames(tt) == "adj.P.Val"] <- "padj"
+write.table(tt, file="{output_tsv}", sep="\\t", row.names=FALSE, quote=FALSE)
+'''
+    write_text(script_path, script)
 
 
 def build_extractor_cmd(
     *,
     python_bin: str,
-    workflow_out: Path,
+    deg_tsv: Path,
     extractor_out: Path,
     organism: str,
     genome_build: str,
-    tissue_id: str,
+    signature_name: str,
     settings: dict[str, str],
-    gtf_path: str | None,
     provenance_mirror_local_prefix: str | None,
     provenance_mirror_remote_prefix: str | None,
 ) -> list[str]:
@@ -163,13 +158,9 @@ def build_extractor_cmd(
         "-m",
         "geneset_extractors.cli",
         "convert",
-        "rna_deg_multi",
+        "rna_deg",
         "--deg_tsv",
-        str(workflow_out / "deg_long.tsv"),
-        "--comparison_column",
-        "comparison_id",
-        "--comparison_name_column",
-        "gmt_comparison_label",
+        str(deg_tsv),
         "--out_dir",
         str(extractor_out),
         "--organism",
@@ -177,7 +168,7 @@ def build_extractor_cmd(
         "--genome_build",
         genome_build,
         "--signature_name",
-        gtex_aging_signature_name(tissue_id),
+        signature_name,
         "--postprocess_mode",
         settings["extractor_postprocess_mode"],
         "--score_mode",
@@ -192,10 +183,6 @@ def build_extractor_cmd(
         "true",
         "--gmt_split_signed",
         "true",
-        "--gmt_name_separator",
-        "_",
-        "--gmt_signed_labels",
-        "up_dn",
         "--gmt_require_symbol",
         settings["extractor_gmt_require_symbol"],
         "--emit_small_gene_sets",
@@ -217,10 +204,6 @@ def build_extractor_cmd(
         value = settings[key]
         if value != "NA":
             cmd.extend([flag_name, value])
-    if settings["extractor_gmt_biotype_allowlist"]:
-        cmd.extend(["--gmt_biotype_allowlist", settings["extractor_gmt_biotype_allowlist"]])
-    if gtf_path:
-        cmd.extend(["--gtf", gtf_path])
     if provenance_mirror_local_prefix:
         cmd.extend(["--provenance_mirror_local_prefix", provenance_mirror_local_prefix])
     if provenance_mirror_remote_prefix:
@@ -260,8 +243,7 @@ def write_model_commands(
             "## Workflow",
             "",
             "```bash",
-            f"cd {shlex.quote(str(dig_dir))}",
-            f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {shell_join(workflow_cmd)}",
+            shell_join(workflow_cmd),
             "```",
             "",
             "## Extractor",
@@ -278,54 +260,44 @@ def write_model_commands(
 
 def main() -> int:
     args = parse_args()
-    repo = repo_root()
+    settings_by_model = load_model_settings(Path(args.model_manifest))
+    if args.model_id not in settings_by_model:
+        raise SystemExit(f"Unsupported model_id: {args.model_id}")
+    settings = settings_by_model[args.model_id]
+
     prepared_dir = Path(args.prepared_dir).resolve()
     run_root = Path(args.run_root).resolve()
-    dig_dir = Path(args.dig_dir).resolve()
-    manifest_path = Path(args.age_binned_model_manifest).resolve()
-    resolved_gtf = resolve_input_path(args.gtf, base_dir=repo)
-    model_settings = load_model_settings(manifest_path)
-    if args.model_id not in model_settings:
-        raise SystemExit(f"Unsupported model_id: {args.model_id}")
-    settings = model_settings[args.model_id]
-    tissue_id = str(args.tissue_id or prepared_dir.parent.name).strip()
-
-    if settings["annotation_mode"] == "gtf_annotated" and not resolved_gtf:
-        raise SystemExit(f"Model {args.model_id} requires --gtf")
-
-    required = ["tissue_counts.tsv", "sample_metadata.tsv", "comparisons.tsv"]
-    if not args.write_commands_only:
-        missing = [name for name in required if not (prepared_dir / name).exists()]
-        if missing:
-            raise SystemExit(
-                "prepared_dir must contain tissue_counts.tsv, sample_metadata.tsv, and comparisons.tsv"
-            )
-
     model_out = run_root / args.model_id
     workflow_out = model_out / "workflow"
-    extractor_out = model_out / "extractor"
-    model_out.mkdir(parents=True, exist_ok=True)
-    model_log = model_out / "run.log"
+    extractor_out = model_out / "tissue_extractor"
+    dig_dir = Path(args.dig_dir).resolve()
+    if not dig_dir.exists():
+        raise SystemExit(f"Missing dig-gene-set-extractors directory: {dig_dir}")
 
-    workflow_cmd = build_workflow_cmd(
-        python_bin=args.python_bin,
-        prepared_dir=prepared_dir,
-        workflow_out=workflow_out,
-        organism=args.organism,
-        genome_build=args.genome_build,
-        settings=settings,
-        provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
-        provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
+    model_out.mkdir(parents=True, exist_ok=True)
+    workflow_out.mkdir(parents=True, exist_ok=True)
+    extractor_out.mkdir(parents=True, exist_ok=True)
+
+    rscript_bin = resolve_rscript_bin(args.rscript_bin)
+    check_r_packages(rscript_bin)
+
+    workflow_script = workflow_out / "run_motrpac_training_limma_voom.R"
+    deg_tsv = workflow_out / "training_deg.tsv"
+    workflow_cmd = [rscript_bin, str(workflow_script)]
+    write_workflow_script(
+        script_path=workflow_script,
+        counts_tsv=prepared_dir / "tissue_counts.tsv",
+        metadata_tsv=prepared_dir / "sample_metadata.tsv",
+        output_tsv=deg_tsv,
     )
     extractor_cmd = build_extractor_cmd(
-        python_bin=args.python_bin,
-        workflow_out=workflow_out,
+        python_bin=str(Path(args.python_bin).resolve()),
+        deg_tsv=deg_tsv,
         extractor_out=extractor_out,
         organism=args.organism,
         genome_build=args.genome_build,
-        tissue_id=tissue_id,
+        signature_name=f"{args.model_id}__training_vs_control",
         settings=settings,
-        gtf_path=resolved_gtf,
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
     )
@@ -336,14 +308,13 @@ def main() -> int:
         extractor_cmd=extractor_cmd,
         dig_dir=dig_dir,
     )
-
     if args.write_commands_only:
         return 0
 
-    env = os.environ.copy()
+    env = dict(os.environ)
     env["PYTHONPATH"] = str(dig_dir / "src")
-    log_line(model_log, f"[run_age_binned_model] model_id={args.model_id}")
-    run_command(workflow_cmd, cwd=dig_dir, env=env, log_path=model_log)
+    model_log = model_out / "run.log"
+    run_command(workflow_cmd, cwd=model_out, env=env, log_path=model_log)
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
     return 0
 

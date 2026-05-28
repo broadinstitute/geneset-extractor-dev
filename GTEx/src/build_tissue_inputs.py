@@ -75,10 +75,18 @@ def compact_age_comparison_label(age_bin: str, reference_age_bin: str) -> str:
     return f"age{left_decade}_{right_decade}"
 
 
+def expanded_age_comparison_label(age_bin: str, reference_age_bin: str) -> str:
+    left = str(age_bin or "").strip().replace("-", "_")
+    right = str(reference_age_bin or "").strip().replace("-", "_")
+    if not left or not right:
+        raise ValueError("age_bin and reference_age_bin must be non-empty")
+    return f"{left}_{right}"
+
+
 def write_naming_reference(path: Path) -> None:
     text = """# Naming Reference
 
-This prepared GTEx bundle uses compact age-bin comparison names.
+This prepared GTEx bundle uses compact workflow comparison IDs plus expanded GMT labels.
 
 ## Comparison Labels
 
@@ -90,16 +98,22 @@ This prepared GTEx bundle uses compact age-bin comparison names.
 
 The suffix `_20` always refers to the reference age bin `20-29`.
 
+Expanded GMT comparison labels are also written in `comparisons.tsv`:
+
+- `30_39_20_29`
+- `40_49_20_29`
+- `50_59_20_29`
+
 ## Gene Set Labels
 
 Downstream GTEx model runs emit compact gene-set names using:
 
-`<model_id>__<comparison>__<sign>`
+`GTEx_aging_<tissue>_<expanded_comparison>_<direction>`
 
 Examples:
 
-- `AB1__age50_20__pos`
-- `AB1__age50_20__neg`
+- `GTEx_aging_adipose_subcutaneous_50_59_20_29_up`
+- `GTEx_aging_adipose_subcutaneous_50_59_20_29_dn`
 """
     path.write_text(text, encoding="utf-8")
 
@@ -228,6 +242,7 @@ def main() -> int:
         comparisons.append(
             {
                 "comparison_id": compact_age_comparison_label(age_bin, reference_age),
+                "gmt_comparison_label": expanded_age_comparison_label(age_bin, reference_age),
                 "comparison_kind": "condition_a_vs_b",
                 "group_column": "age_bin",
                 "group_a": age_bin,
@@ -238,7 +253,7 @@ def main() -> int:
     write_tsv(
         out_dir / "comparisons.tsv",
         comparisons,
-        ["comparison_id", "comparison_kind", "group_column", "group_a", "group_b"],
+        ["comparison_id", "gmt_comparison_label", "comparison_kind", "group_column", "group_a", "group_b"],
     )
 
     summary = {

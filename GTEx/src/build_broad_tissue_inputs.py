@@ -9,6 +9,7 @@ from pathlib import Path
 from build_tissue_inputs import (
     compact_age_comparison_label,
     derive_subject_id,
+    expanded_age_comparison_label,
     normalize_age,
     normalize_sex,
     open_maybe_gzip,
@@ -161,6 +162,7 @@ def main() -> int:
         comparisons.append(
             {
                 "comparison_id": compact_age_comparison_label(age_bin, reference_age),
+                "gmt_comparison_label": expanded_age_comparison_label(age_bin, reference_age),
                 "comparison_kind": "condition_a_vs_b",
                 "group_column": "age_bin",
                 "group_a": age_bin,
@@ -171,7 +173,7 @@ def main() -> int:
     write_tsv(
         out_dir / "comparisons.tsv",
         comparisons,
-        ["comparison_id", "comparison_kind", "group_column", "group_a", "group_b"],
+        ["comparison_id", "gmt_comparison_label", "comparison_kind", "group_column", "group_a", "group_b"],
     )
 
     summary = {
