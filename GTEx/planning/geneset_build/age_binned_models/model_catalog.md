@@ -26,6 +26,7 @@ Each proposed model is supported by the current codebase and varies only knobs t
 Current naming convention:
 - `AB*`: age-binned contrast models
 - `AC*`: continuous-age models
+- `HZ*`: notebook-style/Harmonizome-style aging-signature models
 - `TV*`: reserved for future tissue-versus-reference models
 
 This catalog uses the current GTEx-local `AB1` to `AB22` naming for age-binned models.

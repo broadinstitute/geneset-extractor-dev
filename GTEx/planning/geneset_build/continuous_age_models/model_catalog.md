@@ -42,4 +42,5 @@ Full panel:
 Naming convention:
 - `AB*`: age-binned contrast models
 - `AC*`: continuous-age models
+- `HZ*`: notebook-style/Harmonizome-style aging-signature models
 - `TV*`: reserved for future tissue-versus-reference models

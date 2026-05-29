@@ -26,7 +26,7 @@ This updated proposal assumes the integration should **not** rely on Ma'ayan Lab
 
 This proposal has effectively been superseded by the `dig`-based `HZ1` direction documented in:
 
-- [dig_gtex_aging_signatures_workflow_proposal.md](/home/ryank/software/geneset_extractors/geneset-extractor-dev/GTEx/planning/dig_gtex_aging_signatures_workflow_proposal.md)
+- [dig_gtex_aging_signatures_workflow_proposal.md](/home/ryank/software/geneset_extractors/geneset-extractor-dev/GTEx/planning/proposals/dig_gtex_aging_signatures_workflow_proposal.md)
 
 The active implementation direction is now:
 

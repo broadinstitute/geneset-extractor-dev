@@ -23,6 +23,8 @@ This directory is organized around the current GTEx workflow rather than the his
   - planning for generating GTEx gene sets and GMT outputs
 - `model_evaluation/`
   - planning for optional downstream model evaluation
+- `proposals/`
+  - focused change proposals and integration proposals
 - `shared/`
   - naming and cross-cutting conventions
 
@@ -66,4 +68,5 @@ Relevant wrappers:
 
 - `AB*`: age-binned contrast models
 - `AC*`: continuous-age models
+- `HZ*`: notebook-style/Harmonizome-style aging-signature models
 - `TV*`: reserved for future tissue-versus-reference models

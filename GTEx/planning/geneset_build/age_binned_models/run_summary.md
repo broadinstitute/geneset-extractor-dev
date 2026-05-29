@@ -19,7 +19,7 @@ The current latest GTEx bulk-expression release referenced for planning is `v10`
 
 - a fresh model catalog derived only from the current `dig-gene-set-extractors` code and docs
 - an explicit manifest of supported model settings
-- a current naming scheme with `AB*` for age-binned models, `AC*` for continuous-age models, and `TV*` reserved for future tissue-versus-reference models
+- a current naming scheme with `AB*` for age-binned models, `AC*` for continuous-age models, `HZ*` for notebook-style/Harmonizome-style aging-signature models, and `TV*` reserved for future tissue-versus-reference models
 - a recommended execution order for later pipeline runs
 - consolidated runtime-interface notes and model provenance for the age-binned wrappers
 
@@ -31,10 +31,15 @@ The current latest GTEx bulk-expression release referenced for planning is `v10`
 
 ## Runtime Entry Points
 
-- `geneset-extractor-dev/GTEx/run/build_tissue_inputs.sh`
-- `geneset-extractor-dev/GTEx/run/run_age_binned_model.sh`
-- `geneset-extractor-dev/GTEx/run/run_all_age_binned_models.sh`
-- `geneset-extractor-dev/GTEx/run/run_age_binned_pipeline.sh`
+- `geneset-extractor-dev/GTEx/run/build_genesets.sh`
+- `geneset-extractor-dev/GTEx/src/run_age_binned_model.py`
+
+Current runtime notes:
+
+- `build_genesets.sh` is the main user-facing entry point for `AB*`
+- shared prepared bundles are created once per tissue and reused across models
+- the default output root is `./gtex_outputs`
+- both detailed tissues and broad `SMTS` tissues are supported in the active pipeline
 
 Supporting files in this directory:
 
