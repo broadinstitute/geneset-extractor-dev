@@ -61,7 +61,7 @@ def sanitize_name_token(value: str) -> str:
 
 
 def gtex_tissue_signature_name(tissue_id: str) -> str:
-    return f"GTEx_tissue_{sanitize_name_token(tissue_id)}"
+    return f"GTEx_{sanitize_name_token(tissue_id)}"
 
 
 def _model_sort_key(model_id: str) -> tuple[str, int]:
@@ -414,8 +414,8 @@ def write_tissue_method_note(path: Path, tissue_id: str, model_id: str) -> None:
 This extractor emits one combined GMT for `{tissue_id}` under model `{model_id}`.
 
 Examples:
-- `GTEx_tissue_{tissue_id}_up`: genes with positive age-associated scores
-- `GTEx_tissue_{tissue_id}_dn`: genes with negative age-associated scores
+- `GTEx_{tissue_id}_up`: genes with positive age-associated scores
+- `GTEx_{tissue_id}_dn`: genes with negative age-associated scores
 
 These are derived from one continuous-age regression across all retained tissue samples, not from separate age-bin contrasts.
 """

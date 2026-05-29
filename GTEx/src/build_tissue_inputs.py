@@ -76,11 +76,11 @@ def compact_age_comparison_label(age_bin: str, reference_age_bin: str) -> str:
 
 
 def expanded_age_comparison_label(age_bin: str, reference_age_bin: str) -> str:
-    left = str(age_bin or "").strip().replace("-", "_")
-    right = str(reference_age_bin or "").strip().replace("-", "_")
-    if not left or not right:
+    case_age = str(age_bin or "").strip()
+    reference_age = str(reference_age_bin or "").strip()
+    if not case_age or not reference_age:
         raise ValueError("age_bin and reference_age_bin must be non-empty")
-    return f"{left}_{right}"
+    return f"{reference_age}_{case_age}"
 
 
 def write_naming_reference(path: Path) -> None:
@@ -98,11 +98,12 @@ This prepared GTEx bundle uses compact workflow comparison IDs plus expanded GMT
 
 The suffix `_20` always refers to the reference age bin `20-29`.
 
-Expanded GMT comparison labels are also written in `comparisons.tsv`:
+Expanded GMT comparison labels are also written in `comparisons.tsv` using
+`<reference_age>_<comparison_age>`:
 
-- `30_39_20_29`
-- `40_49_20_29`
-- `50_59_20_29`
+- `20-29_30-39`
+- `20-29_40-49`
+- `20-29_50-59`
 
 ## Gene Set Labels
 
@@ -112,8 +113,8 @@ Downstream GTEx model runs emit compact gene-set names using:
 
 Examples:
 
-- `GTEx_aging_adipose_subcutaneous_50_59_20_29_up`
-- `GTEx_aging_adipose_subcutaneous_50_59_20_29_dn`
+- `GTEx_aging_adipose_subcutaneous_20-29_50-59_up`
+- `GTEx_aging_adipose_subcutaneous_20-29_50-59_dn`
 """
     path.write_text(text, encoding="utf-8")
 
