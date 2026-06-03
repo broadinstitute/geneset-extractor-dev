@@ -3,8 +3,6 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from gene_set_comparison import model_name
-
 
 BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/gtex/genesets"
 IN_FILE = "../../data/gtex/output.tissue/{}_validation_results.txt"
@@ -41,6 +39,17 @@ def plot_gene_set_by_model(df, gene_set_name_suffix):
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
+
+
+def model_name(folder):
+    if folder.startswith("M"):
+        if len(folder) == 2:
+            model_name = folder[0]+"0"+folder[1]
+        else:            
+            model_name = folder
+    else:
+        model_name = folder
+    return model_name
 
 
 def create_top_enriched_df(df):
