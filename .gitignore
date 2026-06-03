@@ -30,6 +30,7 @@
 !validation/
 !validation/**/
 !validation/**/*.py
+!validation/**/*.md
 
 # Allow certain filetypes
 !LINCS_L1000/**/*.py
