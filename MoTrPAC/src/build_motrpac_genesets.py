@@ -30,10 +30,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model_manifest", default=str(default_model_manifest_path()))
     parser.add_argument("--python_bin", default=sys.executable or "python3")
     parser.add_argument("--rscript_bin", default="Rscript")
-    parser.add_argument("--transcript_metadata_tsv", required=True)
-    parser.add_argument("--phenotype_metadata_tsv", required=True)
-    parser.add_argument("--feature_to_gene_tsv", required=True)
-    parser.add_argument("--rat_to_human_tsv", required=True)
+    parser.add_argument("--transcript_metadata_tsv")
+    parser.add_argument("--phenotype_metadata_tsv")
+    parser.add_argument("--feature_to_gene_tsv")
+    parser.add_argument("--rat_to_human_tsv")
+    parser.add_argument("--feature_annot")
+    parser.add_argument("--dea_dir")
+    parser.add_argument("--mapping_file")
+    parser.add_argument("--gene_info")
+    parser.add_argument("--gene_csv")
     parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--provenance_mirror_local_prefix")
     parser.add_argument("--provenance_mirror_remote_prefix")
@@ -91,31 +96,99 @@ def main() -> int:
     )
     model_by_id = row_map(model_rows, "model_id")
     tissue_by_id = row_map(tissue_rows, "tissue_id")
+    selected_model_families = {str(model_by_id[model_id].get("model_family", "")).strip() for model_id in selected_models}
+    tissue_scoped_models = [
+        model_id
+        for model_id in selected_models
+        if str(model_by_id[model_id].get("model_family", "")).strip() in {"training", "timewise"}
+    ]
 
     out_root = Path(args.out_root).resolve()
     outputs_root = out_root / "genesets"
     src_root = Path(__file__).resolve().parent
 
-    transcript_metadata_tsv = require_existing_file(args.transcript_metadata_tsv, "transcript metadata TSV")
-    phenotype_metadata_tsv = require_existing_file(args.phenotype_metadata_tsv, "phenotype metadata TSV")
-    feature_to_gene_tsv = require_existing_file(args.feature_to_gene_tsv, "feature-to-gene TSV")
-    rat_to_human_tsv = require_existing_file(args.rat_to_human_tsv, "rat-to-human mapping TSV")
     model_manifest = require_existing_file(args.model_manifest, "model manifest")
     dig_dir = Path(relative_or_absolute_path(args.dig_dir)).resolve()
     if not dig_dir.exists() or not dig_dir.is_dir():
         raise SystemExit(f"Missing dig-gene-set-extractors directory: {dig_dir}")
+    transcript_metadata_tsv = None
+    phenotype_metadata_tsv = None
+    feature_to_gene_tsv = None
+    rat_to_human_tsv = None
+    if selected_model_families & {"training", "timewise"}:
+        transcript_metadata_tsv = require_existing_file(args.transcript_metadata_tsv, "transcript metadata TSV")
+        phenotype_metadata_tsv = require_existing_file(args.phenotype_metadata_tsv, "phenotype metadata TSV")
+        feature_to_gene_tsv = require_existing_file(args.feature_to_gene_tsv, "feature-to-gene TSV")
+        rat_to_human_tsv = require_existing_file(args.rat_to_human_tsv, "rat-to-human mapping TSV")
+    feature_annot = require_existing_file(args.feature_annot, "feature annotation") if args.feature_annot else None
+    dea_dir = Path(args.dea_dir).resolve() if args.dea_dir else None
+    if dea_dir is not None and (not dea_dir.exists() or not dea_dir.is_dir()):
+        raise SystemExit(f"Missing DEA directory: {dea_dir}")
+    mapping_file = require_existing_file(args.mapping_file, "mapping file") if args.mapping_file else None
+    gene_info = require_existing_file(args.gene_info, "gene_info") if args.gene_info else None
+    gene_csv = require_existing_file(args.gene_csv, "gene.csv") if args.gene_csv else None
 
     conflicts: list[str] = []
+    if "hz_released_dea" in selected_model_families:
+        model_out = outputs_root / "all_tissues" / "models" / "HZ1"
+        if dir_nonempty(model_out):
+            conflicts.append(existing_output_message(tissue_id="all_tissues", model_id="HZ1", path=model_out))
     for tissue_id in selected_tissues:
         tissue_root = outputs_root / tissue_id
-        for model_id in selected_models:
+        for model_id in tissue_scoped_models:
             model_out = tissue_root / "models" / model_id
             if dir_nonempty(model_out):
                 conflicts.append(existing_output_message(tissue_id=tissue_id, model_id=model_id, path=model_out))
     if conflicts and not args.overwrite:
         raise SystemExit("\n\n".join(conflicts))
 
+    if "hz_released_dea" in selected_model_families:
+        if args.overwrite:
+            overwrite_dir(outputs_root / "all_tissues" / "models" / "HZ1")
+        if feature_annot is None or dea_dir is None or mapping_file is None:
+            raise SystemExit(
+                "HZ1 requires --feature_annot, --dea_dir, and --mapping_file."
+            )
+        hz_models = [model_id for model_id in selected_models if str(model_by_id[model_id].get("model_family", "")).strip() == "hz_released_dea"]
+        for model_id in hz_models:
+            run_command(
+                [
+                    str(Path(args.python_bin).resolve()),
+                    str(src_root / "run_motrpac_hz_released_dea_model.py"),
+                    "--model_id",
+                    model_id,
+                    "--run_root",
+                    str(outputs_root / "all_tissues" / "models"),
+                    "--python_bin",
+                    str(Path(args.python_bin).resolve()),
+                    "--dig_dir",
+                    str(dig_dir),
+                    "--feature_annot",
+                    str(feature_annot),
+                    "--dea_dir",
+                    str(dea_dir),
+                    "--mapping_file",
+                    str(mapping_file),
+                    "--model_manifest",
+                    str(model_manifest),
+                ]
+                + (["--gene_info", str(gene_info)] if gene_info is not None else [])
+                + (["--gene_csv", str(gene_csv)] if gene_csv is not None else [])
+                + (
+                    ["--provenance_mirror_local_prefix", args.provenance_mirror_local_prefix]
+                    if args.provenance_mirror_local_prefix
+                    else []
+                )
+                + (
+                    ["--provenance_mirror_remote_prefix", args.provenance_mirror_remote_prefix]
+                    if args.provenance_mirror_remote_prefix
+                    else []
+                )
+            )
+
     for tissue_id in selected_tissues:
+        if not tissue_scoped_models:
+            continue
         tissue_row = tissue_by_id[tissue_id]
         counts_tsv_value = str(tissue_row.get("counts_tsv", "")).strip()
         if not counts_tsv_value:
@@ -130,7 +203,7 @@ def main() -> int:
         prepared_dir = tissue_root / "prepared"
         models_root = tissue_root / "models"
         if args.overwrite:
-            for model_id in selected_models:
+            for model_id in tissue_scoped_models:
                 overwrite_dir(models_root / model_id)
         if not dir_nonempty(prepared_dir):
             run_command(
@@ -156,7 +229,7 @@ def main() -> int:
                 ]
             )
 
-        for model_id in selected_models:
+        for model_id in tissue_scoped_models:
             model_family = model_by_id[model_id].get("model_family", "").strip()
             if model_family == "training":
                 runner_name = "run_motrpac_training_model.py"

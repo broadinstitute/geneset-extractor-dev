@@ -2,7 +2,7 @@
 
 This note proposes a MoTrPAC pipeline parallel to the current GTEx pipeline, but adapted to the available MoTrPAC transcriptomics test data under `inputs/MoTrPAC/`.
 
-The pipeline now supports two related model shapes:
+The pipeline now supports three related model shapes:
 
 - `TR1`
   - one model per tissue
@@ -14,6 +14,10 @@ The pipeline now supports two related model shapes:
   - one signature per `tissue × sex × timepoint`
   - training vs control within each stratum
   - notebook-style naming such as `t68-liver_male_8w`
+- `HZ1`
+  - one model run across all tissues
+  - starts from released DEA tables rather than raw counts
+  - wraps the notebook-replica Harmonizome-style GMT builder
 
 Unlike GTEx, this proposal is for rat transcriptomics inputs. The proposed output policy is:
 
@@ -27,6 +31,7 @@ Build a CLI-first pipeline that:
 2. performs either:
    - one training-vs-control differential expression model per tissue
    - or one timewise training-vs-control model per `tissue × sex × timepoint`
+   - or one all-tissues released-DEA notebook-style library build
 3. converts the resulting DE tables into compact GMT gene sets
 4. emits human-mapped gene sets only
 
@@ -79,10 +84,11 @@ Example first row:
 
 ### Proposed `model_list.tsv`
 
-For the first pass, two models:
+For the first pass, three models:
 
 - `TR1`
 - `TW1`
+- `HZ1`
 
 Suggested metadata:
 
@@ -94,6 +100,10 @@ Suggested metadata:
 - `model_family=timewise`
 - `description=timewise_training_vs_control_notebook_style`
 - `enabled=true`
+- `model_id=HZ1`
+- `model_family=hz_released_dea`
+- `description=harmonizome_notebook_style_released_dea_all_tissues`
+- `enabled=false`
 
 ### Proposed `model_manifest.tsv`
 
@@ -113,6 +123,15 @@ For `TW1`, define:
   - `<tissue_code>-<tissue_slug>_<sex>_<timepoint>`
 - example:
   - `t68-liver_male_8w`
+
+For `HZ1`, define:
+
+- released-DEA all-tissues workflow
+- notebook-replica GMT-building behavior
+- default output mode:
+  - `gmt`
+- default GMT format:
+  - `legacy`
 
 ## Proposed Pipeline Stages
 
@@ -154,6 +173,7 @@ Add:
 
 - `src/run_motrpac_training_model.py`
 - `src/run_motrpac_timewise_model.py`
+- `src/run_motrpac_hz_released_dea_model.py`
 
 Responsibilities:
 
@@ -176,6 +196,13 @@ Responsibilities:
 - emit signatures with notebook-style names such as:
   - `t68-liver_male_8w`
 
+`HZ1` responsibilities:
+
+- run once across all tissues
+- call the notebook-replica released-DEA workflow
+- preserve the standalone script as the authoritative biological logic
+- package outputs into the same outer model layout used by the rest of the pipeline
+
 ### 3. Top-level orchestrator
 
 Add:
@@ -195,6 +222,14 @@ Inputs:
 - `--out_root`
 - `--overwrite`
 
+`HZ1` additionally needs:
+
+- `--feature_annot`
+- `--dea_dir`
+- `--mapping_file`
+- optional `--gene_info`
+- optional `--gene_csv`
+
 ## Proposed Output Layout
 
 Parallel to GTEx:
@@ -202,6 +237,7 @@ Parallel to GTEx:
 - `outputs/genesets/<tissue>/prepared/`
 - `outputs/genesets/<tissue>/models/TR1/`
 - `outputs/genesets/<tissue>/models/TW1/`
+- `outputs/genesets/all_tissues/models/HZ1/`
 
 Prepared outputs:
 
@@ -220,6 +256,15 @@ Model outputs:
 - `tissue_extractor/geneset.full.tsv`
 - `tissue_extractor/geneset.meta.json`
 - `tissue_extractor/geneset.provenance.json`
+
+`HZ1` keeps the same outer model layout but different inner workflow contents:
+
+- `workflow/motrpac_processed.tsv`
+- `workflow/motrpac_processing_audit.tsv`
+- `tissue_extractor/gene_set_library_crisp.gmt`
+- `tissue_extractor/gene_set_library_up_crisp.gmt`
+- `tissue_extractor/gene_set_library_dn_crisp.gmt`
+- adapter `tissue_extractor/genesets.gmt`
 
 ## Human-Mapped Output Policy
 
