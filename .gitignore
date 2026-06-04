@@ -8,8 +8,8 @@
 !geneset-extractor.Dockerfile
 
 # or these needed files
-!GTEx/config/geneset_build/age_binned_model_manifest.tsv
-!GTEx/config/geneset_build/continuous_age_model_manifest.tsv
+!GTEx/config/age_binned_model_manifest.tsv
+!GTEx/config/continuous_age_model_manifest.tsv
 !GTEx/config/model_list.tsv
 !GTEx/config/tissue_list.tsv
 !GTEx/config/broad_tissue_list.tsv
