@@ -3,12 +3,21 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
+PIGEAN = True
 
 BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/gtex/genesets"
-IN_FILE = "../../data/gtex/output.tissue/{}_validation_results.txt"
-HARMONIZOME_FILE = "../../data/gtex/output.tissue/harmonizome_validation.txt"
-DATA_MATRIX_FILE = "../../data/gtex/output.tissue/data_matrix_validation.txt"
-DATA_MATRIX_PIGEAN_FILE = "../../data/gtex/output.tissue/data_matrix_pigean_validation.txt"
+
+if PIGEAN:
+    IN_FILE = "../../data/gtex/output.tissue.pigean/{}_validation_results_pigean.txt"
+    HARMONIZOME_FILE = "../../data/gtex/output.tissue.pigean/harmonizome_pigean_validation.txt"
+    DATA_MATRIX_FILE = "../../data/gtex/output.tissue.pigean/data_matrix_validation.txt"
+    DATA_MATRIX_PIGEAN_FILE = "../../data/gtex/output.tissue.pigean/data_matrix_pigean_validation.txt"
+else:
+    IN_FILE = "../../data/gtex/output.tissue/{}_validation_results.txt"
+    HARMONIZOME_FILE = "../../data/gtex/output.tissue/harmonizome_validation.txt"
+    DATA_MATRIX_FILE = "../../data/gtex/output.tissue/data_matrix_validation.txt"
+    DATA_MATRIX_PIGEAN_FILE = "../../data/gtex/output.tissue/data_matrix_pigean_validation.txt"
+
 
 def plot_gene_set_by_model(df, gene_set_name_suffix):
     """
@@ -182,9 +191,14 @@ def create_pivot_tables(df):
 
 
 def main():
-    output_path = "../../data/gtex/output.tissue/test_top_gene_sets.tsv"
-    pivot_ab_output_path = "../../data/gtex/output.tissue/test_negative_control_counts_AB.tsv"
-    pivot_ac_output_path = "../../data/gtex/output.tissue/test_negative_control_counts_AC.tsv"
+    if PIGEAN:
+        output_path = "../../data/gtex/output.tissue.pigean/test_top_gene_sets.tsv"
+        pivot_ab_output_path = "../../data/gtex/output.tissue.pigean/test_negative_control_counts_AB.tsv"
+        pivot_ac_output_path = "../../data/gtex/output.tissue.pigean/test_negative_control_counts_AC.tsv"
+    else:
+        output_path = "../../data/gtex/output.tissue/test_top_gene_sets.tsv"
+        pivot_ab_output_path = "../../data/gtex/output.tissue/test_negative_control_counts_AB.tsv"
+        pivot_ac_output_path = "../../data/gtex/output.tissue/test_negative_control_counts_AC.tsv"
     df = None
     # process harmonizome file
     if os.path.exists(HARMONIZOME_FILE):

@@ -39,7 +39,9 @@ Entry point for batch validation. Iterates over all tissues and models in `BASE_
 Low-level interface to the EAGGL/PIGEAN enrichment API. Also contains the random-gene simulation baseline.
 
 **Key functions:**
-- `run_eaggl(genes)` — Posts a gene list to the PIGEAN API and returns enriched gene sets.
+- `run_client(genes, enrichment_analysis="hypergeometric")` — Core API client. Posts a gene list to the PIGEAN API with the specified enrichment analysis method and returns enriched gene sets.
+- `run_eaggl(genes)` — Calls `run_client` with `enrichment_analysis="hypergeometric"`.
+- `run_pigean(genes)` — Calls `run_client` with `enrichment_analysis="naive_priors"`.
 - `save_results(out_f, gene_set_name, gene_set_size, genesets)` — Writes enrichment results as tab-delimited rows.
 - `read_all_loc_genes()` — Reads all gene symbols from the LDSC gene location file.
 
