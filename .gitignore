@@ -28,6 +28,9 @@
 !HuBMAP/
 !MoTrPAC/
 !KOMP2/
+!src/
+!run/
+!proposals/
 
 !LINCS_L1000/**/
 !RummaGEO/**/
@@ -39,8 +42,29 @@
 !HuBMAP/**/
 !MoTrPAC/**/
 !KOMP2/**/
+!src/**/
+!run/**/
+!proposals/**/
 
 # Allow certain filetypes
+!src/**/*.py
+!src/**/*.r
+!src/**/*.R
+!src/**/*.sh
+!src/**/*.md
+
+!run/**/*.py
+!run/**/*.r
+!run/**/*.R
+!run/**/*.sh
+!run/**/*.md
+
+!proposals/**/*.py
+!proposals/**/*.r
+!proposals/**/*.R
+!proposals/**/*.sh
+!proposals/**/*.md
+
 !LINCS_L1000/**/*.py
 !LINCS_L1000/**/*.r
 !LINCS_L1000/**/*.R
