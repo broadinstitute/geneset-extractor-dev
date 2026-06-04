@@ -89,41 +89,12 @@ def read_summary(path: Path) -> dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def build_provenance_rebuild_cmd(
-    *,
-    python_bin: str,
-    metadata_json: Path,
-    upstream_provenance_graph_json: Path,
-    provenance_out: Path,
-    provenance_mirror_local_prefix: str | None,
-    provenance_mirror_remote_prefix: str | None,
-) -> list[str]:
-    cmd = [
-        python_bin,
-        "-m",
-        "geneset_extractors.cli",
-        "provenance",
-        "build",
-        str(metadata_json),
-        "--out",
-        str(provenance_out),
-        "--upstream_provenance_graph_json",
-        str(upstream_provenance_graph_json),
-    ]
-    if provenance_mirror_local_prefix:
-        cmd.extend(["--provenance_mirror_local_prefix", provenance_mirror_local_prefix])
-    if provenance_mirror_remote_prefix:
-        cmd.extend(["--provenance_mirror_remote_prefix", provenance_mirror_remote_prefix])
-    return cmd
-
-
 def write_model_commands(
     *,
     model_out: Path,
     model_id: str,
     workflow_cmd: list[str],
     extractor_cmd: list[str] | None,
-    provenance_cmd: list[str] | None,
     invocation_cmd: list[str],
 ) -> None:
     lines = [
@@ -149,17 +120,6 @@ def write_model_commands(
                 "",
                 "```bash",
                 shell_join(extractor_cmd),
-                "```",
-                "",
-            ]
-        )
-    if provenance_cmd is not None:
-        lines.extend(
-            [
-                "## Provenance Rebuild",
-                "",
-                "```bash",
-                shell_join(provenance_cmd),
                 "```",
                 "",
             ]
@@ -309,15 +269,6 @@ def main() -> int:
         extractor_cmd.extend(["--provenance_mirror_local_prefix", args.provenance_mirror_local_prefix])
     if args.provenance_mirror_remote_prefix:
         extractor_cmd.extend(["--provenance_mirror_remote_prefix", args.provenance_mirror_remote_prefix])
-    provenance_cmd = build_provenance_rebuild_cmd(
-        python_bin=str(Path(args.python_bin).resolve()),
-        metadata_json=extractor_dir / "geneset.meta.json",
-        upstream_provenance_graph_json=workflow_dir / "deg_long.provenance_graph.json",
-        provenance_out=extractor_dir / "geneset.provenance.json",
-        provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
-        provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
-    )
-
     invocation_cmd = [
         str(repo / "geneset-extractor-dev" / "GTEx" / "run" / "build_genesets.sh"),
         "--tissues",
@@ -330,7 +281,6 @@ def main() -> int:
         model_id=args.model_id,
         workflow_cmd=workflow_cmd,
         extractor_cmd=extractor_cmd,
-        provenance_cmd=provenance_cmd,
         invocation_cmd=invocation_cmd,
     )
     if args.write_commands_only:
@@ -347,7 +297,6 @@ def main() -> int:
         return 0
 
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
-    run_command(provenance_cmd, cwd=dig_dir, env=env, log_path=model_log)
     return 0
 
 
