@@ -24,6 +24,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample_attributes_tsv", required=True)
     parser.add_argument("--subject_phenotypes_tsv", required=True)
     parser.add_argument("--human_gene_info", required=True)
+    parser.add_argument("--tissue_column")
+    parser.add_argument("--tissue_value")
     parser.add_argument("--prepared_dir")
     parser.add_argument("--run_root", required=True)
     parser.add_argument("--python_bin", default=sys.executable or "python3")
@@ -225,9 +227,9 @@ def main() -> int:
         "--rscript_bin",
         args.rscript_bin,
         "--tissue_column",
-        "SMTS",
+        args.tissue_column or "SMTS",
         "--tissue_value",
-        args.tissue_label,
+        args.tissue_value or args.tissue_label,
         "--tissue_label",
         args.tissue_label,
         "--tissue_id",
