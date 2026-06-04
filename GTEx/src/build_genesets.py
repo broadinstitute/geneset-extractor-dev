@@ -36,6 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--broad_tissue_list", default=str(default_broad_tissue_list_path()))
     parser.add_argument("--python_bin", default=sys.executable or "python3")
     parser.add_argument("--rscript_bin", default="Rscript")
+    parser.add_argument("--counts_gct", required=True)
     parser.add_argument("--sample_metadata_tsv", required=True)
     parser.add_argument("--subject_metadata_tsv", required=True)
     parser.add_argument("--human_gene_info")
@@ -113,6 +114,7 @@ def main() -> int:
     src_root = repo_root() / "geneset-extractor-dev" / "GTEx" / "src"
     sample_metadata_tsv = require_existing_file(args.sample_metadata_tsv, "sample metadata TSV")
     subject_metadata_tsv = require_existing_file(args.subject_metadata_tsv, "subject metadata TSV")
+    counts_gct = require_existing_file(args.counts_gct, "counts GCT")
     human_gene_info: Path | None = None
     if args.human_gene_info:
         human_gene_info = require_existing_file(args.human_gene_info, "human_gene_info")
@@ -165,69 +167,21 @@ def main() -> int:
 
     for tissue_id in selected_tissues:
         tissue_row = tissue_by_id[tissue_id]
-        counts_gct_value = str(tissue_row.get("counts_gct", "")).strip()
-        if not counts_gct_value:
-            raise SystemExit(
-                f"Missing counts_gct for tissue={tissue_id} in tissue list {selected_tissue_list_path.resolve()}"
-            )
-        counts_gct = relative_or_absolute_path(counts_gct_value)
-        if not counts_gct.exists():
-            raise SystemExit(f"Missing counts file for {tissue_id}: {counts_gct}")
-        tissue_label = str(tissue_row.get("tissue_label", "")).strip()
-        if not tissue_label:
-            raise SystemExit(f"Missing tissue_label for {tissue_id} in tissue list")
+        tissue_name = str(tissue_row.get("tissue_name", "")).strip()
+        if not tissue_name:
+            raise SystemExit(f"Missing tissue_name for {tissue_id} in tissue list")
+        if args.tissue_granularity == "broad":
+            metadata_group_column = "SMTS"
+            metadata_group_value = tissue_name
+        else:
+            metadata_group_column = "SMTSD"
+            metadata_group_value = tissue_name
         tissue_root = outputs_root / tissue_id
         prepared_dir = tissue_root / "prepared"
         models_root = tissue_root / "models"
         if args.overwrite:
             for model_id in [*age_binned_models, *continuous_age_models, *hz_notebook_models]:
                 overwrite_dir(models_root / model_id)
-        if not dir_nonempty(prepared_dir):
-            if args.tissue_granularity == "broad":
-                metadata_group_column = str(tissue_row.get("metadata_group_column", "")).strip() or "SMTS"
-                metadata_group_value = str(tissue_row.get("metadata_group_value", "")).strip()
-                if not metadata_group_value:
-                    raise SystemExit(
-                        f"Missing metadata_group_value for tissue={tissue_id} in tissue list {selected_tissue_list_path.resolve()}"
-                    )
-                run_command(
-                    [
-                        str(Path(args.python_bin).resolve()),
-                        str(src_root / "build_broad_tissue_inputs.py"),
-                        "--counts_gct",
-                        str(counts_gct),
-                        "--sample_metadata_tsv",
-                        str(sample_metadata_tsv),
-                        "--subject_metadata_tsv",
-                        str(subject_metadata_tsv),
-                        "--tissue_label",
-                        tissue_label,
-                        "--metadata_group_column",
-                        metadata_group_column,
-                        "--metadata_group_value",
-                        metadata_group_value,
-                        "--out_dir",
-                        str(prepared_dir),
-                    ]
-                )
-            else:
-                run_command(
-                    [
-                        str(Path(args.python_bin).resolve()),
-                        str(src_root / "build_tissue_inputs.py"),
-                        "--counts_gct",
-                        str(counts_gct),
-                        "--sample_metadata_tsv",
-                        str(sample_metadata_tsv),
-                        "--subject_metadata_tsv",
-                        str(subject_metadata_tsv),
-                        "--tissue_label",
-                        tissue_label,
-                        "--out_dir",
-                        str(prepared_dir),
-                    ]
-                )
-
         for model_id in age_binned_models:
             needs_gtf = model_requires_gtf(model_by_id[model_id])
             run_command(
@@ -238,8 +192,14 @@ def main() -> int:
                     model_id,
                     "--tissue_id",
                     tissue_id,
-                    "--prepared_dir",
-                    str(prepared_dir),
+                    "--tissue_label",
+                    tissue_name,
+                    "--expression_gct",
+                    str(counts_gct),
+                    "--sample_attributes_tsv",
+                    str(sample_metadata_tsv),
+                    "--subject_phenotypes_tsv",
+                    str(subject_metadata_tsv),
                     "--run_root",
                     str(models_root),
                     "--python_bin",
@@ -249,6 +209,7 @@ def main() -> int:
                     "--age_binned_model_manifest",
                     str(age_binned_model_manifest),
                 ]
+                + ["--tissue_column", metadata_group_column, "--tissue_value", metadata_group_value]
                 + (
                     ["--provenance_mirror_local_prefix", args.provenance_mirror_local_prefix]
                     if args.provenance_mirror_local_prefix
@@ -280,8 +241,14 @@ def main() -> int:
                     args.rscript_bin,
                     "--tissue_id",
                     tissue_id,
-                    "--prepared_dir",
-                    str(prepared_dir),
+                    "--tissue_label",
+                    tissue_name,
+                    "--expression_gct",
+                    str(counts_gct),
+                    "--sample_attributes_tsv",
+                    str(sample_metadata_tsv),
+                    "--subject_phenotypes_tsv",
+                    str(subject_metadata_tsv),
                     "--run_root",
                     str(models_root),
                     "--dig_dir",
@@ -291,6 +258,7 @@ def main() -> int:
                     "--model_ids",
                     ",".join(continuous_age_models),
                 ]
+                + ["--tissue_column", metadata_group_column, "--tissue_value", metadata_group_value]
                 + (
                     ["--provenance_mirror_local_prefix", args.provenance_mirror_local_prefix]
                     if args.provenance_mirror_local_prefix
@@ -318,7 +286,7 @@ def main() -> int:
                     "--tissue_id",
                     tissue_id,
                     "--tissue_label",
-                    tissue_label,
+                    tissue_name,
                     "--expression_gct",
                     str(counts_gct),
                     "--sample_attributes_tsv",
@@ -338,6 +306,7 @@ def main() -> int:
                     "--dig_dir",
                     str(dig_dir),
                 ]
+                + ["--tissue_column", metadata_group_column, "--tissue_value", metadata_group_value]
                 + (
                     ["--provenance_mirror_local_prefix", args.provenance_mirror_local_prefix]
                     if args.provenance_mirror_local_prefix

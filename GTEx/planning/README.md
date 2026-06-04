@@ -4,8 +4,8 @@ This directory is organized around the current GTEx workflow rather than the his
 
 ## Current Flow
 
-1. Build GTEx tissue inputs
-2. Build tissue-by-model gene sets and GMT files
+1. Build tissue-by-model gene sets and GMT files directly from raw GTEx inputs
+2. Optionally inspect intermediate workflow artifacts written by `dig`
 3. Optionally evaluate those gene sets with PIGEAN and EAGGL
 4. Summarize model behavior and choose representative models
 

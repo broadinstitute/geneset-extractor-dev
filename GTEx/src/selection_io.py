@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import os
 import re
 from pathlib import Path
 
@@ -14,10 +15,16 @@ def gtex_root() -> Path:
 
 
 def planning_root() -> Path:
+    override = os.environ.get("GTEX_PLANNING_ROOT", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
     return gtex_root() / "planning"
 
 
 def default_out_root() -> Path:
+    override = os.environ.get("GTEX_OUT_ROOT", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
     return Path.cwd() / "gtex_outputs"
 
 
@@ -30,22 +37,37 @@ def default_pigean_eaggl_root() -> Path:
 
 
 def default_model_list_path() -> Path:
+    override = os.environ.get("GTEX_MODEL_LIST", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
     return planning_root() / "model_list.tsv"
 
 
 def default_tissue_list_path() -> Path:
+    override = os.environ.get("GTEX_TISSUE_LIST", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
     return planning_root() / "tissue_list.tsv"
 
 
 def default_broad_tissue_list_path() -> Path:
+    override = os.environ.get("GTEX_BROAD_TISSUE_LIST", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
     return planning_root() / "broad_tissue_list.tsv"
 
 
 def default_age_binned_model_manifest_path() -> Path:
+    override = os.environ.get("GTEX_AGE_BINNED_MODEL_MANIFEST", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
     return planning_root() / "geneset_build" / "age_binned_models" / "model_manifest.tsv"
 
 
 def default_continuous_age_model_manifest_path() -> Path:
+    override = os.environ.get("GTEX_CONTINUOUS_AGE_MODEL_MANIFEST", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
     return planning_root() / "geneset_build" / "continuous_age_models" / "model_manifest.tsv"
 
 

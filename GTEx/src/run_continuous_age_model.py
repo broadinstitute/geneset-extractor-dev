@@ -25,8 +25,14 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("--tissue_id", required=True)
+    parser.add_argument("--tissue_label", required=True)
     parser.add_argument("--model_ids", default="all", help="comma-separated model IDs or 'all'")
-    parser.add_argument("--prepared_dir", required=True)
+    parser.add_argument("--expression_gct", required=True)
+    parser.add_argument("--sample_attributes_tsv", required=True)
+    parser.add_argument("--subject_phenotypes_tsv", required=True)
+    parser.add_argument("--tissue_column")
+    parser.add_argument("--tissue_value")
+    parser.add_argument("--prepared_dir")
     parser.add_argument("--run_root", required=True)
     parser.add_argument("--python_bin", default=sys.executable or "python3")
     parser.add_argument("--rscript_bin", required=True)
@@ -239,10 +245,56 @@ write.table(tt, file="{output_tsv}", sep="\\t", row.names=FALSE, quote=FALSE)
 
 def build_workflow_cmd(
     *,
+    python_bin: str,
+    expression_gct: Path,
+    sample_attributes_tsv: Path,
+    subject_phenotypes_tsv: Path,
+    workflow_out: Path,
+    organism: str,
+    genome_build: str,
     rscript_bin: str,
-    workflow_script: Path,
+    tissue_id: str,
+    tissue_label: str,
+    tissue_column: str | None,
+    tissue_value: str | None,
+    covariates: str,
+    provenance_mirror_local_prefix: str | None,
+    provenance_mirror_remote_prefix: str | None,
 ) -> list[str]:
-    return [rscript_bin, str(workflow_script)]
+    cmd = [
+        python_bin,
+        "-m",
+        "geneset_extractors.cli",
+        "workflows",
+        "gtex_continuous_age",
+        "--expression_gct",
+        str(expression_gct),
+        "--sample_attributes_tsv",
+        str(sample_attributes_tsv),
+        "--subject_phenotypes_tsv",
+        str(subject_phenotypes_tsv),
+        "--out_dir",
+        str(workflow_out),
+        "--organism",
+        organism,
+        "--genome_build",
+        genome_build,
+        "--rscript_bin",
+        rscript_bin,
+        "--tissue_id",
+        tissue_id,
+        "--tissue_label",
+        tissue_label,
+        "--covariates",
+        covariates,
+    ]
+    if tissue_column and tissue_value:
+        cmd.extend(["--tissue_column", tissue_column, "--tissue_value", tissue_value])
+    if provenance_mirror_local_prefix:
+        cmd.extend(["--provenance_mirror_local_prefix", provenance_mirror_local_prefix])
+    if provenance_mirror_remote_prefix:
+        cmd.extend(["--provenance_mirror_remote_prefix", provenance_mirror_remote_prefix])
+    return cmd
 
 
 def resolve_rscript_bin(rscript_bin: str) -> str:
@@ -446,7 +498,6 @@ def write_run_outputs(
     model_ids: list[str],
     statuses: list[dict[str, Any]],
     invocation_cmd: list[str],
-    prepared_dir: Path,
 ) -> None:
     fieldnames = [
         "model_id",
@@ -469,7 +520,6 @@ def write_run_outputs(
             shell_join(invocation_cmd),
             "```",
             "",
-            f"- prepared_dir: `{prepared_dir}`",
             f"- models: `{','.join(model_ids)}`",
             "",
         ]
@@ -508,23 +558,21 @@ def write_run_outputs(
 def main() -> int:
     args = parse_args()
     repo = repo_root()
-    prepared_dir = Path(args.prepared_dir)
     run_root = Path(args.run_root)
     dig_dir = Path(args.dig_dir).resolve()
     manifest_path = Path(args.continuous_age_model_manifest).resolve()
-    rscript_bin = resolve_rscript_bin(args.rscript_bin)
+    rscript_bin = args.rscript_bin
     resolved_gtf = resolve_input_path(args.gtf, base_dir=repo)
     model_settings = load_tissue_model_settings(manifest_path)
     model_ids = parse_model_ids(args.model_ids, model_settings)
-
-    if not (prepared_dir / "tissue_counts.tsv").exists() or not (prepared_dir / "sample_metadata.tsv").exists():
-        raise SystemExit("prepared_dir must contain tissue_counts.tsv and sample_metadata.tsv")
+    expression_gct = Path(args.expression_gct).resolve()
+    sample_attributes_tsv = Path(args.sample_attributes_tsv).resolve()
+    subject_phenotypes_tsv = Path(args.subject_phenotypes_tsv).resolve()
+    tissue_label = str(args.tissue_label).strip()
 
     needs_gtf = [model_id for model_id in model_ids if model_settings[model_id]["ANNOTATION_MODE"] == "gtf_annotated"]
     if needs_gtf and not resolved_gtf:
         raise SystemExit(f"Models require --gtf: {', '.join(needs_gtf)}")
-    if not args.write_commands_only:
-        check_r_packages(rscript_bin)
 
     run_root.mkdir(parents=True, exist_ok=True)
     top_log = run_root / "run.log"
@@ -546,28 +594,27 @@ def main() -> int:
         model_out = run_root / model_id
         workflow_out = model_out / "workflow"
         extractor_out = model_out / "tissue_extractor"
-        tissue_deg_tsv = extractor_out / "tissue_deg.tsv"
-        continuous_meta_tsv = workflow_out / "continuous_sample_metadata.tsv"
-        workflow_script = workflow_out / "run_continuous_age_limma_voom.R"
+        tissue_deg_tsv = workflow_out / "deg_long.tsv"
         model_log = model_out / "run.log"
         model_out.mkdir(parents=True, exist_ok=True)
         log_line(top_log, f"[run_gtex_tissue_gmt] start model={model_id}")
-
-        continuous_meta_summary = prepare_continuous_metadata(prepared_dir, continuous_meta_tsv)
-        write_continuous_age_r_script(
-            script_path=workflow_script,
-            counts_tsv=prepared_dir / "tissue_counts.tsv",
-            metadata_tsv=continuous_meta_tsv,
-            output_tsv=tissue_deg_tsv,
-            include_sex=settings["WORKFLOW_COVARIATES"] != "none",
+        workflow_cmd = build_workflow_cmd(
+            python_bin=args.python_bin,
+            expression_gct=expression_gct,
+            sample_attributes_tsv=sample_attributes_tsv,
+            subject_phenotypes_tsv=subject_phenotypes_tsv,
+            workflow_out=workflow_out,
+            organism=args.organism,
+            genome_build=args.genome_build,
+            rscript_bin=rscript_bin,
+            tissue_id=args.tissue_id,
+            tissue_label=tissue_label,
+            tissue_column=args.tissue_column,
+            tissue_value=args.tissue_value,
+            covariates=settings["WORKFLOW_COVARIATES"],
+            provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
+            provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
         )
-        write_tissue_deg_note(
-            tissue_deg_tsv.with_suffix(".md"),
-            args.tissue_id,
-            model_id,
-            settings["WORKFLOW_COVARIATES"] != "none",
-        )
-        workflow_cmd = build_workflow_cmd(rscript_bin=rscript_bin, workflow_script=workflow_script)
         extractor_cmd = build_extractor_cmd(
             python_bin=args.python_bin,
             deg_tsv=tissue_deg_tsv,
@@ -575,7 +622,7 @@ def main() -> int:
             organism=args.organism,
             genome_build=args.genome_build,
             settings=settings,
-            signature_name=gtex_tissue_signature_name(args.tissue_id),
+            signature_name=gtex_tissue_signature_name(tissue_label),
             gtf_path=resolved_gtf,
             provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
             provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
@@ -594,11 +641,11 @@ def main() -> int:
             "model_id": model_id,
             "status": "planned" if args.write_commands_only else "running",
             "workflow_dir": str(workflow_out),
-            "continuous_metadata_tsv": str(continuous_meta_tsv),
+            "continuous_metadata_tsv": str(workflow_out / "continuous_sample_metadata.tsv"),
             "tissue_deg_tsv": str(tissue_deg_tsv),
             "extractor_dir": str(extractor_out),
             "gmt_path": str(extractor_out / "genesets.gmt"),
-            "n_samples": continuous_meta_summary["n_samples"],
+            "n_samples": "",
             "model_formula": "age_mid + SEX" if settings["WORKFLOW_COVARIATES"] != "none" else "age_mid",
         }
 
@@ -607,11 +654,15 @@ def main() -> int:
             continue
 
         try:
-            run_command(workflow_cmd, cwd=repo, env=env, log_path=model_log)
+            run_command(workflow_cmd, cwd=dig_dir, env=env, log_path=model_log)
             write_text(tissue_deg_tsv.with_suffix(".log"), f"continuous age workflow completed for {model_id}\n")
             write_tissue_method_note(extractor_out / "naming_reference.md", args.tissue_id, model_id)
             run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
             status_row["status"] = "complete"
+            continuous_meta_tsv = workflow_out / "continuous_sample_metadata.tsv"
+            if continuous_meta_tsv.exists():
+                with continuous_meta_tsv.open("r", encoding="utf-8", newline="") as handle:
+                    status_row["n_samples"] = max(sum(1 for _ in handle) - 1, 0)
             log_line(top_log, f"[run_gtex_tissue_gmt] complete model={model_id}")
         except subprocess.CalledProcessError as exc:
             status_row["status"] = f"failed:{exc.returncode}"
@@ -622,7 +673,6 @@ def main() -> int:
                 model_ids=model_ids,
                 statuses=statuses,
                 invocation_cmd=invocation_cmd,
-                prepared_dir=prepared_dir,
             )
             raise
 
@@ -633,7 +683,6 @@ def main() -> int:
         model_ids=model_ids,
         statuses=statuses,
         invocation_cmd=invocation_cmd,
-        prepared_dir=prepared_dir,
     )
     return 0
 

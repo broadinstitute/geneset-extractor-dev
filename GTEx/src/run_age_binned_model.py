@@ -19,7 +19,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--model_id", required=True)
     parser.add_argument("--tissue_id")
-    parser.add_argument("--prepared_dir", required=True)
+    parser.add_argument("--tissue_label", required=True)
+    parser.add_argument("--expression_gct", required=True)
+    parser.add_argument("--sample_attributes_tsv", required=True)
+    parser.add_argument("--subject_phenotypes_tsv", required=True)
+    parser.add_argument("--tissue_column")
+    parser.add_argument("--tissue_value")
+    parser.add_argument("--prepared_dir")
     parser.add_argument("--run_root", required=True)
     parser.add_argument("--python_bin", default=sys.executable or "python3")
     parser.add_argument("--organism", default="human", choices=["human", "mouse"])
@@ -98,56 +104,19 @@ def write_tsv_rows(path: Path, rows: list[dict[str, str]], fieldnames: list[str]
             writer.writerow(row)
 
 
-def ensure_gmt_comparison_labels(*, prepared_dir: Path, workflow_out: Path, log_path: Path) -> Path:
-    deg_path = workflow_out / "deg_long.tsv"
-    deg_rows = read_tsv_rows(deg_path)
-    if not deg_rows:
-        return deg_path
-    fieldnames = list(deg_rows[0].keys())
-    if "gmt_comparison_label" in fieldnames:
-        return deg_path
-
-    comparison_rows = read_tsv_rows(prepared_dir / "comparisons.tsv")
-    label_by_comparison = {
-        str(row.get("comparison_id", "")).strip(): str(row.get("gmt_comparison_label", "")).strip()
-        for row in comparison_rows
-        if str(row.get("comparison_id", "")).strip()
-    }
-    missing = sorted(
-        {
-            str(row.get("comparison_id", "")).strip()
-            for row in deg_rows
-            if str(row.get("comparison_id", "")).strip() not in label_by_comparison
-        }
-    )
-    if missing:
-        joined = ", ".join(missing[:5])
-        suffix = "" if len(missing) <= 5 else ", ..."
-        raise SystemExit(
-            "Missing gmt_comparison_label mapping for comparison_id values: "
-            f"{joined}{suffix}"
-        )
-
-    augmented_rows: list[dict[str, str]] = []
-    for row in deg_rows:
-        updated = dict(row)
-        updated["gmt_comparison_label"] = label_by_comparison[str(row.get("comparison_id", "")).strip()]
-        augmented_rows.append(updated)
-
-    augmented_fieldnames = [*fieldnames, "gmt_comparison_label"]
-    augmented_path = workflow_out / "deg_long.with_gmt_labels.tsv"
-    write_tsv_rows(augmented_path, augmented_rows, augmented_fieldnames)
-    log_line(log_path, f"[run_age_binned_model] wrote augmented DEG table {augmented_path}")
-    return augmented_path
-
-
 def build_workflow_cmd(
     *,
     python_bin: str,
-    prepared_dir: Path,
     workflow_out: Path,
     organism: str,
     genome_build: str,
+    tissue_id: str,
+    tissue_label: str,
+    expression_gct: Path,
+    sample_attributes_tsv: Path,
+    subject_phenotypes_tsv: Path,
+    tissue_column: str | None,
+    tissue_value: str | None,
     settings: dict[str, str],
     provenance_mirror_local_prefix: str | None,
     provenance_mirror_remote_prefix: str | None,
@@ -157,25 +126,17 @@ def build_workflow_cmd(
         "-m",
         "geneset_extractors.cli",
         "workflows",
-        "rna_de_prepare",
-        "--modality",
-        "bulk",
-        "--counts_tsv",
-        str(prepared_dir / "tissue_counts.tsv"),
-        "--matrix_orientation",
-        "gene_by_sample",
-        "--feature_id_column",
-        "gene_id",
-        "--matrix_gene_symbol_column",
-        "gene_symbol",
-        "--sample_metadata_tsv",
-        str(prepared_dir / "sample_metadata.tsv"),
-        "--sample_id_column",
-        "sample_id",
-        "--group_column",
-        "age_bin",
-        "--comparisons_tsv",
-        str(prepared_dir / "comparisons.tsv"),
+        "gtex_age_binned",
+        "--expression_gct",
+        str(expression_gct),
+        "--sample_attributes_tsv",
+        str(sample_attributes_tsv),
+        "--subject_phenotypes_tsv",
+        str(subject_phenotypes_tsv),
+        "--tissue_id",
+        tissue_id,
+        "--tissue_label",
+        tissue_label,
         "--de_mode",
         settings["workflow_de_mode"],
         "--balance_groups",
@@ -193,6 +154,8 @@ def build_workflow_cmd(
         "--genome_build",
         genome_build,
     ]
+    if tissue_column and tissue_value:
+        cmd.extend(["--tissue_column", tissue_column, "--tissue_value", tissue_value])
     if settings["workflow_covariates"] != "none":
         cmd.extend(["--covariates", settings["workflow_covariates"]])
     if provenance_mirror_local_prefix:
@@ -336,7 +299,6 @@ def write_model_commands(
 def main() -> int:
     args = parse_args()
     repo = repo_root()
-    prepared_dir = Path(args.prepared_dir).resolve()
     run_root = Path(args.run_root).resolve()
     dig_dir = Path(args.dig_dir).resolve()
     manifest_path = Path(args.age_binned_model_manifest).resolve()
@@ -345,18 +307,14 @@ def main() -> int:
     if args.model_id not in model_settings:
         raise SystemExit(f"Unsupported model_id: {args.model_id}")
     settings = model_settings[args.model_id]
-    tissue_id = str(args.tissue_id or prepared_dir.parent.name).strip()
+    tissue_id = str(args.tissue_id).strip()
+    tissue_label = str(args.tissue_label).strip()
+    expression_gct = Path(args.expression_gct).resolve()
+    sample_attributes_tsv = Path(args.sample_attributes_tsv).resolve()
+    subject_phenotypes_tsv = Path(args.subject_phenotypes_tsv).resolve()
 
     if settings["annotation_mode"] == "gtf_annotated" and not resolved_gtf:
         raise SystemExit(f"Model {args.model_id} requires --gtf")
-
-    required = ["tissue_counts.tsv", "sample_metadata.tsv", "comparisons.tsv"]
-    if not args.write_commands_only:
-        missing = [name for name in required if not (prepared_dir / name).exists()]
-        if missing:
-            raise SystemExit(
-                "prepared_dir must contain tissue_counts.tsv, sample_metadata.tsv, and comparisons.tsv"
-            )
 
     model_out = run_root / args.model_id
     workflow_out = model_out / "workflow"
@@ -366,10 +324,16 @@ def main() -> int:
 
     workflow_cmd = build_workflow_cmd(
         python_bin=args.python_bin,
-        prepared_dir=prepared_dir,
         workflow_out=workflow_out,
         organism=args.organism,
         genome_build=args.genome_build,
+        tissue_id=tissue_id,
+        tissue_label=tissue_label,
+        expression_gct=expression_gct,
+        sample_attributes_tsv=sample_attributes_tsv,
+        subject_phenotypes_tsv=subject_phenotypes_tsv,
+        tissue_column=args.tissue_column,
+        tissue_value=args.tissue_value,
         settings=settings,
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
@@ -377,14 +341,14 @@ def main() -> int:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(dig_dir / "src")
     log_line(model_log, f"[run_age_binned_model] model_id={args.model_id}")
-    deg_tsv_for_extractor = workflow_out / "deg_long.with_gmt_labels.tsv"
+    deg_tsv_for_extractor = workflow_out / "deg_long.tsv"
     extractor_cmd = build_extractor_cmd(
         python_bin=args.python_bin,
         deg_tsv=deg_tsv_for_extractor,
         extractor_out=extractor_out,
         organism=args.organism,
         genome_build=args.genome_build,
-        tissue_id=tissue_id,
+        tissue_id=tissue_label,
         settings=settings,
         gtf_path=resolved_gtf,
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
@@ -402,18 +366,13 @@ def main() -> int:
         return 0
 
     run_command(workflow_cmd, cwd=dig_dir, env=env, log_path=model_log)
-    deg_tsv_for_extractor = ensure_gmt_comparison_labels(
-        prepared_dir=prepared_dir,
-        workflow_out=workflow_out,
-        log_path=model_log,
-    )
     extractor_cmd = build_extractor_cmd(
         python_bin=args.python_bin,
         deg_tsv=deg_tsv_for_extractor,
         extractor_out=extractor_out,
         organism=args.organism,
         genome_build=args.genome_build,
-        tissue_id=tissue_id,
+        tissue_id=tissue_label,
         settings=settings,
         gtf_path=resolved_gtf,
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,

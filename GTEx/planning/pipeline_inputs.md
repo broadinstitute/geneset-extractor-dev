@@ -24,9 +24,13 @@ This file covers:
 
 These are the scientific input files needed to build GTEx gene sets.
 
-### 1. Tissue counts file for each selected tissue
+### 1. GTEx counts GCT
 
-Each selected tissue must have a `counts_gct` entry in the supplied tissue list file.
+Required by `build_genesets.sh` as an explicit CLI input:
+
+- `--counts_gct`
+
+This is now the runtime mechanism used to switch between versions such as GTEx v8 and v10.
 
 Example for adipose subcutaneous:
 
@@ -80,11 +84,13 @@ Used to define valid selectable model IDs and their enabled/default state.
 
 ### 2. Tissue list
 
-Used to define valid selectable tissue IDs and per-tissue counts file paths.
+Used to define valid selectable tissue IDs and map them to stable labels and metadata grouping values.
 
 - `geneset-extractor-dev/GTEx/planning/tissue_list.tsv`
 
 This now defaults from the repo-relative planning path in the active Python entrypoints unless overridden explicitly.
+
+The tissue lists are no longer the authoritative source of the counts GCT path for runtime execution.
 
 ### 3. Continuous-age model manifest
 
@@ -202,7 +208,7 @@ To run the full current pipeline, make sure you have:
 
 - a model list TSV
 - a tissue list TSV
-- a counts GCT file for each selected tissue
+- a counts GCT file supplied explicitly via `--counts_gct`
 - a GTEx sample metadata TSV
 - a GTEx subject metadata TSV
 - a `human_gene_info` file when running `HZ*` notebook-style models
@@ -212,6 +218,15 @@ To run the full current pipeline, make sure you have:
 - a PIGEAN bundle data directory
 - a Python interpreter that can run the GTEx and external Python code
 - an `Rscript` binary with `edgeR` and `limma` installed
+
+## Runtime Note
+
+For the current `AB*` and `AC*` implementations, the authoritative runtime path now starts from raw GTEx inputs inside `dig` workflows:
+
+- `geneset_extractors.cli workflows gtex_age_binned`
+- `geneset_extractors.cli workflows gtex_continuous_age`
+
+The top-level GTEx wrapper still selects tissues and models, but it no longer depends on a persistent `prepared/` bundle as the execution contract for those model families.
 
 ## Default Planning Paths
 

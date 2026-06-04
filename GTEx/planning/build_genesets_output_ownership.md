@@ -4,20 +4,6 @@ This note covers only the `build_genesets.sh` pipeline stage.
 
 ## Created By `geneset-extractor-dev`
 
-### Prepared tissue bundle
-
-Under:
-
-- `gtex_outputs/genesets/<tissue>/prepared/`
-
-Files:
-
-- `tissue_counts.tsv`
-- `sample_metadata.tsv`
-- `comparisons.tsv`
-- `prepare_summary.json`
-- `naming_reference.md`
-
 ### Per-model GTEx-local orchestration files
 
 Under:
@@ -33,18 +19,10 @@ Files:
 
 Under:
 
-- `gtex_outputs/genesets/<tissue>/models/<model_id>/workflow/`
 - `gtex_outputs/genesets/<tissue>/models/<model_id>/tissue_extractor/`
 
 Files:
 
-- `workflow/continuous_sample_metadata.tsv`
-- `workflow/continuous_sample_metadata.md`
-- `workflow/continuous_sample_metadata.log`
-- `workflow/run_continuous_age_limma_voom.R`
-- `tissue_extractor/tissue_deg.tsv`
-- `tissue_extractor/tissue_deg.md`
-- `tissue_extractor/tissue_deg.log`
 - `tissue_extractor/naming_reference.md`
 
 ## Created By `dig-gene-set-extractors`
@@ -59,7 +37,9 @@ Important files:
 
 - `deg_long.tsv`
 - `deg_long.provenance_graph.json`
-- `prepare_summary.json`
+- `tissue_counts.tsv`
+- `sample_metadata.tsv`
+- `comparisons.tsv`
 - `comparison_manifest.tsv`
 - `comparison_audit.tsv`
 - `comparison_selected_samples.tsv`
@@ -97,6 +77,21 @@ Per-comparison files under directories such as `age30_20/`, `age40_20/`, `age50_
 - `genesets.gmt`
 - `run_summary.json`
 - `run_summary.txt`
+
+### `AC*` model workflow outputs
+
+Under:
+
+- `gtex_outputs/genesets/<tissue>/models/<model_id>/workflow/`
+
+Important files:
+
+- `deg_long.tsv`
+- `deg_long.provenance_graph.json`
+- `tissue_counts.tsv`
+- `sample_metadata.tsv`
+- `continuous_sample_metadata.tsv`
+- `run_continuous_age_limma_voom.R`
 
 ### `AC*` model extractor outputs
 
@@ -159,9 +154,9 @@ Per-comparison files under directories such as `age30_20/`, `age40_20/`, `age50_
 
 - sample metadata TSV
 - subject metadata TSV
+- counts GCT supplied explicitly via `--counts_gct`
 - `human_gene_info` when selected models include `HZ*`
 - `dig-gene-set-extractors` checkout
-- counts GCT path or paths referenced by `tissue_list.tsv`
 - `--gtf` when required by the active `model_list.tsv`
 - `Rscript` only when selected models include `AC*`
 
@@ -174,27 +169,24 @@ Per-comparison files under directories such as `age30_20/`, `age40_20/`, `age50_
 
 ## Internal Build Dependencies
 
-### Shared prepared bundle
-
-The prepared bundle must exist before any model runs:
-
-- `prepared/tissue_counts.tsv`
-- `prepared/sample_metadata.tsv`
-
 ### `AB*` model requirements
 
-`AB*` runs require:
+`AB*` runs now require:
 
-- `prepared/tissue_counts.tsv`
-- `prepared/sample_metadata.tsv`
-- `prepared/comparisons.tsv`
+- raw counts GCT from the active tissue or broad tissue list
+- sample attributes TSV
+- subject phenotypes TSV
+- `dig-gene-set-extractors`
 
 ### `AC*` model requirements
 
-`AC*` runs require:
+`AC*` runs now require:
 
-- `prepared/tissue_counts.tsv`
-- `prepared/sample_metadata.tsv`
+- raw counts GCT from the active tissue or broad tissue list
+- sample attributes TSV
+- subject phenotypes TSV
+- `dig-gene-set-extractors`
+- `Rscript`
 
 ### `HZ*` model requirements
 
@@ -212,5 +204,5 @@ They require:
 
 The clean ownership split for `build_genesets.sh` is:
 
-- `geneset-extractor-dev` creates the prepared tissue bundle and the GTEx-local orchestration and logging files.
-- `dig-gene-set-extractors` creates the differential expression workflow outputs and extractor outputs for `AB*` and `HZ*`, and the extractor outputs for `AC*`.
+- `geneset-extractor-dev` creates the GTEx-local orchestration and logging files.
+- `dig-gene-set-extractors` creates the differential expression workflow outputs and extractor outputs for `AB*`, `AC*`, and `HZ*`.
