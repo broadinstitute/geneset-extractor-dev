@@ -13,6 +13,9 @@
 !GTEx/config/model_list.tsv
 !GTEx/config/tissue_list.tsv
 !GTEx/config/broad_tissue_list.tsv
+!MoTrPAC/config/model_list.tsv
+!MoTrPAC/config/tissue_list.tsv
+!MoTrPAC/config/model_manifest.tsv
 
 # Allow traversing these subdirectories
 !LINCS_L1000/

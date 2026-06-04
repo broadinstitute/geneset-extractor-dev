@@ -212,12 +212,12 @@ But it should still be presented through the same outer model layout conventions
 
 ## Minimal File Changes If Implemented
 
-1. Update `planning/model_list.tsv`
+1. Update `config/model_list.tsv`
 
 - add `HZ1`
 - set `model_family = hz_released_dea`
 
-2. Update `planning/model_manifest.tsv`
+2. Update `config/model_manifest.tsv`
 
 - either add an `HZ1` row with notebook-style parameters
 - or create a separate `hz_model_manifest.tsv` if the settings are too different from `TR1` and `TW1`

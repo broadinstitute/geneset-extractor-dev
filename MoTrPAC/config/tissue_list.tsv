@@ -1,0 +1,2 @@
+tissue_id	tissue_label	transcript_tissue_label	counts_tsv	enabled	available_locally
+liver	Liver	Liver Powder	inputs/MoTrPAC/motrpac_test/raw_counts_by_tissue/TRNSCRPT_LIVER_RAW_COUNTS.tsv.gz	true	true

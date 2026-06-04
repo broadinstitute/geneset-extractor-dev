@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import os
 from pathlib import Path
 
 
@@ -16,20 +17,36 @@ def planning_root() -> Path:
     return motrpac_root() / "planning"
 
 
+def config_root() -> Path:
+    override = os.environ.get("MOTRPAC_CONFIG_ROOT", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return motrpac_root() / "config"
+
+
 def default_out_root() -> Path:
     return Path.cwd() / "motrpac_outputs"
 
 
 def default_tissue_list_path() -> Path:
-    return planning_root() / "tissue_list.tsv"
+    override = os.environ.get("MOTRPAC_TISSUE_LIST", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return config_root() / "tissue_list.tsv"
 
 
 def default_model_list_path() -> Path:
-    return planning_root() / "model_list.tsv"
+    override = os.environ.get("MOTRPAC_MODEL_LIST", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return config_root() / "model_list.tsv"
 
 
 def default_model_manifest_path() -> Path:
-    return planning_root() / "model_manifest.tsv"
+    override = os.environ.get("MOTRPAC_MODEL_MANIFEST", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return config_root() / "model_manifest.tsv"
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:

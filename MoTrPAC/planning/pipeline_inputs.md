@@ -10,9 +10,9 @@ The current MoTrPAC pipeline supports:
 
 ## Planning inputs
 
-- `planning/tissue_list.tsv`
-- `planning/model_list.tsv`
-- `planning/model_manifest.tsv`
+- `config/tissue_list.tsv`
+- `config/model_list.tsv`
+- `config/model_manifest.tsv`
 
 ## Biological and mapping inputs for `TR1` and `TW1`
 
