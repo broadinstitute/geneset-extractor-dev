@@ -1,32 +1,28 @@
-# HZ1 Wrapper Notes
+# HZ1 Historical Wrapper Notes
 
-This file tracks the MoTrPAC `HZ1` wrapper used by the pipeline:
+This file tracks the original MoTrPAC `HZ1` wrapper:
 
 - wrapper: `build_motrpac_rat_endurance_gmt_hz1.py`
 - source script: `notebooks_adapted/build_motrpac_rat_endurance_gmt.py`
 
-## Purpose
+## Current Status
 
-The pipeline uses `HZ1` as a wrapper around the notebook-replica standalone script while keeping the biological workflow cell-for-cell with the standalone implementation.
+The active pipeline no longer uses this wrapper as the runtime entrypoint.
 
-## Differences From The Source Script
+Current runtime shape:
 
-- no biological logic changes
-- no data-processing changes
-- no CLI argument changes
+- workflow:
+  - `geneset_extractors.cli workflows motrpac_released_dea`
+- extractor:
+  - `geneset_extractors.cli convert signed_term_gene`
 
-The wrapper only:
+So the released-DEA processing logic now lives in `dig-gene-set-extractors`, and the MoTrPAC repo is back to being a thin wrapper around resolved `dig` commands.
 
-- locates the standalone script from the repository root
-- imports it dynamically
-- dispatches the current CLI arguments to the standalone script's `main()`
+## Why Keep This File
 
-## Why This Exists
+It still documents:
 
-It gives the MoTrPAC pipeline a stable entrypoint under:
+- the original notebook-replica entrypoint
+- the source standalone script that the new `dig` workflow was adapted from
 
-- `geneset-extractor-dev/MoTrPAC/src/`
-
-while preserving the standalone notebook-replica logic as the authoritative workflow for preprocessing and term-gene construction inside `HZ1`.
-
-The final GMT emission is now handled by `dig-gene-set-extractors`, which is the authoritative GMT writer for the integrated pipeline model.
+That makes it easier to compare the historical wrapper-based implementation against the current dig-native one.

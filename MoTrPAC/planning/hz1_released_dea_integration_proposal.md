@@ -2,7 +2,7 @@
 
 This note proposes how to integrate `notebooks_adapted/build_motrpac_rat_endurance_gmt.py` into the current MoTrPAC pipeline as model `HZ1`.
 
-The main conclusion is that this requires a different inner workflow from the current MoTrPAC `TR1` and `TW1` models, but it can still be packaged in the same outer model-output format.
+The current implementation now uses a different inner workflow from the raw-count MoTrPAC models, but it still fits the same outer model-output format.
 
 So the target should be:
 
@@ -11,9 +11,9 @@ So the target should be:
 
 This is different from the current raw-count models in one important way:
 
-- the authoritative biological workflow should remain the standalone notebook-replica logic up to the processed term-gene table
-- the pipeline wrapper should adapt around it while preserving the same top-level model layout
-- `dig-gene-set-extractors` should be the authoritative GMT writer
+- the released-DEA processing logic is now hosted in a dedicated `dig` workflow
+- the pipeline wrapper adapts around that workflow while preserving the same top-level model layout
+- `dig-gene-set-extractors` is the authoritative GMT writer
 
 ## Why This Needs A Separate Model Shape
 
@@ -71,7 +71,7 @@ But it should still be emitted under the same model-oriented directory shape as 
 
 Add a dedicated runtime path instead of reusing `build_motrpac_tissue_inputs.py` plus the current model runners.
 
-### New runner
+### Current dig-native runner shape
 
 Add:
 
@@ -80,9 +80,10 @@ Add:
 Responsibilities:
 
 - accept the released MoTrPAC DEA inputs and mapping inputs
-- reproduce the standalone notebook-replica script cell-for-cell as closely as possible
-- write outputs into a pipeline-owned model directory
-- optionally emit additional adapter files for consistency with the existing pipeline
+- call `dig workflows motrpac_released_dea`
+- call `dig convert signed_term_gene`
+- write outputs into the pipeline-owned model directory
+- emit adapter files for consistency with the existing pipeline
 
 ### Top-level orchestrator changes
 
@@ -178,22 +179,13 @@ even though the biological workflow inside `workflow/` is different.
 
 `dig` should be the authoritative GMT writer for the integrated pipeline model.
 
-Recommended use:
+Current implementation:
 
-- command/provenance conventions
-- authoritative GMT emission
-- metadata and provenance artifacts
-
-Recommended implementation:
-
-- transform `motrpac_processed.tsv` into a dig-compatible signed term-gene table
-- use a dedicated dig converter for that signed table
-
-Reason:
-
-- the standalone script does not start from one DEG table per signature in the same way as GTEx `HZ1`
-- it combines released DEA products into a signed term-gene table
-- a dedicated dig converter can preserve that logic more faithfully than forcing the data through `rna_deg`
+- the released-DEA workflow emits:
+  - `workflow/motrpac_processed.tsv`
+  - `workflow/motrpac_signed_term_gene.tsv`
+  - `workflow/motrpac_processing_audit.tsv`
+- `signed_term_gene` consumes that workflow-side table and writes the authoritative GMT plus provenance artifacts
 
 ## Relation To The Existing MoTrPAC Models
 

@@ -14,10 +14,11 @@ The pipeline now supports three related model shapes:
   - one signature per `tissue × sex × timepoint`
   - training vs control within each stratum
   - notebook-style naming such as `t68-liver_male_8w`
+  - implemented through `dig workflows motrpac_timewise` plus `convert rna_deg_multi`
 - `HZ1`
   - one model run across all tissues
   - starts from released DEA tables rather than raw counts
-  - wraps the notebook-replica Harmonizome-style GMT builder
+  - implemented through `dig workflows motrpac_released_dea` plus `convert signed_term_gene`
 
 Unlike GTEx, this proposal is for rat transcriptomics inputs. The proposed output policy is:
 
@@ -187,20 +188,17 @@ Responsibilities:
 `TW1` responsibilities:
 
 - read prepared counts and sample metadata
-- stratify samples by:
-  - `sex`
-  - `timepoint`
-- within each stratum, fit limma/voom with:
-  - `~ intervention`
-- write one DEG table per stratum
+- derive notebook-style `tissue × sex × timepoint` comparisons
+- run grouped DE inside `dig`
+- emit one combined `deg_long.tsv`
+- convert grouped comparisons with `rna_deg_multi`
 - emit signatures with notebook-style names such as:
   - `t68-liver_male_8w`
 
 `HZ1` responsibilities:
 
 - run once across all tissues
-- call the notebook-replica released-DEA workflow
-- preserve the standalone script as the authoritative biological logic
+- reproduce the released-DEA processing logic inside a dedicated `dig` workflow
 - package outputs into the same outer model layout used by the rest of the pipeline
 
 ### 3. Top-level orchestrator

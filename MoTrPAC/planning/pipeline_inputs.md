@@ -27,6 +27,13 @@ The current MoTrPAC pipeline supports:
 - rat-to-human ortholog mapping:
   - `inputs/MoTrPAC/motrpac_test/RAT_TO_HUMAN_GENE.tsv.gz`
 
+`TW1` now runs through a `dig` workflow from the prepared tissue bundle:
+
+- workflow:
+  - `geneset_extractors.cli workflows motrpac_timewise`
+- extractor:
+  - `geneset_extractors.cli convert rna_deg_multi`
+
 ## Released-DEA inputs for `HZ1`
 
 - feature annotation:
@@ -40,6 +47,13 @@ Optional `HZ1` extras:
 
 - `--gene_info`
 - `--gene_csv`
+
+`HZ1` now runs through a `dig` workflow from the released DEA inputs:
+
+- workflow:
+  - `geneset_extractors.cli workflows motrpac_released_dea`
+- extractor:
+  - `geneset_extractors.cli convert signed_term_gene`
 
 ## Software inputs
 
@@ -66,6 +80,10 @@ The `HZ1` all-tissues model writes under:
 Its authoritative GMT output is:
 
 - `motrpac_outputs/genesets/all_tissues/models/HZ1/tissue_extractor/genesets.gmt`
+
+Its workflow-side signed term-gene table is:
+
+- `motrpac_outputs/genesets/all_tissues/models/HZ1/workflow/motrpac_signed_term_gene.tsv`
 
 Optional provenance mirror inputs supported by the build entrypoint:
 
