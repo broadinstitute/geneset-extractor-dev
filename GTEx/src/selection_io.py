@@ -14,6 +14,16 @@ def gtex_root() -> Path:
     return repo_root() / "geneset-extractor-dev" / "GTEx"
 
 
+def config_root() -> Path:
+    override = os.environ.get("GTEX_CONFIG_ROOT", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    planning_override = os.environ.get("GTEX_PLANNING_ROOT", "").strip()
+    if planning_override:
+        return Path(planning_override).expanduser().resolve()
+    return gtex_root() / "config"
+
+
 def planning_root() -> Path:
     override = os.environ.get("GTEX_PLANNING_ROOT", "").strip()
     if override:
@@ -40,35 +50,35 @@ def default_model_list_path() -> Path:
     override = os.environ.get("GTEX_MODEL_LIST", "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    return planning_root() / "model_list.tsv"
+    return config_root() / "model_list.tsv"
 
 
 def default_tissue_list_path() -> Path:
     override = os.environ.get("GTEX_TISSUE_LIST", "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    return planning_root() / "tissue_list.tsv"
+    return config_root() / "tissue_list.tsv"
 
 
 def default_broad_tissue_list_path() -> Path:
     override = os.environ.get("GTEX_BROAD_TISSUE_LIST", "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    return planning_root() / "broad_tissue_list.tsv"
+    return config_root() / "broad_tissue_list.tsv"
 
 
 def default_age_binned_model_manifest_path() -> Path:
     override = os.environ.get("GTEX_AGE_BINNED_MODEL_MANIFEST", "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    return planning_root() / "geneset_build" / "age_binned_models" / "model_manifest.tsv"
+    return config_root() / "age_binned_model_manifest.tsv"
 
 
 def default_continuous_age_model_manifest_path() -> Path:
     override = os.environ.get("GTEX_CONTINUOUS_AGE_MODEL_MANIFEST", "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    return planning_root() / "geneset_build" / "continuous_age_models" / "model_manifest.tsv"
+    return config_root() / "continuous_age_model_manifest.tsv"
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:

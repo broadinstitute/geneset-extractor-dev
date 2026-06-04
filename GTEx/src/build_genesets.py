@@ -122,8 +122,6 @@ def main() -> int:
         tissue_list_path_text,
         "broad tissue list" if args.tissue_granularity == "broad" else "tissue list",
     )
-    age_binned_model_manifest = require_existing_file(args.age_binned_model_manifest, "age-binned model manifest")
-    continuous_age_model_manifest = require_existing_file(args.continuous_age_model_manifest, "continuous-age model manifest")
     dig_dir = Path(relative_or_absolute_path(args.dig_dir)).resolve()
     if not dig_dir.exists():
         raise SystemExit(f"Missing dig-gene-set-extractors directory: {dig_dir}")
@@ -134,6 +132,18 @@ def main() -> int:
     continuous_age_models = [model_id for model_id in selected_models if model_group_for(model_id) == "continuous_age"]
     hz_notebook_models = [model_id for model_id in selected_models if model_group_for(model_id) == "hz_notebook"]
     unsupported_models = [model_id for model_id in selected_models if model_group_for(model_id) == "tissue_versus"]
+    age_binned_model_manifest: Path | None = None
+    continuous_age_model_manifest: Path | None = None
+    if age_binned_models:
+        age_binned_model_manifest = require_existing_file(
+            args.age_binned_model_manifest,
+            "age-binned model manifest",
+        )
+    if continuous_age_models:
+        continuous_age_model_manifest = require_existing_file(
+            args.continuous_age_model_manifest,
+            "continuous-age model manifest",
+        )
     if unsupported_models:
         raise SystemExit("TV* geneset building is not implemented yet")
     if hz_notebook_models and args.tissue_granularity != "broad":

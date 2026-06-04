@@ -157,13 +157,13 @@ Per-comparison files under directories such as `age30_20/`, `age40_20/`, `age50_
 - counts GCT supplied explicitly via `--counts_gct`
 - `human_gene_info` when selected models include `HZ*`
 - `dig-gene-set-extractors` checkout
-- `--gtf` when required by the active `model_list.tsv`
+- `--gtf` when required by the active `config/model_list.tsv`
 - `Rscript` only when selected models include `AC*`
 
 ### Planning and configuration inputs
 
-- `model_list.tsv`
-- `tissue_list.tsv`
+- `config/model_list.tsv`
+- `config/tissue_list.tsv`
 - age-binned model manifest
 - continuous-age model manifest
 

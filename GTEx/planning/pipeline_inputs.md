@@ -80,15 +80,15 @@ These files are part of the runtime configuration surface.
 
 Used to define valid selectable model IDs and their enabled/default state.
 
-- `geneset-extractor-dev/GTEx/planning/model_list.tsv`
+- `geneset-extractor-dev/GTEx/config/model_list.tsv`
 
 ### 2. Tissue list
 
 Used to define valid selectable tissue IDs and map them to stable labels and metadata grouping values.
 
-- `geneset-extractor-dev/GTEx/planning/tissue_list.tsv`
+- `geneset-extractor-dev/GTEx/config/tissue_list.tsv`
 
-This now defaults from the repo-relative planning path in the active Python entrypoints unless overridden explicitly.
+This now defaults from the repo-relative config path in the active Python entrypoints unless overridden explicitly.
 
 The tissue lists are no longer the authoritative source of the counts GCT path for runtime execution.
 
@@ -96,13 +96,13 @@ The tissue lists are no longer the authoritative source of the counts GCT path f
 
 Used by the continuous-age model runner.
 
-- `geneset-extractor-dev/GTEx/planning/geneset_build/continuous_age_models/model_manifest.tsv`
+- `geneset-extractor-dev/GTEx/config/continuous_age_model_manifest.tsv`
 
 ### 4. Age-binned model manifest
 
 Used by the age-binned model runner.
 
-- `geneset-extractor-dev/GTEx/planning/geneset_build/age_binned_models/model_manifest.tsv`
+- `geneset-extractor-dev/GTEx/config/age_binned_model_manifest.tsv`
 
 ## External Repository Inputs
 

@@ -38,10 +38,16 @@ This is the first phase the user runs:
 
 - `geneset-extractor-dev/GTEx/run/build_genesets.sh`
 
-Selection inputs for models and tissues are maintained directly under planning:
+Runtime config inputs for models and tissues are maintained under:
 
-- `geneset-extractor-dev/GTEx/planning/model_list.tsv`
-- `geneset-extractor-dev/GTEx/planning/tissue_list.tsv`
+- `geneset-extractor-dev/GTEx/config/model_list.tsv`
+- `geneset-extractor-dev/GTEx/config/tissue_list.tsv`
+- `geneset-extractor-dev/GTEx/config/broad_tissue_list.tsv`
+- `geneset-extractor-dev/GTEx/config/age_binned_model_manifest.tsv`
+- `geneset-extractor-dev/GTEx/config/continuous_age_model_manifest.tsv`
+
+Runtime-interface notes remain under planning:
+
 - `geneset-extractor-dev/GTEx/planning/selection_inputs.md`
 - `geneset-extractor-dev/GTEx/planning/pipeline_inputs.md`
 
