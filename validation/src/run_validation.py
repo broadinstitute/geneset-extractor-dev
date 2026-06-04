@@ -1,9 +1,10 @@
 import os
 
-from run_eaggl import run_eaggl, save_results
+from run_eaggl import run_eaggl, run_pigean, save_results
 
 BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/gtex/genesets"
 OUT_FILE = "../../data/gtex/output.tissue/{}_validation_results.txt"
+OUT_FILE_PIGEAN = "../../data/gtex/output.tissue.pigean/{}_validation_results_pigean.txt"
 
 
 def parse_gmt_file(gmt_file):
@@ -41,7 +42,8 @@ def run_validation(folder_path, out_file):
     with open(out_file, 'a') as out_f:
         for gene_set in genesets:
             print("Gene set:", gene_set['gene_set'], "Number of genes:", len(gene_set['genes']))
-            genesets = run_eaggl(gene_set['genes'])
+            # genesets = run_eaggl(gene_set['genes'])
+            genesets = run_pigean(gene_set['genes'])
             save_results(out_f, gene_set['gene_set'], len(gene_set['genes']), genesets)
 
 
@@ -51,7 +53,7 @@ def validate_tissue(tissue):
         folder_path = os.path.join(base_folder, folder)
         if os.path.isdir(folder_path):
             try:
-                run_validation(folder_path, OUT_FILE.format(tissue))
+                run_validation(folder_path, OUT_FILE_PIGEAN.format(tissue))
             except Exception as e:
                 print(f"Error validating folder {folder_path}: {e}")
 
@@ -64,4 +66,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # validate_tissue("whole_blood")

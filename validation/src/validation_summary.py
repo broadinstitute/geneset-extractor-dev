@@ -8,6 +8,7 @@ BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/gtex/genese
 IN_FILE = "../../data/gtex/output.tissue/{}_validation_results.txt"
 HARMONIZOME_FILE = "../../data/gtex/output.tissue/harmonizome_validation.txt"
 DATA_MATRIX_FILE = "../../data/gtex/output.tissue/data_matrix_validation.txt"
+DATA_MATRIX_PIGEAN_FILE = "../../data/gtex/output.tissue/data_matrix_pigean_validation.txt"
 
 def plot_gene_set_by_model(df, gene_set_name_suffix):
     """
@@ -222,6 +223,25 @@ def main():
             df = summarize_data_matrix_df
     else:
         print(f"Data matrix file {DATA_MATRIX_FILE} not found. Skipping.")
+
+    # process data matrix pigean file
+    if os.path.exists(DATA_MATRIX_PIGEAN_FILE):
+        data_matrix_pigean_df = pd.read_csv(DATA_MATRIX_PIGEAN_FILE, sep='\t', names=['gene_set_name_suffix','model','gene_set_name', 'gene_set_size', 'rank', 'enriched_gene_sets_name', 'enriched_gene_set_size', 'enriched_gene_set_p_value'])
+        # select only rows where gene_set_name_suffix starts with "GTEx"
+        data_matrix_pigean_df = data_matrix_pigean_df[data_matrix_pigean_df['gene_set_name_suffix'].str.startswith("GTEx")]
+
+        data_matrix_pigean_df['model'] = 'DM_PG'
+        data_matrix_pigean_df['tissue'] = 'data_matrix_pigean'
+        print(f"Processed data matrix pigean file with {len(data_matrix_pigean_df)} rows.")
+        # print(data_matrix_pigean_df.head())
+        summarize_data_matrix_pigean_df = create_top_enriched_df(data_matrix_pigean_df)
+        summarize_data_matrix_pigean_df = add_key_column_drc(summarize_data_matrix_pigean_df)
+        print("\nTop enriched gene sets for data matrix pigean:")
+        print(summarize_data_matrix_pigean_df.head(10))
+        if df is not None:
+            df = pd.concat([df, summarize_data_matrix_pigean_df], ignore_index=True)
+        else:
+            df = summarize_data_matrix_pigean_df
 
     # Process each tissue file and concatenate results
     for tissue in sorted(os.listdir(BASE_FOLDER)):

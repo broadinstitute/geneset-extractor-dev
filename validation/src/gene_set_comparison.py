@@ -8,6 +8,7 @@ BASE_FOLDER = "/humgen/diabetes2/users/ryank/geneset_extractors/GTEx/outputs/gen
 BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/gtex/genesets"
 OUT_FILE = "../../data/gtex/output.tissue/adipose_tissue_{}_comparison.tsv"
 DCC_COMP_OUT_FILE = "../../data/gtex/output.tissue/DM_comparison.tsv"
+DM_VS_DM_COMP_OUT_FILE = "../../data/gtex/output.tissue/DM_vs_DM_comparison.tsv"
 
 MODELS = [ "DM", "Harmo", 
     "AB1", "AB2", "AB3", "AB4", "AB5", "AB6", "AB7", "AB8", "AB9", "AB10",
@@ -140,7 +141,7 @@ def read_gmt_file(gmt_path):
     return gene_sets
 
 
-def main():
+def main_DM_vs_AB_models():
     genesets = load_genesets()
     harmonizome_gene_sets = read_gmt_file("../../GTEx/VD/inputs/harmonizome_gtex_aging.gmt")
     for gene_set_name, gene_set in harmonizome_gene_sets.items():
@@ -156,7 +157,21 @@ def main():
             print("Comparing gene set:", gene_set_name)
             compare_gene_sets(gene_set_name, genesets[gene_set_name], out_f)
 
+def main_DM_vs_DM():
+    genesets = read_gmt_file("../../GTEx/VD/inputs/GTEx_XMT_2022-06-06_GTEx_Aging_Signatures_2021.gmt")
+    with open(DM_VS_DM_COMP_OUT_FILE, 'w') as out_f:
+        out_f.write("key1\ttissue1\tkey2\ttissue2\tleft_only\toverlap\tright_only\n")
+        for gene_set_name1 in sorted(genesets.keys()):
+            print("Comparing gene set:", gene_set_name1)
+            tissue1, _, _, _ = parse_drc_gene_set_name_suffix(gene_set_name1)
+            for gene_set_name2 in sorted(genesets.keys()):
+                tissue2, _, _, _ = parse_drc_gene_set_name_suffix(gene_set_name2)
+                gene_set1 = genesets[gene_set_name1]
+                gene_set2 = genesets[gene_set_name2]
+                left_only, overlap, right_only = gene_set_overlap(gene_set1, gene_set2)
+                out_f.write(f"{gene_set_name1}\t{tissue1}\t{gene_set_name2}\t{tissue2}\t{left_only}\t{overlap}\t{right_only}\n")
 
 
 if __name__ == "__main__":
-    main()
+    main_DM_vs_AB_models()
+    main_DM_vs_DM()

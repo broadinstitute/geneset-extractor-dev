@@ -35,13 +35,13 @@ def save_results(out_f, gene_set_name, gene_set_size, genesets):
         out_f.flush()
 
 
-def run_eaggl(genes):
+def run_client(genes, enrichment_analysis="hypergeometric"):
     URL = "http://chembio-dev-03:8082/pigean"
     payload = {
         "p_value": "0.05",
         "max_number_gene_sets": 50,
         "gene_sets": "default",
-        "enrichment_analysis": "hypergeometric",
+        "enrichment_analysis": enrichment_analysis,
         "factorization_weight": "-logpvalue/sqrt_size",
         "exclude_controls": False,
         "factorization_phi": 0.1,
@@ -56,11 +56,19 @@ def run_eaggl(genes):
     for entry in response_json['logs']:
         print(entry)
     print("\nEnriched gene sets:")
-    for i,gene_set in enumerate(response_json['gene_sets']):
+    for i, gene_set in enumerate(response_json['gene_sets']):
         if i >= 10:
             break
         print(gene_set['gene_set'], gene_set['gene_set_size'], gene_set['p_value'])
     return response_json['gene_sets']
+
+
+def run_eaggl(genes):
+    return run_client(genes, enrichment_analysis="hypergeometric")
+
+
+def run_pigean(genes):
+    return run_client(genes, enrichment_analysis="naive_priors")
 
 
 def main():
