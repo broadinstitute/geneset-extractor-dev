@@ -209,6 +209,7 @@ run_task() {
     --python_bin "${PYTHON_BIN}"
     --rscript_bin "${RSCRIPT_BIN}"
     --out_root "${GTEX_OUT_ROOT}"
+    --gtf "${GTEX_GTF}"
     --overwrite
   )
 
@@ -218,10 +219,6 @@ run_task() {
     cmd+=(--continuous_age_model_manifest "${GTEX_CONTINUOUS_AGE_MODEL_MANIFEST}")
   elif [[ "${model_group}" == "HZ" ]]; then
     cmd+=(--human_gene_info "${human_gene_info}")
-  fi
-
-  if [[ -n "${gtf}" ]]; then
-    cmd+=(--gtf "${gtf}")
   fi
 
   echo "+ ${cmd[*]}"
