@@ -155,6 +155,8 @@ def build_extractor_cmd(
         "score",
         "--sign_column",
         "sign",
+        "--emit_mode",
+        "ternary_matrix_notebook",
         "--gmt_name_separator",
         "_",
         "--gmt_signed_labels",

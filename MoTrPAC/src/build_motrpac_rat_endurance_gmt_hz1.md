@@ -16,6 +16,8 @@ Current runtime shape:
 - extractor:
   - `geneset_extractors.cli convert signed_term_gene`
 
+The extractor now runs with a notebook-faithful ternary-matrix emission mode so the final GMT behavior is closer to the standalone script than the generic grouped-row converter path.
+
 So the released-DEA processing logic now lives in `dig-gene-set-extractors`, and the MoTrPAC repo is back to being a thin wrapper around resolved `dig` commands.
 
 ## Why Keep This File

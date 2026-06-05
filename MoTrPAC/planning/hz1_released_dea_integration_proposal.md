@@ -186,6 +186,7 @@ Current implementation:
   - `workflow/motrpac_signed_term_gene.tsv`
   - `workflow/motrpac_processing_audit.tsv`
 - `signed_term_gene` consumes that workflow-side table and writes the authoritative GMT plus provenance artifacts
+- the active `HZ1` runtime uses a notebook-faithful ternary-matrix emission mode inside `signed_term_gene`
 
 ## Relation To The Existing MoTrPAC Models
 
