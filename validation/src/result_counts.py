@@ -1,6 +1,6 @@
 import os
 
-BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/gtex/genesets"
+BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/runs/gtex_all_models/genesets"
 OUT_FILE = "../../data/gtex/output.tissue/model_counts.txt"
 
 MODELS = ["AB1", "AB2", "AB3", "AB4", "AB5", "AB6", "AB7", "AB8", "AB9", "AB10", 
@@ -13,7 +13,7 @@ def parse_gmt_file(gmt_file):
         for line in f:
             parts = line.strip().split('\t')
             gene_set_name = parts[0]
-            gene_set_genes = parts[1].split(' ')
+            gene_set_genes = parts[2:]
             gene_sets.append({
                 "gene_set": gene_set_name,
                 "genes": gene_set_genes

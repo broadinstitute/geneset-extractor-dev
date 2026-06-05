@@ -9,7 +9,7 @@ from run_eaggl import run_eaggl, run_pigean, save_results
 
 CLIENT = "eaggl"
 
-BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/gtex/genesets"
+BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/runs/gtex_all_models/genesets"
 CONSENSUS_OUT_FILE = "../../data/gtex/output.tissue/consensus_analysis.txt"
 CONSENSUS_PIGEAN_OUT_FILE = "../../data/gtex/output.tissue.pigean/consensus_analysis_pigean.txt"
 

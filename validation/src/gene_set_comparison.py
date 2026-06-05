@@ -4,8 +4,7 @@ from collections import defaultdict
 from run_validation import parse_gmt_file
 from validation_summary import key, parse_gtex_gene_set_name_suffix, parse_drc_gene_set_name_suffix
 
-BASE_FOLDER = "/humgen/diabetes2/users/ryank/geneset_extractors/GTEx/outputs/genesets/adipose_subcutaneous/models"
-BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/gtex/genesets"
+BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/runs/gtex_all_models/genesets"
 OUT_FILE = "../../data/gtex/output.tissue/adipose_tissue_{}_comparison.tsv"
 DCC_COMP_OUT_FILE = "../../data/gtex/output.tissue/DM_comparison.tsv"
 DM_VS_DM_COMP_OUT_FILE = "../../data/gtex/output.tissue/DM_vs_DM_comparison.tsv"
@@ -33,11 +32,11 @@ def load_genesets_for_tissue(tissue_folder):
         if os.path.isdir(folder_path):
             print("Loading gene sets for model:", folder)
             gmt_file = folder_path + "/extractor/genesets.gmt"
+            if not os.path.exists(gmt_file):
+                gmt_file = folder_path + "/tissue_extractor/genesets.gmt"
             if os.path.exists(gmt_file):
                 for gene_set in parse_gmt_file(gmt_file):
                     gene_set_name = gene_set['gene_set']
-                    if gene_set_name.startswith("A") or gene_set_name.startswith("C"):
-                        gene_set_name = gene_set_name.split("__", 1)[1] if "__" in gene_set_name else gene_set_name
                     genesets[gene_set_name][model_name(folder)] = gene_set['genes']
             else:
                 print("No GMT file found for model:", folder)

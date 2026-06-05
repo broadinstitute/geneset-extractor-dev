@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 PIGEAN = False
 
-BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/gtex/genesets"
+BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/runs/gtex_all_models/genesets"
 
 if PIGEAN:
     IN_FILE = "../../data/gtex/output.tissue.pigean/{}_validation_results_pigean.txt"
@@ -106,14 +106,23 @@ def parse_drc_gene_set_name_suffix(gene_set_name):
 
 
 def parse_gtex_gene_set_name_suffix(tissue, gene_set_name):
-    """ parse gene set name into tissue, age group 1 and age group 2, direction (up/down) 
-        for example, "adipose_tissue" and "age70_20__neg" would be parsed into:
-        tissue: "adiposetissue"
-        age group 1: "70"
-        age group 2: "20"
-        direction: "down"
+    """ parse gene set name into tissue, age group 1 and age group 2, direction (up/down)
+
+    Handles two formats:
+    - New: "GTEx_aging_Adrenal_Gland_20-29_50-59_up" or "GTEx_Adrenal_Gland_up"
+    - Old: "age70_20__neg"
     """
-    tissue = tissue.replace("_", "").lower()
+    tissue_normalized = tissue.replace("_", "").lower()
+
+    if gene_set_name.startswith("GTEx_"):
+        parts = gene_set_name.split("_")
+        direction = "up" if parts[-1] == "up" else "down"
+        age_ranges = [p for p in parts if '-' in p and p.replace('-', '').isdigit()]
+        if len(age_ranges) >= 2:
+            return tissue_normalized, age_ranges[0].split('-')[0], age_ranges[1].split('-')[0], direction
+        return tissue_normalized, "0", "0", direction
+
+    # Old format: "age70_20__neg"
     age_group_1 = "0"
     age_group_2 = "0"
     direction = ""
@@ -123,7 +132,7 @@ def parse_gtex_gene_set_name_suffix(tissue, gene_set_name):
         age_group_2 = parts[0][6:8]  # "age20" -> "20"
     if len(parts) > 1:
         direction = "down" if parts[1] == "neg" else "up"
-    return tissue, age_group_2, age_group_1, direction
+    return tissue_normalized, age_group_2, age_group_1, direction
 
 
 def key(tissue, age_group_1, age_group_2, direction):
