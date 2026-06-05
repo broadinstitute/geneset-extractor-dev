@@ -6,6 +6,7 @@
 !environment.yml
 !requirements.txt
 !geneset-extractor.Dockerfile
+!geneset-extractor.apptainer.def
 
 # or these needed files
 !GTEx/config/age_binned_model_manifest.tsv

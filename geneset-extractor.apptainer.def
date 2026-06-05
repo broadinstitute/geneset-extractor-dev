@@ -1,0 +1,247 @@
+Bootstrap: docker
+From: ubuntu:22.04
+
+%labels
+    Author Ryan Koesterer
+    Description "Broad Python/R container for MaayanLab HarmonizomePythonScripts: LINCS, HuBMAP, GTEx, MoTrPAC"
+    Base ubuntu:22.04
+
+%help
+    Broad container for running MaayanLab/HarmonizomePythonScripts workflows,
+    including LINCS, HuBMAP, GTEx, and MoTrPAC-style Python/R notebooks/scripts.
+
+    Build:
+        apptainer build harmonizome_maayan.sif harmonizome_maayan.def
+
+    Shell:
+        apptainer shell harmonizome_maayan.sif
+
+    Example:
+        apptainer exec harmonizome_maayan.sif python --version
+        apptainer exec harmonizome_maayan.sif R --version
+        apptainer exec harmonizome_maayan.sif bash
+
+%environment
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+    export PATH=/opt/conda/envs/harmonizome/bin:/opt/conda/bin:$PATH
+    export CONDA_DEFAULT_ENV=harmonizome
+    export PYTHONNOUSERSITE=1
+    export RETICULATE_PYTHON=/opt/conda/envs/harmonizome/bin/python
+    export HARMONIZOME_REPO=/opt/HarmonizomePythonScripts
+
+%post
+    set -eux
+
+    export DEBIAN_FRONTEND=noninteractive
+
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        bash \
+        ca-certificates \
+        curl \
+        wget \
+        git \
+        git-lfs \
+        bzip2 \
+        xz-utils \
+        unzip \
+        zip \
+        tar \
+        gzip \
+        pigz \
+        build-essential \
+        gfortran \
+        make \
+        cmake \
+        pkg-config \
+        autoconf \
+        automake \
+        libtool \
+        locales \
+        less \
+        vim \
+        nano \
+        file \
+        procps \
+        time \
+        parallel \
+        jq \
+        rsync \
+        libcurl4-openssl-dev \
+        libssl-dev \
+        libxml2-dev \
+        libfontconfig1-dev \
+        libharfbuzz-dev \
+        libfribidi-dev \
+        libfreetype6-dev \
+        libpng-dev \
+        libtiff5-dev \
+        libjpeg-dev \
+        zlib1g-dev \
+        libbz2-dev \
+        liblzma-dev \
+        libreadline-dev \
+        libsqlite3-dev \
+        libhdf5-dev \
+        libglpk-dev \
+        libgsl-dev \
+        libudunits2-dev \
+        libgeos-dev \
+        libproj-dev \
+        libgdal-dev \
+        pandoc \
+        default-jre \
+        && rm -rf /var/lib/apt/lists/*
+
+    locale-gen C.UTF-8 || true
+
+    # Install Miniforge/Mambaforge-style conda.
+    curl -L -o /tmp/Miniforge3.sh \
+        https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
+
+    bash /tmp/Miniforge3.sh -b -p /opt/conda
+    rm -f /tmp/Miniforge3.sh
+
+    export PATH=/opt/conda/bin:$PATH
+
+    conda config --system --set channel_priority strict
+    conda config --system --add channels conda-forge
+    conda config --system --add channels bioconda
+
+    # Python 3.10 is a safer compatibility target than 3.11 for older notebooks/scripts.
+    mamba create -y -n harmonizome \
+        python=3.10 \
+        pip \
+        numpy \
+        pandas \
+        scipy \
+        scikit-learn \
+        statsmodels \
+        matplotlib \
+        seaborn \
+        h5py \
+        pytables \
+        hdf5 \
+        requests \
+        urllib3 \
+        beautifulsoup4 \
+        lxml \
+        html5lib \
+        openpyxl \
+        xlrd \
+        xlsxwriter \
+        pyarrow \
+        fastparquet \
+        tqdm \
+        pyyaml \
+        click \
+        jupyter \
+        jupyterlab \
+        notebook \
+        ipykernel \
+        nbconvert \
+        papermill \
+        cmapPy \
+        anndata \
+        scanpy \
+        mygene \
+        gseapy \
+        goatools \
+        bioservices \
+        biopython \
+        goatools \
+        r-base=4.3 \
+        r-essentials \
+        r-optparse \
+        r-argparse \
+        r-data.table \
+        r-tidyverse \
+        r-readxl \
+        r-openxlsx \
+        r-janitor \
+        r-stringi \
+        r-stringr \
+        r-dplyr \
+        r-tidyr \
+        r-purrr \
+        r-readr \
+        r-tibble \
+        r-ggplot2 \
+        r-reshape2 \
+        r-matrix \
+        r-matrixstats \
+        r-devtools \
+        r-remotes \
+        r-biocmanager \
+        r-irkernel \
+        r-seurat \
+        r-seuratobject \
+        bioconductor-limma \
+        bioconductor-edger \
+        bioconductor-deseq2 \
+        bioconductor-biobase \
+        bioconductor-summarizedexperiment \
+        bioconductor-genomicranges \
+        bioconductor-iranges \
+        bioconductor-s4vectors \
+        bioconductor-annotationdbi \
+        bioconductor-org.hs.eg.db \
+        bioconductor-org.rn.eg.db \
+        bioconductor-org.mm.eg.db \
+        bioconductor-biomart \
+        bioconductor-gseabase \
+        bioconductor-clusterprofiler \
+        bioconductor-enrichplot \
+        bioconductor-fgsea \
+        bioconductor-rhdf5 \
+        bioconductor-hdf5array \
+        bioconductor-delayedarray \
+        bioconductor-singlecellexperiment \
+        bioconductor-scran \
+        bioconductor-scater \
+        bioconductor-celldex
+
+    conda clean -afy
+
+    /opt/conda/envs/harmonizome/bin/pip install --no-cache-dir \
+        GEOparse \
+        pyreadr \
+        gprofiler-official
+
+    # Clone Ma'ayan Lab Harmonizome processing scripts.
+    cd /opt
+    git clone https://github.com/MaayanLab/HarmonizomePythonScripts.git
+
+    # Optional: clone Appyter conversions too, since some workflows/notebooks live there.
+    git clone https://github.com/MaayanLab/Harmonizome-Data-Processing-Appyters.git || true
+
+    # Register the R kernel inside the env.
+    /opt/conda/envs/harmonizome/bin/Rscript -e "IRkernel::installspec(name='harmonizome-r', displayname='R harmonizome', user=FALSE)" || true
+
+    # Smoke tests.
+    /opt/conda/envs/harmonizome/bin/python - <<'PY'
+import sys
+import numpy
+import pandas
+import scipy
+import h5py
+print("Python OK:", sys.version)
+print("h5py OK:", h5py.__version__)
+PY
+
+    /opt/conda/envs/harmonizome/bin/Rscript - <<'RS'
+cat("R OK:", R.version.string, "\n")
+suppressPackageStartupMessages({
+  library(data.table)
+  library(limma)
+  library(edgeR)
+})
+cat("Core R/Bioc packages OK\n")
+RS
+
+%runscript
+    exec /bin/bash "$@"
+
+%startscript
+    exec /bin/bash
