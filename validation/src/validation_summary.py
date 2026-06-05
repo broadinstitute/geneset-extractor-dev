@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
-PIGEAN = True
+PIGEAN = False
 
 BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/gtex/genesets"
 
@@ -12,11 +12,13 @@ if PIGEAN:
     HARMONIZOME_FILE = "../../data/gtex/output.tissue.pigean/harmonizome_pigean_validation.txt"
     DATA_MATRIX_FILE = "../../data/gtex/output.tissue.pigean/data_matrix_validation.txt"
     DATA_MATRIX_PIGEAN_FILE = "../../data/gtex/output.tissue.pigean/data_matrix_pigean_validation.txt"
+    CONSENSUS_FILE = "../../data/gtex/output.tissue.pigean/consensus_analysis.txt"
 else:
     IN_FILE = "../../data/gtex/output.tissue/{}_validation_results.txt"
     HARMONIZOME_FILE = "../../data/gtex/output.tissue/harmonizome_validation.txt"
     DATA_MATRIX_FILE = "../../data/gtex/output.tissue/data_matrix_validation.txt"
     DATA_MATRIX_PIGEAN_FILE = "../../data/gtex/output.tissue/data_matrix_pigean_validation.txt"
+    CONSENSUS_FILE = "../../data/gtex/output.tissue/consensus_analysis.txt"
 
 
 def plot_gene_set_by_model(df, gene_set_name_suffix):
@@ -256,6 +258,20 @@ def main():
             df = pd.concat([df, summarize_data_matrix_pigean_df], ignore_index=True)
         else:
             df = summarize_data_matrix_pigean_df
+
+    # process concensus analysis file
+    if os.path.exists(CONSENSUS_FILE):
+        consensus_df = pd.read_csv(CONSENSUS_FILE, sep='\t', names=['model','gene_set_name_suffix','gene_set_name', 'gene_set_size', 'rank', 'enriched_gene_sets_name', 'enriched_gene_set_size', 'enriched_gene_set_p_value'])
+        consensus_df['tissue'] = 'consensus_analysis'
+        print(f"Processed consensus analysis file with {len(consensus_df)} rows.")
+        summarize_consensus_df = create_top_enriched_df(consensus_df)
+        summarize_consensus_df['key'] = summarize_consensus_df['gene_set_name_suffix']
+        print("\nTop enriched gene sets for consensus analysis:")
+        print(summarize_consensus_df.head(10))
+        if df is not None:
+            df = pd.concat([df, summarize_consensus_df], ignore_index=True)
+        else:
+            df = summarize_consensus_df
 
     # Process each tissue file and concatenate results
     for tissue in sorted(os.listdir(BASE_FOLDER)):
