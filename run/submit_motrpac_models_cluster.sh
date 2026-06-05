@@ -22,11 +22,15 @@ QSUB_BIN="${QSUB_BIN:-qsub}"
 
 MOTRPAC_ARRAY_MEMORY="${MOTRPAC_ARRAY_MEMORY:-16G}"
 MOTRPAC_ARRAY_WALLTIME="${MOTRPAC_ARRAY_WALLTIME:-24:00:00}"
+SUBMIT_MODE=0
+FILTER_MODEL_GROUP=""
+FILTER_TISSUE_ID=""
+FILTER_MODEL_ID=""
 
 usage() {
   cat <<'EOF'
 Usage:
-  ./geneset-extractor-dev/run/submit_motrpac_models_cluster.sh --submit
+  ./geneset-extractor-dev/run/submit_motrpac_models_cluster.sh --submit [--model_group TW|HZ] [--tissue_id TISSUE|all_tissues] [--model_id MODEL]
   ./geneset-extractor-dev/run/submit_motrpac_models_cluster.sh --help
 
 Required environment variables:
@@ -48,6 +52,10 @@ Notes:
   - Use --submit to submit the qsub array.
   - When run inside a qsub array task, it auto-detects the task context and
     runs the assigned workload row.
+  - No filters: one array covering all tissue+model tasks.
+  - --model_group: one array for all tasks in that group.
+  - --tissue_id: one array for all models for that tissue.
+  - --model_id with optional --tissue_id: one single-task submission.
 EOF
 }
 
@@ -92,6 +100,98 @@ csv_from_tsv_filter() {
   ' "${tsv_path}" | paste -sd, -
 }
 
+canonicalize_model_group() {
+  case "$1" in
+    TW|timewise) printf '%s\n' "TW" ;;
+    HZ|hz_released_dea) printf '%s\n' "HZ" ;;
+    TR|training) printf '%s\n' "TR" ;;
+    *) return 1 ;;
+  esac
+}
+
+resolve_model_group_for_id() {
+  local model_id="$1"
+  awk -F $'\t' -v model_id="${model_id}" '
+    NR == 1 {
+      for (i = 1; i <= NF; i++) {
+        if ($i == "model_id") model_id_col = i
+        if ($i == "model_family") family_col = i
+      }
+      next
+    }
+    $model_id_col == model_id {
+      if ($family_col == "timewise") print "TW"
+      else if ($family_col == "hz_released_dea") print "HZ"
+      else if ($family_col == "training") print "TR"
+      exit
+    }
+  ' "${MOTRPAC_MODEL_LIST}"
+}
+
+parse_cli() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --submit)
+        SUBMIT_MODE=1
+        shift
+        ;;
+      --model_group)
+        [[ $# -ge 2 ]] || { echo "Missing value for --model_group" >&2; exit 1; }
+        FILTER_MODEL_GROUP="$(canonicalize_model_group "$2")" || {
+          echo "Unsupported MoTrPAC model group: $2" >&2
+          exit 1
+        }
+        shift 2
+        ;;
+      --tissue_id)
+        [[ $# -ge 2 ]] || { echo "Missing value for --tissue_id" >&2; exit 1; }
+        FILTER_TISSUE_ID="$2"
+        shift 2
+        ;;
+      --model_id)
+        [[ $# -ge 2 ]] || { echo "Missing value for --model_id" >&2; exit 1; }
+        FILTER_MODEL_ID="$2"
+        shift 2
+        ;;
+      -h|--help|help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Unknown argument: $1" >&2
+        usage >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  if [[ -n "${FILTER_MODEL_ID}" ]]; then
+    local derived_group
+    derived_group="$(resolve_model_group_for_id "${FILTER_MODEL_ID}")"
+    if [[ -z "${derived_group}" ]]; then
+      echo "Model not found in MoTrPAC model list: ${FILTER_MODEL_ID}" >&2
+      exit 1
+    fi
+    if [[ -n "${FILTER_MODEL_GROUP}" && "${FILTER_MODEL_GROUP}" != "${derived_group}" ]]; then
+      echo "--model_id ${FILTER_MODEL_ID} conflicts with --model_group ${FILTER_MODEL_GROUP}" >&2
+      exit 1
+    fi
+    FILTER_MODEL_GROUP="${derived_group}"
+    if [[ "${derived_group}" == "HZ" && -z "${FILTER_TISSUE_ID}" ]]; then
+      FILTER_TISSUE_ID="all_tissues"
+    fi
+    if [[ "${derived_group}" != "HZ" && -z "${FILTER_TISSUE_ID}" ]]; then
+      echo "--model_id ${FILTER_MODEL_ID} requires --tissue_id for non-HZ MoTrPAC models" >&2
+      exit 1
+    fi
+  fi
+
+  if [[ ${SUBMIT_MODE} -ne 1 ]]; then
+    usage
+    exit 1
+  fi
+}
+
 prepare_common() {
   mkdir -p "${WORK_ROOT}" "${QSUB_LOG_ROOT}"
   require_dir "${DIG_DIR}"
@@ -117,27 +217,67 @@ prepare_common() {
 }
 
 write_worklist() {
-  local tw_models hz_models
-  tw_models="$(csv_from_tsv_filter "${MOTRPAC_MODEL_LIST}" "model_family" "timewise")"
-  hz_models="$(csv_from_tsv_filter "${MOTRPAC_MODEL_LIST}" "model_family" "hz_released_dea")"
-
-  if [[ -z "${tw_models}" || -z "${hz_models}" ]]; then
-    echo "Failed to resolve MoTrPAC model families from ${MOTRPAC_MODEL_LIST}" >&2
-    exit 1
-  fi
+  local model_tsv tissue_tsv
+  model_tsv="$(mktemp)"
+  tissue_tsv="$(mktemp)"
+  awk -F $'\t' 'NR > 1 && $4 == "true" {
+    group = ""
+    if ($2 == "timewise") group = "TW"
+    else if ($2 == "hz_released_dea") group = "HZ"
+    else if ($2 == "training") group = "TR"
+    if (group != "") print $1 "\t" group
+  }' "${MOTRPAC_MODEL_LIST}" > "${model_tsv}"
+  awk -F $'\t' 'NR > 1 && $5 == "true" { print $1 }' "${MOTRPAC_TISSUE_LIST}" > "${tissue_tsv}"
 
   {
-    printf "task_id\ttissue_id\tmodel_group\tmodels\n"
-    awk -F $'\t' -v tw="${tw_models}" '
-      BEGIN { task_id = 0 }
-      NR == 1 { next }
-      $5 == "true" {
-        task_id += 1
-        printf "%d\t%s\tTW\t%s\n", task_id, $1, tw
-      }
-    ' "${MOTRPAC_TISSUE_LIST}"
-    printf "1000000000\tall_tissues\tHZ\t%s\n" "${hz_models}"
+    printf "task_id\ttissue_id\tmodel_group\tmodel_id\n"
+    awk -F $'\t' \
+      -v model_tsv="${model_tsv}" \
+      -v tissue_tsv="${tissue_tsv}" \
+      -v filter_group="${FILTER_MODEL_GROUP}" \
+      -v filter_tissue="${FILTER_TISSUE_ID}" \
+      -v filter_model="${FILTER_MODEL_ID}" '
+      BEGIN {
+        while ((getline line < model_tsv) > 0) {
+          split(line, fields, "\t")
+          n_models += 1
+          model_ids[n_models] = fields[1]
+          model_groups[n_models] = fields[2]
+        }
+        close(model_tsv)
+        while ((getline line < tissue_tsv) > 0) {
+          tissues[++n_tissues] = line
+        }
+        close(tissue_tsv)
+        task_id = 0
+        for (mi = 1; mi <= n_models; mi++) {
+          model_id = model_ids[mi]
+          model_group = model_groups[mi]
+          if (filter_group != "" && model_group != filter_group) continue
+          if (model_group == "HZ") {
+            tissue_id = "all_tissues"
+            if (filter_tissue != "" && tissue_id != filter_tissue) continue
+            if (filter_model != "" && model_id != filter_model) continue
+            task_id += 1
+            printf "%d\t%s\t%s\t%s\n", task_id, tissue_id, model_group, model_id
+          } else {
+            for (ti = 1; ti <= n_tissues; ti++) {
+              tissue_id = tissues[ti]
+              if (filter_tissue != "" && tissue_id != filter_tissue) continue
+              if (filter_model != "" && model_id != filter_model) continue
+              task_id += 1
+              printf "%d\t%s\t%s\t%s\n", task_id, tissue_id, model_group, model_id
+            }
+          }
+        }
+      }'
   } > "${MOTRPAC_WORKLIST}"
+  rm -f "${model_tsv}" "${tissue_tsv}"
+
+  if [[ "$(awk 'END { print NR - 1 }' "${MOTRPAC_WORKLIST}")" -le 0 ]]; then
+    echo "MoTrPAC filters produced an empty worklist" >&2
+    exit 1
+  fi
 }
 
 submit_array() {
@@ -167,20 +307,20 @@ run_task() {
     exit 1
   fi
 
-  local row tissue_id model_group models
+  local row tissue_id model_group model_id
   row="$(awk -F $'\t' -v target="${task_id}" 'NR > 1 && $1 == target { print; exit }' "${MOTRPAC_WORKLIST}")"
   if [[ -z "${row}" ]]; then
     echo "No MoTrPAC worklist row found for task ${task_id}" >&2
     exit 1
   fi
 
-  IFS=$'\t' read -r _ tissue_id model_group models <<< "${row}"
+  IFS=$'\t' read -r _ tissue_id model_group model_id <<< "${row}"
 
-  echo "MoTrPAC task ${task_id}: tissue=${tissue_id} group=${model_group} models=${models}"
+  echo "MoTrPAC task ${task_id}: tissue=${tissue_id} group=${model_group} model=${model_id}"
 
   local cmd=(
     bash "${REPO_ROOT}/geneset-extractor-dev/MoTrPAC/run/build_motrpac_genesets.sh"
-    --models "${models}"
+    --models "${model_id}"
     --model_list "${MOTRPAC_MODEL_LIST}"
     --tissue_list "${MOTRPAC_TISSUE_LIST}"
     --model_manifest "${MOTRPAC_MODEL_MANIFEST}"
@@ -225,19 +365,8 @@ main() {
     return
   fi
 
-  case "${mode}" in
-    --submit)
-      submit_array
-      ;;
-    -h|--help|help|"")
-      usage
-      ;;
-    *)
-      echo "Unknown mode: ${mode}" >&2
-      usage >&2
-      exit 1
-      ;;
-  esac
+  parse_cli "$@"
+  submit_array
 }
 
 main "$@"

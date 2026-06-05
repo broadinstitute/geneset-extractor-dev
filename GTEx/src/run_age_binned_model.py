@@ -299,7 +299,6 @@ def write_model_commands(
     model_id: str,
     workflow_cmd: list[str],
     extractor_cmd: list[str],
-    provenance_cmd: list[str],
     dig_dir: Path,
 ) -> None:
     text = "\n".join(
@@ -320,13 +319,7 @@ def write_model_commands(
             f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {shell_join(extractor_cmd)}",
             "```",
             "",
-            "## Provenance Rebuild",
-            "",
-            "```bash",
-            f"cd {shlex.quote(str(dig_dir))}",
-            f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {shell_join(provenance_cmd)}",
-            "```",
-            "",
+            "Note: `rna_deg_multi` writes grouped extractor outputs with per-group provenance.",
         ]
     )
     write_text(model_out / "commands.md", text)
@@ -390,20 +383,11 @@ def main() -> int:
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
     )
-    provenance_cmd = build_provenance_rebuild_cmd(
-        python_bin=args.python_bin,
-        metadata_json=extractor_out / "geneset.meta.json",
-        upstream_provenance_graph_json=workflow_out / "deg_long.provenance_graph.json",
-        provenance_out=extractor_out / "geneset.provenance.json",
-        provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
-        provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
-    )
     write_model_commands(
         model_out=model_out,
         model_id=args.model_id,
         workflow_cmd=workflow_cmd,
         extractor_cmd=extractor_cmd,
-        provenance_cmd=provenance_cmd,
         dig_dir=dig_dir,
     )
 
@@ -424,7 +408,6 @@ def main() -> int:
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
     )
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
-    run_command(provenance_cmd, cwd=dig_dir, env=env, log_path=model_log)
     return 0
 
 

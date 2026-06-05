@@ -37,11 +37,15 @@ fi
 
 GTEX_ARRAY_MEMORY="${GTEX_ARRAY_MEMORY:-16G}"
 GTEX_ARRAY_WALLTIME="${GTEX_ARRAY_WALLTIME:-24:00:00}"
+SUBMIT_MODE=0
+FILTER_MODEL_GROUP=""
+FILTER_TISSUE_ID=""
+FILTER_MODEL_ID=""
 
 usage() {
   cat <<'EOF'
 Usage:
-  ./geneset-extractor-dev/run/submit_gtex_models_cluster_apptainer.sh --submit
+  ./geneset-extractor-dev/run/submit_gtex_models_cluster_apptainer.sh --submit [--model_group AB|AC|HZ] [--tissue_id TISSUE] [--model_id MODEL]
   ./geneset-extractor-dev/run/submit_gtex_models_cluster_apptainer.sh --help
 
 Required environment variables:
@@ -67,6 +71,11 @@ Notes:
   - Use --submit to submit the qsub array.
   - Array tasks re-enter this script inside the Apptainer image and run the
     assigned workload row there.
+  - No filters: one array covering all tissue+model tasks.
+  - --model_group: one array for all tissue+model tasks in that group.
+  - --tissue_id: one array for all models for that tissue.
+  - --model_id alone: one array for that model across all tissues.
+  - --model_id plus --tissue_id: one single-task submission.
 EOF
 }
 
@@ -111,6 +120,91 @@ csv_from_tsv_filter() {
   ' "${tsv_path}" | paste -sd, -
 }
 
+canonicalize_model_group() {
+  case "$1" in
+    AB|age_binned) printf '%s\n' "AB" ;;
+    AC|continuous_age) printf '%s\n' "AC" ;;
+    HZ|hz_notebook) printf '%s\n' "HZ" ;;
+    *) return 1 ;;
+  esac
+}
+
+resolve_model_group_for_id() {
+  local model_id="$1"
+  awk -F $'\t' -v model_id="${model_id}" '
+    NR == 1 {
+      for (i = 1; i <= NF; i++) {
+        if ($i == "model_id") model_id_col = i
+        if ($i == "model_family") family_col = i
+      }
+      next
+    }
+    $model_id_col == model_id {
+      if ($family_col == "age_binned") print "AB"
+      else if ($family_col == "continuous_age") print "AC"
+      else if ($family_col == "hz_notebook") print "HZ"
+      exit
+    }
+  ' "${GTEX_MODEL_LIST}"
+}
+
+parse_cli() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --submit)
+        SUBMIT_MODE=1
+        shift
+        ;;
+      --model_group)
+        [[ $# -ge 2 ]] || { echo "Missing value for --model_group" >&2; exit 1; }
+        FILTER_MODEL_GROUP="$(canonicalize_model_group "$2")" || {
+          echo "Unsupported GTEx model group: $2" >&2
+          exit 1
+        }
+        shift 2
+        ;;
+      --tissue_id)
+        [[ $# -ge 2 ]] || { echo "Missing value for --tissue_id" >&2; exit 1; }
+        FILTER_TISSUE_ID="$2"
+        shift 2
+        ;;
+      --model_id)
+        [[ $# -ge 2 ]] || { echo "Missing value for --model_id" >&2; exit 1; }
+        FILTER_MODEL_ID="$2"
+        shift 2
+        ;;
+      -h|--help|help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Unknown argument: $1" >&2
+        usage >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  if [[ -n "${FILTER_MODEL_ID}" ]]; then
+    local derived_group
+    derived_group="$(resolve_model_group_for_id "${FILTER_MODEL_ID}")"
+    if [[ -z "${derived_group}" ]]; then
+      echo "Model not found in GTEx model list: ${FILTER_MODEL_ID}" >&2
+      exit 1
+    fi
+    if [[ -n "${FILTER_MODEL_GROUP}" && "${FILTER_MODEL_GROUP}" != "${derived_group}" ]]; then
+      echo "--model_id ${FILTER_MODEL_ID} conflicts with --model_group ${FILTER_MODEL_GROUP}" >&2
+      exit 1
+    fi
+    FILTER_MODEL_GROUP="${derived_group}"
+  fi
+
+  if [[ ${SUBMIT_MODE} -ne 1 ]]; then
+    usage
+    exit 1
+  fi
+}
+
 append_bind_path() {
   local path="$1"
   if [[ -z "${path}" ]]; then
@@ -153,19 +247,26 @@ prepare_common() {
 }
 
 write_worklist() {
-  local ab_models ac_models hz_models
-  ab_models="$(csv_from_tsv_filter "${GTEX_MODEL_LIST}" "model_family" "age_binned")"
-  ac_models="$(csv_from_tsv_filter "${GTEX_MODEL_LIST}" "model_family" "continuous_age")"
-  hz_models="$(csv_from_tsv_filter "${GTEX_MODEL_LIST}" "model_family" "hz_notebook")"
-
-  if [[ -z "${ab_models}" || -z "${ac_models}" || -z "${hz_models}" ]]; then
-    echo "Failed to resolve GTEx model families from ${GTEX_MODEL_LIST}" >&2
-    exit 1
-  fi
+  local model_tsv tissue_tsv
+  model_tsv="$(mktemp)"
+  tissue_tsv="$(mktemp)"
+  awk -F $'\t' 'NR > 1 && $3 == "true" {
+    group = ""
+    if ($2 == "age_binned") group = "AB"
+    else if ($2 == "continuous_age") group = "AC"
+    else if ($2 == "hz_notebook") group = "HZ"
+    if (group != "") print $1 "\t" group
+  }' "${GTEX_MODEL_LIST}" > "${model_tsv}"
+  awk -F $'\t' 'NR > 1 { print $1 }' "${GTEX_BROAD_TISSUE_LIST}" > "${tissue_tsv}"
 
   {
-    printf "task_id\ttissue_id\tmodel_group\tmodels\tcounts_gct\tsample_metadata_tsv\tsubject_metadata_tsv\thuman_gene_info\tgtf\n"
-    awk -F $'\t' -v ab="${ab_models}" -v ac="${ac_models}" -v hz="${hz_models}" \
+    printf "task_id\ttissue_id\tmodel_group\tmodel_id\tcounts_gct\tsample_metadata_tsv\tsubject_metadata_tsv\thuman_gene_info\tgtf\n"
+    awk -F $'\t' \
+      -v model_tsv="${model_tsv}" \
+      -v tissue_tsv="${tissue_tsv}" \
+      -v filter_group="${FILTER_MODEL_GROUP}" \
+      -v filter_tissue="${FILTER_TISSUE_ID}" \
+      -v filter_model="${FILTER_MODEL_ID}" \
       -v v10_counts="${GTEX_V10_COUNTS_GCT}" \
       -v v10_sample="${GTEX_V10_SAMPLE_ATTRIBUTES_TSV}" \
       -v v10_subject="${GTEX_V10_SUBJECT_PHENOTYPES_TSV}" \
@@ -174,18 +275,43 @@ write_worklist() {
       -v v8_subject="${GTEX_V8_SUBJECT_PHENOTYPES_TSV}" \
       -v v8_hgi="${GTEX_V8_HUMAN_GENE_INFO}" \
       -v gtf="${GTEX_GTF}" '
-      BEGIN { task_id = 0 }
-      NR == 1 { next }
-      {
-        task_id += 1
-        printf "%d\t%s\tAB\t%s\t%s\t%s\t%s\t\t%s\n", task_id, $1, ab, v10_counts, v10_sample, v10_subject, gtf
-        task_id += 1
-        printf "%d\t%s\tAC\t%s\t%s\t%s\t%s\t\t%s\n", task_id, $1, ac, v10_counts, v10_sample, v10_subject, gtf
-        task_id += 1
-        printf "%d\t%s\tHZ\t%s\t%s\t%s\t%s\t%s\t%s\n", task_id, $1, hz, v8_counts, v8_sample, v8_subject, v8_hgi, gtf
-      }
-    ' "${GTEX_BROAD_TISSUE_LIST}"
+      BEGIN {
+        while ((getline line < model_tsv) > 0) {
+          split(line, fields, "\t")
+          n_models += 1
+          model_ids[n_models] = fields[1]
+          model_groups[n_models] = fields[2]
+        }
+        close(model_tsv)
+        while ((getline line < tissue_tsv) > 0) {
+          tissues[++n_tissues] = line
+        }
+        close(tissue_tsv)
+        task_id = 0
+        for (ti = 1; ti <= n_tissues; ti++) {
+          tissue_id = tissues[ti]
+          if (filter_tissue != "" && tissue_id != filter_tissue) continue
+          for (mi = 1; mi <= n_models; mi++) {
+            model_id = model_ids[mi]
+            model_group = model_groups[mi]
+            if (filter_group != "" && model_group != filter_group) continue
+            if (filter_model != "" && model_id != filter_model) continue
+            task_id += 1
+            if (model_group == "HZ") {
+              printf "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", task_id, tissue_id, model_group, model_id, v8_counts, v8_sample, v8_subject, v8_hgi, gtf
+            } else {
+              printf "%d\t%s\t%s\t%s\t%s\t%s\t%s\t\t%s\n", task_id, tissue_id, model_group, model_id, v10_counts, v10_sample, v10_subject, gtf
+            }
+          }
+        }
+      }'
   } > "${GTEX_WORKLIST}"
+  rm -f "${model_tsv}" "${tissue_tsv}"
+
+  if [[ "$(awk 'END { print NR - 1 }' "${GTEX_WORKLIST}")" -le 0 ]]; then
+    echo "GTEx filters produced an empty worklist" >&2
+    exit 1
+  fi
 }
 
 apptainer_bind_csv() {
@@ -277,22 +403,22 @@ run_task() {
     return
   fi
 
-  local row tissue_id model_group models counts_gct sample_tsv subject_tsv human_gene_info gtf
+  local row tissue_id model_group model_id counts_gct sample_tsv subject_tsv human_gene_info gtf
   row="$(awk -F $'\t' -v target="${task_id}" 'NR > 1 && $1 == target { print; exit }' "${GTEX_WORKLIST}")"
   if [[ -z "${row}" ]]; then
     echo "No GTEx worklist row found for task ${task_id}" >&2
     exit 1
   fi
 
-  IFS=$'\t' read -r _ tissue_id model_group models counts_gct sample_tsv subject_tsv human_gene_info gtf <<< "${row}"
+  IFS=$'\t' read -r _ tissue_id model_group model_id counts_gct sample_tsv subject_tsv human_gene_info gtf <<< "${row}"
 
-  echo "GTEx task ${task_id}: tissue=${tissue_id} group=${model_group} models=${models}"
+  echo "GTEx task ${task_id}: tissue=${tissue_id} group=${model_group} model=${model_id}"
 
   local cmd=(
     bash "${REPO_ROOT}/geneset-extractor-dev/GTEx/run/build_genesets.sh"
     --tissue_granularity broad
     --tissues "${tissue_id}"
-    --models "${models}"
+    --models "${model_id}"
     --counts_gct "${counts_gct}"
     --sample_metadata_tsv "${sample_tsv}"
     --subject_metadata_tsv "${subject_tsv}"
@@ -329,19 +455,8 @@ main() {
     return
   fi
 
-  case "${mode}" in
-    --submit)
-      submit_array
-      ;;
-    -h|--help|help|"")
-      usage
-      ;;
-    *)
-      echo "Unknown mode: ${mode}" >&2
-      usage >&2
-      exit 1
-      ;;
-  esac
+  parse_cli "$@"
+  submit_array
 }
 
 main "$@"
