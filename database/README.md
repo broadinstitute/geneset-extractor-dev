@@ -7,14 +7,15 @@ A command-line SQLite loader for gene set data stored in `.gmt` files.
 ### Overview
 
 - Connects to a SQLite database and initializes the schema from a SQL file.
-- Recursively finds `.gmt` files under `--data-root`.
+- Recursively finds `.gmt` files under either `--data-root` or `--s3-data-root`.
 - Parses each GMT line into a gene set name plus its gene symbols.
 - Creates or reuses reference rows for species, namespace, collection, and license.
 - Inserts each gene set, its gene symbols, and the many-to-many links between them.
+- When using S3 input, reads `.gmt`, provenance, and metadata files directly from the bucket via AWS APIs.
 
 ### Provenance Support
 
-For each GMT file directory, it looks for `geneset.provenance.json`, `geneset.meta.json`, and optional `run_summary.json`.
+For each GMT file directory or S3 prefix, it looks for `geneset.provenance.json`, `geneset.meta.json`, and optional `run_summary.json`.
 
 - If provenance is required, gene sets missing those files are skipped.
 - Stores raw provenance/metadata JSON in a `provenance` table.
@@ -27,6 +28,8 @@ For each GMT file directory, it looks for `geneset.provenance.json`, `geneset.me
 
 ### Example
 
+Local filesystem input:
+
 ```bash
 python database/src/populate_database.py \
   --db-path database.db \
@@ -35,11 +38,22 @@ python database/src/populate_database.py \
   --output-log logs/populate_database.log
 ```
 
+S3 input:
+
+```bash
+python database/src/populate_database.py \
+  --db-path database.db \
+  --schema-file schema.sql \
+  --s3-data-root s3://geneset-marc-test \
+  --output-log logs/populate_database.log
+```
+
 ### Options
 
 - `--db-path`: Required. Path to the SQLite database file to create or update.
 - `--schema-file`: Required. Path to the SQL schema file used to initialize the database.
-- `--data-root`: Required. Root directory to search recursively for `.gmt` files.
+- `--data-root`: Required unless `--s3-data-root` is provided. Root directory to search recursively for `.gmt` files.
+- `--s3-data-root`: Required unless `--data-root` is provided. S3 URI to search recursively for `.gmt` files, for example `s3://s3-bucket-name`. Cannot be used together with `--data-root`.
 - `--output-log`: Optional. Path to a log file. If omitted, logs are written only to stderr.
 - `--collection-name`: Optional. Collection name stored with imported gene sets. Default: `GTEx`.
 - `--species-code`: Optional. Species code stored in reference tables and gene set details. Default: `Homo_sapiens`.
@@ -49,3 +63,8 @@ python database/src/populate_database.py \
 - `--contrib-organization`: Optional. Contributing organization stored in `gene_set_details`. Default: `GTEx Consortium`.
 - `--require-provenance`: Optional flag. Keeps the default behavior of requiring `geneset.provenance.json` and `geneset.meta.json` for each imported gene set.
 - `--skip-provenance-check`: Optional flag. Imports gene sets even when provenance and metadata files are missing.
+
+### S3 Requirements
+
+- `boto3` must be installed in the Python environment when using `--s3-data-root`.
+- AWS credentials and permissions must allow `s3:ListBucket` on the bucket and `s3:GetObject` for the relevant objects.

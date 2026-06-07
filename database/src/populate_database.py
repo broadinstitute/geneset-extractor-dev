@@ -3,16 +3,24 @@
 Populate GenSeCoDB database from GMT gene set files.
 
 Usage:
-    python populate_database.py --db-path database.db --schema-file schema.sql --data-root /path/to/data [--output-log /path/to/logfile.log]
+    python populate_database.py --db-path database.db --schema-file schema.sql (--data-root /path/to/data | --s3-data-root s3://bucket/prefix) [--output-log /path/to/logfile.log]
 """
 
 import argparse
 import sqlite3
 import json
 import logging
-from pathlib import Path
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
 from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
+
+try:
+    import boto3
+    from botocore.exceptions import ClientError
+except ImportError:  # pragma: no cover - depends on runtime environment
+    boto3 = None
+    ClientError = None
 
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 logger = logging.getLogger(__name__)
@@ -35,6 +43,15 @@ def configure_logging(output_log: Optional[str] = None):
     )
 
 
+@dataclass(frozen=True)
+class DataFileRef:
+    """Reference to either a local file or an S3 object."""
+    location: str
+    parent_location: str
+    path_parts: Tuple[str, ...]
+    is_s3: bool
+
+
 class GeneSeCoDatabasePopulator:
     """Populate GenSeCoDB database from GMT files."""
 
@@ -43,6 +60,7 @@ class GeneSeCoDatabasePopulator:
         self.db_path = db_path
         self.conn = None
         self.cursor = None
+        self.s3_client = None
         self.next_available_node_id = 1  # Track next available node ID for spacing gene sets
 
     def connect(self):
@@ -78,17 +96,118 @@ class GeneSeCoDatabasePopulator:
             logger.error(f"Error initializing schema: {e}")
             raise
 
-    def find_gmt_files(self, root_path: str) -> List[Path]:
-        """Find all .gmt files in root directory and subdirectories."""
+    def get_s3_client(self):
+        """Lazily initialize the S3 client."""
+        if boto3 is None:
+            raise ImportError("boto3 is required when using --s3-data-root")
+
+        if self.s3_client is None:
+            self.s3_client = boto3.client('s3')
+
+        return self.s3_client
+
+    def parse_s3_uri(self, s3_uri: str) -> Tuple[str, str]:
+        """Parse an S3 URI into bucket and key prefix."""
+        if not s3_uri.startswith('s3://'):
+            raise ValueError(f"Invalid S3 URI: {s3_uri}")
+
+        remainder = s3_uri[5:]
+        if not remainder or remainder.startswith('/'):
+            raise ValueError(f"Invalid S3 URI: {s3_uri}")
+
+        bucket, _, key = remainder.partition('/')
+        return bucket, key.rstrip('/')
+
+    def build_s3_uri(self, bucket: str, key: str = '') -> str:
+        """Build a normalized S3 URI."""
+        return f"s3://{bucket}/{key}" if key else f"s3://{bucket}"
+
+    def build_child_location(self, base_location: str, child_name: str, is_s3: bool) -> str:
+        """Build a child path or S3 URI from a base location."""
+        if is_s3:
+            bucket, key = self.parse_s3_uri(base_location)
+            child_key = f"{key}/{child_name}" if key else child_name
+            return self.build_s3_uri(bucket, child_key)
+
+        return str(Path(base_location) / child_name)
+
+    def read_text(self, location: str, is_s3: bool) -> str:
+        """Read a text file from local disk or S3."""
+        if is_s3:
+            bucket, key = self.parse_s3_uri(location)
+            response = self.get_s3_client().get_object(Bucket=bucket, Key=key)
+            return response['Body'].read().decode('utf-8', errors='ignore')
+
+        with open(location, 'r', encoding='utf-8', errors='ignore') as f:
+            return f.read()
+
+    def read_json_file(self, location: str, is_s3: bool) -> Optional[str]:
+        """Read JSON content from local disk or S3, returning None for missing files."""
+        try:
+            data = self.read_text(location, is_s3)
+        except FileNotFoundError:
+            return None
+        except Exception as e:
+            if is_s3 and ClientError is not None and isinstance(e, ClientError):
+                error_code = e.response.get('Error', {}).get('Code')
+                if error_code in {'404', 'NoSuchKey', 'NotFound'}:
+                    return None
+            raise
+
+        parsed = json.loads(data)
+        return json.dumps(parsed)
+
+    def find_gmt_files(
+        self,
+        root_path: Optional[str] = None,
+        s3_root: Optional[str] = None
+    ) -> List[DataFileRef]:
+        """Find all .gmt files under a local path or S3 prefix."""
+        if bool(root_path) == bool(s3_root):
+            raise ValueError("Provide exactly one of root_path or s3_root")
+
+        if s3_root:
+            bucket, prefix = self.parse_s3_uri(s3_root)
+            paginator = self.get_s3_client().get_paginator('list_objects_v2')
+            gmt_files = []
+
+            for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+                for obj in page.get('Contents', []):
+                    key = obj['Key']
+                    if not key.endswith('.gmt'):
+                        continue
+
+                    key_path = PurePosixPath(key)
+                    parent_key = '' if str(key_path.parent) == '.' else str(key_path.parent)
+                    gmt_files.append(
+                        DataFileRef(
+                            location=self.build_s3_uri(bucket, key),
+                            parent_location=self.build_s3_uri(bucket, parent_key),
+                            path_parts=key_path.parts,
+                            is_s3=True,
+                        )
+                    )
+
+            logger.info(f"Found {len(gmt_files)} .gmt files in {s3_root}")
+            return gmt_files
+
         root = Path(root_path)
         if not root.exists():
             raise ValueError(f"Data root path does not exist: {root_path}")
         
-        gmt_files = list(root.rglob('*.gmt'))
-        logger.info(f"Found {len(gmt_files)} .gmt files")
+        gmt_files = [
+            DataFileRef(
+                location=str(path),
+                parent_location=str(path.parent),
+                path_parts=path.parts,
+                is_s3=False,
+            )
+            for path in root.rglob('*.gmt')
+        ]
+        logger.info(f"Found {len(gmt_files)} .gmt files in {root_path}")
         return gmt_files
 
-    def parse_gmt_file(self, gmt_path: Path) -> List[Tuple[str, List[str]]]:
+    def parse_gmt_file(self, gmt_file: DataFileRef) -> List[Tuple[str, List[str]]]:
         """
         Parse GMT file.
         
@@ -99,33 +218,32 @@ class GeneSeCoDatabasePopulator:
         """
         gene_sets = []
         try:
-            with open(gmt_path, 'r', encoding='utf-8', errors='ignore') as f:
-                for line_num, line in enumerate(f, 1):
-                    line = line.strip()
-                    if not line:
-                        continue
-                    
-                    parts = line.split('\t')
-                    if len(parts) < 2:
-                        logger.warning(f"{gmt_path}:{line_num} - Invalid line format (missing tab)")
-                        continue
-                    
-                    gene_set_name = parts[0]
-                    # Second column is typically description (optional in some GMT files)
-                    # Genes are space-separated, starting from the second column
-                    genes_str = '\t'.join(parts[1:])
-                    genes = genes_str.split()
-                    
-                    if not genes:
-                        logger.warning(f"{gmt_path}:{line_num} - No genes found for {gene_set_name}")
-                        continue
-                    
-                    gene_sets.append((gene_set_name, genes))
+            for line_num, line in enumerate(self.read_text(gmt_file.location, gmt_file.is_s3).splitlines(), 1):
+                line = line.strip()
+                if not line:
+                    continue
+                
+                parts = line.split('\t')
+                if len(parts) < 2:
+                    logger.warning(f"{gmt_file.location}:{line_num} - Invalid line format (missing tab)")
+                    continue
+                
+                gene_set_name = parts[0]
+                # Second column is typically description (optional in some GMT files)
+                # Genes are space-separated, starting from the second column
+                genes_str = '\t'.join(parts[1:])
+                genes = genes_str.split()
+                
+                if not genes:
+                    logger.warning(f"{gmt_file.location}:{line_num} - No genes found for {gene_set_name}")
+                    continue
+                
+                gene_sets.append((gene_set_name, genes))
             
-            logger.info(f"Parsed {len(gene_sets)} gene sets from {gmt_path}")
+            logger.info(f"Parsed {len(gene_sets)} gene sets from {gmt_file.location}")
             return gene_sets
         except Exception as e:
-            logger.error(f"Error parsing {gmt_path}: {e}")
+            logger.error(f"Error parsing {gmt_file.location}: {e}")
             return []
 
     def insert_species(self, species_code: str, species_name: str) -> int:
@@ -307,7 +425,8 @@ class GeneSeCoDatabasePopulator:
     def load_provenance_and_metadata(
         self, 
         gene_set_name: str, 
-        root_path: Path
+        root_location: str,
+        is_s3: bool
     ) -> Optional[Tuple[str, str, Optional[str]]]:
         """
         Load provenance_graph, geneset_metadata, and run_summary for a gene set.
@@ -322,31 +441,17 @@ class GeneSeCoDatabasePopulator:
             run_summary is optional. None returned if required files are missing.
         """
         try:
-            provenance_file = root_path / "geneset.provenance.json"
-            metadata_file = root_path / "geneset.meta.json"
-            run_summary_file = root_path / "run_summary.json"
+            provenance_file = self.build_child_location(root_location, "geneset.provenance.json", is_s3)
+            metadata_file = self.build_child_location(root_location, "geneset.meta.json", is_s3)
+            run_summary_file = self.build_child_location(root_location, "run_summary.json", is_s3)
+
+            provenance_graph = self.read_json_file(provenance_file, is_s3)
+            geneset_metadata = self.read_json_file(metadata_file, is_s3)
             
-            # Required files must exist
-            if not provenance_file.exists() or not metadata_file.exists():
+            if provenance_graph is None or geneset_metadata is None:
                 return None
-            
-            # Load provenance
-            with open(provenance_file, 'r', encoding='utf-8') as f:
-                provenance_data = json.load(f)
-            provenance_graph = json.dumps(provenance_data)
-            
-            # Load metadata
-            with open(metadata_file, 'r', encoding='utf-8') as f:
-                metadata_data = json.load(f)
-            geneset_metadata = json.dumps(metadata_data)
-            
-            # Load run_summary (optional)
-            run_summary = None
-            if run_summary_file.exists():
-                with open(run_summary_file, 'r', encoding='utf-8') as f:
-                    run_summary_data = json.load(f)
-                run_summary = json.dumps(run_summary_data)
-            
+
+            run_summary = self.read_json_file(run_summary_file, is_s3)
             return (provenance_graph, geneset_metadata, run_summary)
         
         except Exception as e:
@@ -625,7 +730,8 @@ class GeneSeCoDatabasePopulator:
 
     def populate_from_gmt_files(
         self,
-        root_path: str,
+        root_path: Optional[str] = None,
+        s3_root: Optional[str] = None,
         collection_name: str = 'GTEx',
         species_code: str = 'Homo_sapiens',
         species_name: str = 'Homo sapiens',
@@ -636,10 +742,8 @@ class GeneSeCoDatabasePopulator:
     ):
         """Populate database from GMT files."""
         try:
-            root = Path(root_path)
-            
             # Find all GMT files
-            gmt_files = self.find_gmt_files(root_path)
+            gmt_files = self.find_gmt_files(root_path=root_path, s3_root=s3_root)
             if not gmt_files:
                 logger.warning("No .gmt files found")
                 return
@@ -657,16 +761,16 @@ class GeneSeCoDatabasePopulator:
             skipped_gene_sets = 0
             
             for gmt_file in gmt_files:
-                logger.info(f"Processing GMT file: {gmt_file}")
+                logger.info(f"Processing GMT file: {gmt_file.location}")
                 gene_sets = self.parse_gmt_file(gmt_file)
                 
                 for gene_set_name, genes in gene_sets:
                     try:
                         # Derive tissue from path: .../genesets/{tissue}/models/{model_id}/tissue_extractor/genesets.gmt
                         tissue = None
-                        for ancestor in gmt_file.parents:
-                            if ancestor.name == 'models' and ancestor.parent is not None:
-                                tissue = ancestor.parent.name
+                        for idx, part in enumerate(gmt_file.path_parts):
+                            if part == 'models' and idx > 0:
+                                tissue = gmt_file.path_parts[idx - 1]
                                 break
                         
                         # Build unified standard name: {collection}__{tissue}__{gene_set_name}
@@ -678,7 +782,11 @@ class GeneSeCoDatabasePopulator:
                         # Load provenance and metadata if required
                         provenance_data = None
                         if require_provenance:
-                            provenance_data = self.load_provenance_and_metadata(gene_set_name, gmt_file.parent)
+                            provenance_data = self.load_provenance_and_metadata(
+                                gene_set_name,
+                                gmt_file.parent_location,
+                                gmt_file.is_s3,
+                            )
                             if not provenance_data:
                                 logger.debug(f"Skipping {gene_set_name} - provenance/metadata files not found")
                                 skipped_gene_sets += 1
@@ -738,7 +846,7 @@ class GeneSeCoDatabasePopulator:
                         total_gene_sets += 1
                         logger.info(
                             f"Loaded gene set '{standard_name}' (id={gene_set_id}, "
-                            f"{len(genes)} genes) from {gmt_file}"
+                            f"{len(genes)} genes) from {gmt_file.location}"
                         )
                         
                         if total_gene_sets % 100 == 0:
@@ -774,10 +882,14 @@ def main():
         required=True,
         help='Path to database schema SQL file'
     )
-    parser.add_argument(
+    input_group = parser.add_mutually_exclusive_group(required=True)
+    input_group.add_argument(
         '--data-root',
-        required=True,
         help='Root directory containing GMT files'
+    )
+    input_group.add_argument(
+        '--s3-data-root',
+        help='S3 URI containing GMT files, for example s3://geneset-marc-test'
     )
     parser.add_argument(
         '--output-log',
@@ -843,6 +955,7 @@ def main():
         # Populate data
         populator.populate_from_gmt_files(
             root_path=args.data_root,
+            s3_root=args.s3_data_root,
             collection_name=args.collection_name,
             species_code=args.species_code,
             species_name=args.species_name,
