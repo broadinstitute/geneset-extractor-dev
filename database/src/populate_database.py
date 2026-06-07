@@ -3,7 +3,7 @@
 Populate GenSeCoDB database from GMT gene set files.
 
 Usage:
-    python populate_database.py --db-path database.db --schema-file schema.sql --data-root /path/to/data
+    python populate_database.py --db-path database.db --schema-file schema.sql --data-root /path/to/data [--output-log /path/to/logfile.log]
 """
 
 import argparse
@@ -14,11 +14,25 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 logger = logging.getLogger(__name__)
+
+
+def configure_logging(output_log: Optional[str] = None):
+    """Configure console logging and optional file logging."""
+    handlers = [logging.StreamHandler()]
+
+    if output_log:
+        log_path = Path(output_log)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(log_path))
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format=LOG_FORMAT,
+        handlers=handlers,
+        force=True,
+    )
 
 
 class GeneSeCoDatabasePopulator:
@@ -766,6 +780,10 @@ def main():
         help='Root directory containing GMT files'
     )
     parser.add_argument(
+        '--output-log',
+        help='Optional path to a log file. If omitted, logs are only written to stderr.'
+    )
+    parser.add_argument(
         '--collection-name',
         default='GTEx',
         help='Collection name (default: GTEx)'
@@ -809,6 +827,8 @@ def main():
     
     args = parser.parse_args()
     
+    configure_logging(args.output_log)
+
     # Determine whether to require provenance
     require_provenance = not args.skip_provenance_check
     
