@@ -1,2 +1,20 @@
-tissue_id	tissue_label	transcript_tissue_label	counts_tsv	enabled	available_locally
-liver	Liver	Liver Powder	inputs/MoTrPAC/motrpac_test/raw_counts_by_tissue/TRNSCRPT_LIVER_RAW_COUNTS.tsv.gz	true	true
+tissue_id	tissue_label	transcript_tissue_label	raw_counts_object
+adrenals	Adrenals	Adrenal Powder	TRNSCRPT_ADRNL_RAW_COUNTS
+blood	PaxGene RNA	PaxGene RNA	TRNSCRPT_BLOOD_RAW_COUNTS
+brown_adipose	Brown Adipose	Brown Adipose Powder	TRNSCRPT_BAT_RAW_COUNTS
+colon	Colon	Colon Powder	TRNSCRPT_COLON_RAW_COUNTS
+cortex	Cortex	Cortex Powder	TRNSCRPT_CORTEX_RAW_COUNTS
+gastrocnemius	Gastrocnemius	Gastrocnemius Powder	TRNSCRPT_SKMGN_RAW_COUNTS
+heart	Heart	Heart Powder	TRNSCRPT_HEART_RAW_COUNTS
+hippocampus	Hippocampus	Hippocampus Powder	TRNSCRPT_HIPPOC_RAW_COUNTS
+hypothalamus	Hypothalamus	Hypothalmus Powder	TRNSCRPT_HYPOTH_RAW_COUNTS
+kidney	Kidney	Kidney Powder	TRNSCRPT_KIDNEY_RAW_COUNTS
+liver	Liver	Liver Powder	TRNSCRPT_LIVER_RAW_COUNTS
+lung	Lung	Lung Powder	TRNSCRPT_LUNG_RAW_COUNTS
+ovaries	Ovaries	Ovaries Powder	TRNSCRPT_OVARY_RAW_COUNTS
+small_intestine	Small Intestine	Small Intestine Powder	TRNSCRPT_SMLINT_RAW_COUNTS
+spleen	Spleen	Spleen Powder	TRNSCRPT_SPLEEN_RAW_COUNTS
+testes	Testes	Testes Powder	TRNSCRPT_TESTES_RAW_COUNTS
+vena_cava	Vena Cava	Aorta Powder	TRNSCRPT_VENACV_RAW_COUNTS
+vastus_lateralis	Vastus Lateralis	Vastus Lateralis Powder	TRNSCRPT_SKMVL_RAW_COUNTS
+white_adipose	White Adipose	White Adipose Powder	TRNSCRPT_WATSC_RAW_COUNTS

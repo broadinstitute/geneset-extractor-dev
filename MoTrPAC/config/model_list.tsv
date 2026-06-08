@@ -1,4 +1,4 @@
 model_id	model_family	description	enabled
-TR1	training	training_vs_control_with_sex_covariate	false
+TR1	training	training_vs_control_with_sex_covariate	true
 TW1	timewise	timewise_training_vs_control_dig_workflow	true
 HZ1	hz_released_dea	harmonizome_released_dea_dig_workflow_all_tissues	true

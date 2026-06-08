@@ -34,6 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--phenotype_metadata_tsv")
     parser.add_argument("--feature_to_gene_tsv")
     parser.add_argument("--rat_to_human_tsv")
+    parser.add_argument("--raw_counts_dir")
     parser.add_argument("--feature_annot")
     parser.add_argument("--dea_dir")
     parser.add_argument("--mapping_file")
@@ -78,6 +79,32 @@ def require_existing_file(path_text: str, label: str) -> Path:
     return path
 
 
+def require_existing_dir(path_text: str, label: str) -> Path:
+    path = relative_or_absolute_path(path_text)
+    if not path.exists():
+        raise SystemExit(f"Missing {label}: {path}")
+    if not path.is_dir():
+        raise SystemExit(f"Expected {label} to be a directory: {path}")
+    return path
+
+
+def resolve_raw_counts_tsv(raw_counts_dir: Path, raw_counts_object: str) -> Path:
+    object_name = str(raw_counts_object).strip()
+    if not object_name:
+        raise SystemExit("Missing raw_counts_object in tissue list row")
+    candidates = [
+        raw_counts_dir / f"{object_name}.tsv.gz",
+        raw_counts_dir / "raw_counts_by_tissue" / f"{object_name}.tsv.gz",
+    ]
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    raise SystemExit(
+        "Missing raw counts TSV for "
+        f"{object_name}. Looked in: {', '.join(str(path) for path in candidates)}"
+    )
+
+
 def main() -> int:
     args = build_parser().parse_args()
     model_rows = read_tsv(Path(args.model_list))
@@ -115,11 +142,15 @@ def main() -> int:
     phenotype_metadata_tsv = None
     feature_to_gene_tsv = None
     rat_to_human_tsv = None
+    raw_counts_dir = None
     if selected_model_families & {"training", "timewise"}:
+        if not args.raw_counts_dir:
+            raise SystemExit("Timewise/training MoTrPAC models require --raw_counts_dir.")
         transcript_metadata_tsv = require_existing_file(args.transcript_metadata_tsv, "transcript metadata TSV")
         phenotype_metadata_tsv = require_existing_file(args.phenotype_metadata_tsv, "phenotype metadata TSV")
         feature_to_gene_tsv = require_existing_file(args.feature_to_gene_tsv, "feature-to-gene TSV")
         rat_to_human_tsv = require_existing_file(args.rat_to_human_tsv, "rat-to-human mapping TSV")
+        raw_counts_dir = require_existing_dir(args.raw_counts_dir, "raw counts directory")
     feature_annot = require_existing_file(args.feature_annot, "feature annotation") if args.feature_annot else None
     dea_dir = Path(args.dea_dir).resolve() if args.dea_dir else None
     if dea_dir is not None and (not dea_dir.exists() or not dea_dir.is_dir()):
@@ -190,10 +221,10 @@ def main() -> int:
         if not tissue_scoped_models:
             continue
         tissue_row = tissue_by_id[tissue_id]
-        counts_tsv_value = str(tissue_row.get("counts_tsv", "")).strip()
-        if not counts_tsv_value:
-            raise SystemExit(f"Missing counts_tsv for tissue={tissue_id} in {Path(args.tissue_list).resolve()}")
-        counts_tsv = require_existing_file(counts_tsv_value, f"counts TSV for {tissue_id}")
+        raw_counts_object = str(tissue_row.get("raw_counts_object", "")).strip()
+        if not raw_counts_object:
+            raise SystemExit(f"Missing raw_counts_object for tissue={tissue_id} in {Path(args.tissue_list).resolve()}")
+        counts_tsv = resolve_raw_counts_tsv(raw_counts_dir, raw_counts_object)
         tissue_label = str(tissue_row.get("tissue_label", "")).strip()
         transcript_tissue_label = str(tissue_row.get("transcript_tissue_label", "")).strip()
         if not tissue_label or not transcript_tissue_label:
