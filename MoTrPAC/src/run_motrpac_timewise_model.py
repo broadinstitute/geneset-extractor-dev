@@ -255,7 +255,7 @@ def write_run_manifest(
         "model_id": model_id,
         "tissue_id": tissue_id,
         "workflow_dir": str(workflow_out),
-        "tissue_extractor_dir": str(extractor_out),
+        "extractor_dir": str(extractor_out),
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -272,7 +272,7 @@ def main() -> int:
     run_root = Path(args.run_root).resolve()
     model_out = run_root / args.model_id
     workflow_out = model_out / "workflow"
-    extractor_out = model_out / "tissue_extractor"
+    extractor_out = model_out / "extractor"
     dig_dir = Path(args.dig_dir).resolve()
     if not dig_dir.exists():
         raise SystemExit(f"Missing dig-gene-set-extractors directory: {dig_dir}")

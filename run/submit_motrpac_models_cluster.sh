@@ -343,7 +343,7 @@ run_task() {
     --overwrite
   )
 
-  if [[ "${model_group}" == "TW" ]]; then
+  if [[ "${model_group}" == "TW" || "${model_group}" == "TR" ]]; then
     cmd+=(
       --tissues "${tissue_id}"
       --raw_counts_dir "${MOTRPAC_RAW_COUNTS_DIR}"

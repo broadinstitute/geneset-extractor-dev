@@ -258,7 +258,7 @@ def write_manifest(
     payload = {
         "model_id": model_id,
         "workflow_dir": str(workflow_out),
-        "tissue_extractor_dir": str(extractor_out),
+        "extractor_dir": str(extractor_out),
         "provenance_mirror_local_prefix": provenance_mirror_local_prefix,
         "provenance_mirror_remote_prefix": provenance_mirror_remote_prefix,
     }
@@ -295,7 +295,7 @@ def main() -> int:
     run_root = Path(args.run_root).resolve()
     model_out = run_root / args.model_id
     workflow_out = model_out / "workflow"
-    extractor_out = model_out / "tissue_extractor"
+    extractor_out = model_out / "extractor"
     dig_dir = Path(args.dig_dir).resolve()
 
     model_out.mkdir(parents=True, exist_ok=True)

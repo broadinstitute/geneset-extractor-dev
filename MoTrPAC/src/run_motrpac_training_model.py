@@ -269,7 +269,7 @@ def main() -> int:
     run_root = Path(args.run_root).resolve()
     model_out = run_root / args.model_id
     workflow_out = model_out / "workflow"
-    extractor_out = model_out / "tissue_extractor"
+    extractor_out = model_out / "extractor"
     dig_dir = Path(args.dig_dir).resolve()
     if not dig_dir.exists():
         raise SystemExit(f"Missing dig-gene-set-extractors directory: {dig_dir}")
