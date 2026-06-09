@@ -1,11 +1,11 @@
-# Proposal: HuBMAP `HZ*` Integration From ASCT+B Notebook-Replica Scripts
+# Proposal: HuBMAP `HZ*` Integration From ASCT+B Into `dig` Workflows
 
-This note proposes how to integrate the standalone notebook-replica scripts:
+This note proposes how to integrate the ASCT+B workflows:
 
 - `notebooks_adapted/build_hubmap_asctb_gmt.py`
 - `notebooks_adapted/build_hubmap_asctb_augmented_gmt.py`
 
-into a new `geneset-extractor-dev/HuBMAP/` pipeline area.
+into a `dig`-native runtime with `geneset-extractor-dev/HuBMAP/` acting mainly as an orchestration layer.
 
 ## Conclusion
 
@@ -13,7 +13,7 @@ The clean integration shape is very similar to the recent LINCS_L1000 and MoTrPA
 
 - all-dataset models
 - no tissue-specific run architecture
-- notebook-replica workflow remains authoritative for preprocessing and intermediate table construction
+- `dig` workflow remains authoritative for preprocessing and intermediate table construction
 - `dig-gene-set-extractors` should be the authoritative GMT writer
 - same outer model layout as the other integrated `HZ` models
 
@@ -119,25 +119,22 @@ Likely optional:
 - `--out_root`
 - provenance mirror options
 
-## Proposed Runtime Shape
+## Runtime Shape
 
-Add:
+The implemented runtime shape is:
 
-- `src/build_hubmap_asctb_hz1.py`
-- `src/build_hubmap_asctb_hz1.md`
-- `src/build_hubmap_asctb_augmented_hz2.py`
-- `src/build_hubmap_asctb_augmented_hz2.md`
+- `HZ1`
+  - `dig workflows hubmap_asctb`
+  - `dig convert unsigned_term_gene`
+- `HZ2`
+  - `dig workflows hubmap_asctb_augmented`
+  - `dig convert unsigned_term_gene`
 
-These should be thin wrappers around the standalone scripts, following the same pattern used for:
-
-- MoTrPAC `HZ1`
-- LINCS_L1000 `HZ1` and `HZ2`
-
-Add a shared model runner:
+The active HuBMAP wrapper is:
 
 - `src/run_hubmap_hz_model.py`
 
-and a top-level entrypoint:
+and the top-level entrypoint remains:
 
 - `src/build_hubmap_genesets.py`
 - `run/build_hubmap_genesets.sh`
@@ -152,7 +149,7 @@ The all-dataset output tree should be:
 Each model should write:
 
 - `workflow/`
-- `tissue_extractor/`
+- `extractor/`
 - `commands.md`
 - `run.log`
 
@@ -160,29 +157,26 @@ Even though HuBMAP is not tissue-scoped here, using `all_signatures` keeps it co
 
 ## Use Of `dig`
 
-`dig` should be the authoritative GMT writer, not the standalone scripts.
+`dig` is now both:
 
-Recommended pattern:
+1. the authoritative HuBMAP workflow engine
+2. the authoritative GMT writer
 
-1. run the notebook-replica workflow to build the processed/intermediate table
-2. transform that intermediate table into a dig-compatible signed term-gene table
-3. use `dig` to write:
-   - `genesets.gmt`
-   - `geneset.tsv`
-   - `geneset.full.tsv`
+The implemented pattern is:
+
+1. `dig workflows hubmap_asctb` or `dig workflows hubmap_asctb_augmented`
+2. emit `workflow/hubmap_unsigned_term_gene.tsv`
+3. `dig convert unsigned_term_gene`
+4. write:
+   - `extractor/genesets.gmt`
+   - `extractor/geneset.tsv`
    - metadata and provenance JSON
-
-The best current fit is likely reuse of the existing:
-
-- `convert signed_term_gene`
-
-added earlier for MoTrPAC/LINCS-style signed term-gene inputs.
 
 ## Expected Intermediate Tables
 
 ### `HZ1` base ASCT+B
 
-The standalone script builds cell-type marker relationships from ASCT+B tables and `human_gene_info`.
+The `dig` workflow builds cell-type marker relationships from ASCT+B tables and `human_gene_info`.
 
 The integration should emit an intermediate signed table like:
 
@@ -198,12 +192,12 @@ The integration should emit an intermediate signed table like:
 
 Important implication:
 
-- if the base ASCT+B workflow only emits unsigned positive memberships, then `dig` will still be authoritative, but the converter path should emit one set per term rather than signed up/down pairs
-- if the existing `signed_term_gene` converter is reused, this may require setting all `sign=1`
+- the base ASCT+B workflow emits unsigned positive memberships
+- the converter path therefore emits one set per term using `unsigned_term_gene`
 
 ### `HZ2` augmented ASCT+B
 
-The standalone script creates augmented memberships from:
+The `dig` workflow creates augmented memberships from:
 
 - existing base matrix
 - Geneshot augmentation scores
@@ -219,25 +213,15 @@ The integration should emit an intermediate table like:
 - `sign`
   - probably `1` only unless the augmented workflow uses directional signs
 
-This means HuBMAP may differ from LINCS and MoTrPAC in one important way:
+This means HuBMAP differs from LINCS and MoTrPAC in one important way:
 
 - the HuBMAP models may be fundamentally unsigned membership libraries
 
 If so, there are two implementation options:
 
-### Option A: Reuse `signed_term_gene`
-
-- set all `sign = 1`
-- let `dig` emit one positive set per term
-- use naming without directional suffixes if needed
-
-### Option B: Add A Small Unsigned Term-Gene Converter
-
-If HuBMAP output naming or semantics do not fit `signed_term_gene` cleanly, add:
+The implemented solution is:
 
 - `convert unsigned_term_gene`
-
-This would likely be a very small companion converter, but it should only be added if `signed_term_gene` cannot express the desired output without awkward hacks.
 
 ## Proposed Model Manifest
 
@@ -257,6 +241,8 @@ This would likely be a very small companion converter, but it should only be add
 - `workflow_gmt_min_size`
 
 ## Companion Tracking Files
+
+The older `build_hubmap_asctb_hz1.py` and `build_hubmap_asctb_augmented_hz2.py` wrappers are no longer the primary runtime path. They remain only as historical notebook-integration references.
 
 Because the implementation will adapt notebook-replica scripts, add tracking notes:
 

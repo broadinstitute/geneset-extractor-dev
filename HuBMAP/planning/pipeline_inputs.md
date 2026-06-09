@@ -42,7 +42,24 @@ The all-signatures output tree is:
 
 The authoritative GMT output for each model is:
 
-- `tissue_extractor/genesets.gmt`
+- `extractor/genesets.gmt`
+
+The runtime shape is now:
+
+- `HZ1`
+  - `dig workflows hubmap_asctb`
+  - `dig convert unsigned_term_gene`
+- `HZ2`
+  - `dig workflows hubmap_asctb_augmented`
+  - `dig convert unsigned_term_gene`
+
+`geneset-extractor-dev/HuBMAP` is now primarily responsible for:
+
+- model selection
+- argument resolution
+- commands/log packaging
+
+The functional workflow logic lives in `dig-gene-set-extractors`.
 
 Optional provenance mirror inputs supported by the build entrypoint:
 

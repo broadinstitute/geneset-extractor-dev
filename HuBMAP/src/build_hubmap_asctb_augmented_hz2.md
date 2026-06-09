@@ -2,21 +2,26 @@
 
 This file tracks the HuBMAP `HZ2` wrapper used by the pipeline:
 
-- wrapper: `build_hubmap_asctb_augmented_hz2.py`
-- source script: `notebooks_adapted/build_hubmap_asctb_augmented_gmt.py`
+- primary runner: `run_hubmap_hz_model.py`
+- `dig` workflow: `hubmap_asctb_augmented`
+- source notebook reference: `notebooks_adapted/build_hubmap_asctb_augmented_gmt.py`
 
 ## Purpose
 
-The pipeline uses `HZ2` as a wrapper around the notebook-replica standalone script while preserving the underlying notebook-style preprocessing logic.
+The active pipeline now uses `HZ2` as a wrapper around a `dig` workflow while preserving the notebook-style augmentation logic.
 
 ## Differences From The Source Script
 
-- no biological logic changes
-- no data-processing changes
-- no CLI argument changes
+- the core workflow logic now lives in `dig-gene-set-extractors`
+- the wrapper resolves model inputs and calls:
+  - `dig workflows hubmap_asctb_augmented`
+  - `dig convert unsigned_term_gene`
+- output layout now uses:
+  - `workflow/`
+  - `extractor/`
 
-The wrapper only locates the standalone script from the repository root, imports it dynamically, and executes the source script entrypoint.
+The notebook-adapted script remains a reference for the augmentation logic, but it is no longer the primary runtime entrypoint.
 
 ## Integration Note
 
-The final authoritative GMT output for the integrated pipeline model is written by `dig-gene-set-extractors`, not by this wrapper.
+The final authoritative GMT output for the integrated pipeline model is written by `dig-gene-set-extractors`, and the workflow provenance begins from the initial HuBMAP inputs.
