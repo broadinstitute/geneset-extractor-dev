@@ -108,6 +108,48 @@ class GeneSeCoDatabasePopulator:
             logger.error(f"Error initializing schema: {e}")
             raise
 
+    def synchronize_next_available_node_id(self):
+        """Sync the next reserved ID with the current database contents."""
+        max_gene_set_id = 0
+        max_provenance_node_id = 0
+
+        try:
+            self.cursor.execute('SELECT COALESCE(MAX(gene_set_id), 0) FROM gene_set')
+            max_gene_set_id = self.cursor.fetchone()[0] or 0
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            self.cursor.execute('SELECT COALESCE(MAX(provenance_node_id), 0) FROM provenance_node')
+            max_provenance_node_id = self.cursor.fetchone()[0] or 0
+        except sqlite3.OperationalError:
+            pass
+
+        self.next_available_node_id = max(max_gene_set_id, max_provenance_node_id) + 1
+        logger.info(f"Next available node ID initialized to {self.next_available_node_id}")
+
+    def find_next_unused_node_id(self, start_id: Optional[int] = None) -> int:
+        """Find the next unused ID across gene_set and provenance_node."""
+        candidate_id = start_id or self.next_available_node_id
+
+        while True:
+            self.cursor.execute(
+                'SELECT 1 FROM gene_set WHERE gene_set_id = ?',
+                (candidate_id,)
+            )
+            gene_set_exists = self.cursor.fetchone() is not None
+
+            self.cursor.execute(
+                'SELECT 1 FROM provenance_node WHERE provenance_node_id = ?',
+                (candidate_id,)
+            )
+            provenance_node_exists = self.cursor.fetchone() is not None
+
+            if not gene_set_exists and not provenance_node_exists:
+                return candidate_id
+
+            candidate_id += 1
+
     def get_s3_client(self):
         """Lazily initialize the S3 client."""
         if boto3 is None:
@@ -418,8 +460,12 @@ class GeneSeCoDatabasePopulator:
         license_code: str,
         tags: str = None,
         gene_set_id: int = None
-    ) -> int:
-        """Insert gene set with optional explicit ID."""
+    ) -> Tuple[Optional[int], bool]:
+        """Insert gene set with optional explicit ID.
+
+        Returns:
+            Tuple of (gene_set_id, was_inserted).
+        """
         try:
             if gene_set_id is not None:
                 # Insert with explicit ID
@@ -427,7 +473,7 @@ class GeneSeCoDatabasePopulator:
                     'INSERT INTO gene_set (gene_set_id, standard_name, collection_name, license_code, tags) VALUES (?, ?, ?, ?, ?)',
                     (gene_set_id, standard_name, collection_name, license_code, tags)
                 )
-                return gene_set_id
+                return (gene_set_id, True)
             else:
                 # Auto-increment ID
                 self.cursor.execute(
@@ -435,7 +481,7 @@ class GeneSeCoDatabasePopulator:
                     (standard_name, collection_name, license_code, tags)
                 )
                 self.conn.commit()
-                return self.cursor.lastrowid
+                return (self.cursor.lastrowid, True)
         except sqlite3.IntegrityError as e:
             logger.warning(f"Gene set insert error for {standard_name}: {e}")
             # Try to get existing ID
@@ -444,7 +490,7 @@ class GeneSeCoDatabasePopulator:
                 (standard_name,)
             )
             result = self.cursor.fetchone()
-            return result[0] if result else None
+            return (result[0], False) if result else (None, False)
 
     def insert_gene_set_gene_symbol(self, gene_set_id: int, gene_symbol_id: int):
         """Insert gene set gene symbol association."""
@@ -776,6 +822,8 @@ class GeneSeCoDatabasePopulator:
     ):
         """Populate database from GMT files."""
         try:
+            self.synchronize_next_available_node_id()
+
             # Find all GMT files
             gmt_files = self.find_gmt_files(root_path=root_path, s3_root=s3_root)
             if not gmt_files:
@@ -827,10 +875,11 @@ class GeneSeCoDatabasePopulator:
                                 continue
                         
                         # Assign gene_set_id = next_available_node_id (for ID spacing)
-                        gene_set_id = self.next_available_node_id
+                        requested_gene_set_id = self.find_next_unused_node_id()
+                        gene_set_id = requested_gene_set_id
                         
                         # Insert gene set with explicit ID
-                        gene_set_id = self.insert_gene_set(
+                        gene_set_id, gene_set_was_inserted = self.insert_gene_set(
                             standard_name=standard_name,
                             collection_name=collection_name,
                             license_code=license_code,
@@ -852,9 +901,9 @@ class GeneSeCoDatabasePopulator:
                                 self.insert_gene_set_gene_symbol(gene_set_id, gene_symbol_id)
                                 total_genes += 1
                         
-                        # Insert provenance if available
+                        # Only insert provenance for newly created gene sets.
                         max_node_id = 0
-                        if provenance_data:
+                        if provenance_data and gene_set_was_inserted:
                             provenance_graph, geneset_metadata, run_summary = provenance_data
                             self.insert_provenance(gene_set_id, provenance_graph, geneset_metadata, run_summary)
                             # Populate gene_set_details from metadata JSON
@@ -872,10 +921,15 @@ class GeneSeCoDatabasePopulator:
                                     geneset_node_name=standard_name,
                                     geneset_node_name_match=gene_set_name
                                 )
+                        elif provenance_data and not gene_set_was_inserted:
+                            logger.info(
+                                f"Gene set '{standard_name}' already exists (id={gene_set_id}); "
+                                "skipping provenance insertion"
+                            )
                         
                         # Always advance next_available_node_id past this gene set's used IDs,
                         # so the next gene set never collides (even if provenance was missing/empty).
-                        self.next_available_node_id = max(gene_set_id, max_node_id) + 1
+                        self.next_available_node_id = max(requested_gene_set_id, gene_set_id, max_node_id) + 1
                         
                         total_gene_sets += 1
                         logger.info(
