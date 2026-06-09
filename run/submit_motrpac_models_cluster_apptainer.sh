@@ -445,6 +445,11 @@ run_task() {
     )
   elif [[ "${model_group}" == "HZ" ]]; then
     cmd+=(
+      --raw_counts_dir "${MOTRPAC_RAW_COUNTS_DIR}"
+      --transcript_metadata_tsv "${MOTRPAC_TRANSCRIPT_METADATA_TSV}"
+      --phenotype_metadata_tsv "${MOTRPAC_PHENOTYPE_METADATA_TSV}"
+      --feature_to_gene_tsv "${MOTRPAC_FEATURE_TO_GENE_TSV}"
+      --rat_to_human_tsv "${MOTRPAC_RAT_TO_HUMAN_TSV}"
       --feature_annot "${MOTRPAC_FEATURE_ANNOT}"
       --dea_dir "${MOTRPAC_DEA_DIR}"
       --mapping_file "${MOTRPAC_MAPPING_FILE}"
