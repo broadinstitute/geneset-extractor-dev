@@ -226,6 +226,8 @@ def build_extractor_cmd(
         "true",
         "--gmt_split_signed",
         "true",
+        "--gmt_name_separator",
+        "_",
         "--gmt_signed_labels",
         "up_dn",
         "--gmt_require_symbol",
