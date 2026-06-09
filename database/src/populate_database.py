@@ -10,6 +10,7 @@ import argparse
 import sqlite3
 import json
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Dict, List, Tuple, Optional
@@ -55,12 +56,23 @@ class DataFileRef:
 class GeneSeCoDatabasePopulator:
     """Populate GenSeCoDB database from GMT files."""
 
-    def __init__(self, db_path: str):
+    def __init__(
+        self,
+        db_path: str,
+        aws_access_key_id: Optional[str] = None,
+        aws_secret_access_key: Optional[str] = None,
+        aws_session_token: Optional[str] = None,
+        aws_region: Optional[str] = None,
+    ):
         """Initialize database connection."""
         self.db_path = db_path
         self.conn = None
         self.cursor = None
         self.s3_client = None
+        self.aws_access_key_id = aws_access_key_id
+        self.aws_secret_access_key = aws_secret_access_key
+        self.aws_session_token = aws_session_token
+        self.aws_region = aws_region
         self.next_available_node_id = 1  # Track next available node ID for spacing gene sets
 
     def connect(self):
@@ -102,7 +114,29 @@ class GeneSeCoDatabasePopulator:
             raise ImportError("boto3 is required when using --s3-data-root")
 
         if self.s3_client is None:
-            self.s3_client = boto3.client('s3')
+            client_kwargs = {}
+
+            access_key_id = self.aws_access_key_id or os.getenv('AWS_ACCESS_KEY_ID')
+            secret_access_key = self.aws_secret_access_key or os.getenv('AWS_SECRET_ACCESS_KEY')
+            session_token = self.aws_session_token or os.getenv('AWS_SESSION_TOKEN')
+            region = self.aws_region or os.getenv('AWS_DEFAULT_REGION') or os.getenv('AWS_REGION')
+
+            if access_key_id and secret_access_key:
+                client_kwargs['aws_access_key_id'] = access_key_id
+                client_kwargs['aws_secret_access_key'] = secret_access_key
+                if session_token:
+                    client_kwargs['aws_session_token'] = session_token
+                logger.info("Using explicit AWS access key credentials for S3 access")
+            elif access_key_id or secret_access_key:
+                raise ValueError(
+                    "Both AWS access key ID and secret access key must be provided together "
+                    "via CLI options or environment variables"
+                )
+
+            if region:
+                client_kwargs['region_name'] = region
+
+            self.s3_client = boto3.client('s3', **client_kwargs)
 
         return self.s3_client
 
@@ -896,6 +930,22 @@ def main():
         help='Optional path to a log file. If omitted, logs are only written to stderr.'
     )
     parser.add_argument(
+        '--aws-access-key-id',
+        help='Optional AWS access key ID for S3 access. Takes precedence over AWS_ACCESS_KEY_ID.'
+    )
+    parser.add_argument(
+        '--aws-secret-access-key',
+        help='Optional AWS secret access key for S3 access. Takes precedence over AWS_SECRET_ACCESS_KEY.'
+    )
+    parser.add_argument(
+        '--aws-session-token',
+        help='Optional AWS session token for temporary S3 credentials. Takes precedence over AWS_SESSION_TOKEN.'
+    )
+    parser.add_argument(
+        '--aws-region',
+        help='Optional AWS region for the S3 client. Takes precedence over AWS_DEFAULT_REGION and AWS_REGION.'
+    )
+    parser.add_argument(
         '--collection-name',
         default='GTEx',
         help='Collection name (default: GTEx)'
@@ -945,7 +995,13 @@ def main():
     require_provenance = not args.skip_provenance_check
     
     # Populate database
-    populator = GeneSeCoDatabasePopulator(args.db_path)
+    populator = GeneSeCoDatabasePopulator(
+        args.db_path,
+        aws_access_key_id=args.aws_access_key_id,
+        aws_secret_access_key=args.aws_secret_access_key,
+        aws_session_token=args.aws_session_token,
+        aws_region=args.aws_region,
+    )
     populator.connect()
     
     try:

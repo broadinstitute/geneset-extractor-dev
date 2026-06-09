@@ -45,6 +45,8 @@ python database/src/populate_database.py \
   --db-path database.db \
   --schema-file schema.sql \
   --s3-data-root s3://geneset-marc-test \
+  --aws-access-key-id "$AWS_ACCESS_KEY_ID" \
+  --aws-secret-access-key "$AWS_SECRET_ACCESS_KEY" \
   --output-log logs/populate_database.log
 ```
 
@@ -55,6 +57,10 @@ python database/src/populate_database.py \
 - `--data-root`: Required unless `--s3-data-root` is provided. Root directory to search recursively for `.gmt` files.
 - `--s3-data-root`: Required unless `--data-root` is provided. S3 URI to search recursively for `.gmt` files, for example `s3://s3-bucket-name`. Cannot be used together with `--data-root`.
 - `--output-log`: Optional. Path to a log file. If omitted, logs are written only to stderr.
+- `--aws-access-key-id`: Optional. AWS access key ID for S3 access. If provided together with `--aws-secret-access-key`, these credentials are tried before the default AWS credential chain.
+- `--aws-secret-access-key`: Optional. AWS secret access key for S3 access. Must be provided together with `--aws-access-key-id`.
+- `--aws-session-token`: Optional. AWS session token for temporary S3 credentials.
+- `--aws-region`: Optional. AWS region passed to the S3 client.
 - `--collection-name`: Optional. Collection name stored with imported gene sets. Default: `GTEx`.
 - `--species-code`: Optional. Species code stored in reference tables and gene set details. Default: `Homo_sapiens`.
 - `--species-name`: Optional. Human-readable species name. Default: `Homo sapiens`.
@@ -67,4 +73,8 @@ python database/src/populate_database.py \
 ### S3 Requirements
 
 - `boto3` must be installed in the Python environment when using `--s3-data-root`.
+- Credential resolution order for S3:
+- 1. `--aws-access-key-id` / `--aws-secret-access-key` / `--aws-session-token` if provided.
+- 2. `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` environment variables if present.
+- 3. The default AWS credential chain used by `boto3`.
 - AWS credentials and permissions must allow `s3:ListBucket` on the bucket and `s3:GetObject` for the relevant objects.
