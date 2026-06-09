@@ -293,34 +293,10 @@ def main() -> int:
             raise SystemExit(f"Missing tissue label fields for tissue={tissue_id} in {Path(args.tissue_list).resolve()}")
 
         tissue_root = outputs_root / tissue_id
-        prepared_dir = tissue_root / "prepared"
         models_root = tissue_root / "models"
         if args.overwrite:
             for model_id in tissue_scoped_models:
                 overwrite_dir(models_root / model_id)
-        if not dir_nonempty(prepared_dir):
-            run_command(
-                [
-                    str(Path(args.python_bin).resolve()),
-                    str(src_root / "build_motrpac_tissue_inputs.py"),
-                    "--counts_tsv",
-                    str(counts_tsv),
-                    "--transcript_metadata_tsv",
-                    str(transcript_metadata_tsv),
-                    "--phenotype_metadata_tsv",
-                    str(phenotype_metadata_tsv),
-                    "--feature_to_gene_tsv",
-                    str(feature_to_gene_tsv),
-                    "--rat_to_human_tsv",
-                    str(rat_to_human_tsv),
-                    "--tissue_label",
-                    tissue_label,
-                    "--transcript_tissue_label",
-                    transcript_tissue_label,
-                    "--out_dir",
-                    str(prepared_dir),
-                ]
-            )
 
         for model_id in tissue_scoped_models:
             model_family = model_by_id[model_id].get("model_family", "").strip()
@@ -338,10 +314,24 @@ def main() -> int:
                     model_id,
                     "--tissue_id",
                     tissue_id,
-                    "--prepared_dir",
-                    str(prepared_dir),
+                    "--counts_tsv",
+                    str(counts_tsv),
+                    "--tissue_label",
+                    tissue_label,
+                    "--transcript_tissue_label",
+                    transcript_tissue_label,
                     "--run_root",
                     str(models_root),
+                    "--raw_counts_tsv",
+                    str(counts_tsv),
+                    "--transcript_metadata_tsv",
+                    str(transcript_metadata_tsv),
+                    "--phenotype_metadata_tsv",
+                    str(phenotype_metadata_tsv),
+                    "--feature_to_gene_tsv",
+                    str(feature_to_gene_tsv),
+                    "--rat_to_human_tsv",
+                    str(rat_to_human_tsv),
                     "--python_bin",
                     str(Path(args.python_bin).resolve()),
                     "--rscript_bin",

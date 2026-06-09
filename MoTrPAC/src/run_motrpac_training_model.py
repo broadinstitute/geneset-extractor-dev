@@ -20,8 +20,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--model_id", required=True)
     parser.add_argument("--tissue_id", required=True)
-    parser.add_argument("--prepared_dir", required=True)
+    parser.add_argument("--prepared_dir")
+    parser.add_argument("--counts_tsv")
+    parser.add_argument("--tissue_label")
+    parser.add_argument("--transcript_tissue_label")
     parser.add_argument("--run_root", required=True)
+    parser.add_argument("--raw_counts_tsv")
+    parser.add_argument("--transcript_metadata_tsv")
+    parser.add_argument("--phenotype_metadata_tsv")
+    parser.add_argument("--feature_to_gene_tsv")
+    parser.add_argument("--rat_to_human_tsv")
     parser.add_argument("--python_bin", default=sys.executable or "python3")
     parser.add_argument("--rscript_bin", default="Rscript")
     parser.add_argument("--organism", default="human", choices=["human", "mouse"])
@@ -218,15 +226,26 @@ def build_extractor_cmd(
 def build_workflow_cmd(
     *,
     python_bin: str,
-    prepared_dir: Path,
+    prepared_dir: Path | None,
     workflow_out: Path,
     organism: str,
     genome_build: str,
     rscript_bin: str,
     include_sex: bool,
+    counts_tsv: str | None,
+    tissue_label: str | None,
+    transcript_tissue_label: str | None,
+    raw_counts_tsv: str | None,
+    transcript_metadata_tsv: str | None,
+    phenotype_metadata_tsv: str | None,
+    feature_to_gene_tsv: str | None,
+    rat_to_human_tsv: str | None,
     provenance_mirror_local_prefix: str | None,
     provenance_mirror_remote_prefix: str | None,
 ) -> list[str]:
+    counts_arg = counts_tsv or raw_counts_tsv
+    if not counts_arg:
+        raise SystemExit("MoTrPAC training runner requires --counts_tsv or --raw_counts_tsv.")
     cmd = [
         python_bin,
         "-m",
@@ -234,9 +253,7 @@ def build_workflow_cmd(
         "workflows",
         "motrpac_training",
         "--counts_tsv",
-        str(prepared_dir / "tissue_counts.tsv"),
-        "--sample_metadata_tsv",
-        str(prepared_dir / "sample_metadata.tsv"),
+        counts_arg,
         "--out_dir",
         str(workflow_out),
         "--organism",
@@ -248,6 +265,29 @@ def build_workflow_cmd(
         "--covariates",
         "sex" if include_sex else "none",
     ]
+    if prepared_dir is not None:
+        cmd.extend(["--sample_metadata_tsv", str(prepared_dir / "sample_metadata.tsv")])
+    else:
+        if not tissue_label or not transcript_tissue_label:
+            raise SystemExit("MoTrPAC training runner requires --tissue_label and --transcript_tissue_label when --prepared_dir is omitted.")
+        cmd.extend(
+            [
+                "--tissue_label",
+                tissue_label,
+                "--transcript_tissue_label",
+                transcript_tissue_label,
+            ]
+        )
+    if raw_counts_tsv:
+        cmd.extend(["--raw_counts_tsv", raw_counts_tsv])
+    if transcript_metadata_tsv:
+        cmd.extend(["--transcript_metadata_tsv", transcript_metadata_tsv])
+    if phenotype_metadata_tsv:
+        cmd.extend(["--phenotype_metadata_tsv", phenotype_metadata_tsv])
+    if feature_to_gene_tsv:
+        cmd.extend(["--feature_to_gene_tsv", feature_to_gene_tsv])
+    if rat_to_human_tsv:
+        cmd.extend(["--rat_to_human_tsv", rat_to_human_tsv])
     if provenance_mirror_local_prefix:
         cmd.extend(["--provenance_mirror_local_prefix", provenance_mirror_local_prefix])
     if provenance_mirror_remote_prefix:
@@ -309,7 +349,7 @@ def main() -> int:
         raise SystemExit(f"Unsupported model_id: {args.model_id}")
     settings = settings_by_model[args.model_id]
 
-    prepared_dir = Path(args.prepared_dir).resolve()
+    prepared_dir = Path(args.prepared_dir).resolve() if args.prepared_dir else None
     run_root = Path(args.run_root).resolve()
     model_out = run_root / args.model_id
     workflow_out = model_out / "workflow"
@@ -332,6 +372,14 @@ def main() -> int:
         genome_build=args.genome_build,
         rscript_bin=args.rscript_bin,
         include_sex=include_sex,
+        counts_tsv=args.counts_tsv,
+        tissue_label=args.tissue_label,
+        transcript_tissue_label=args.transcript_tissue_label,
+        raw_counts_tsv=args.raw_counts_tsv,
+        transcript_metadata_tsv=args.transcript_metadata_tsv,
+        phenotype_metadata_tsv=args.phenotype_metadata_tsv,
+        feature_to_gene_tsv=args.feature_to_gene_tsv,
+        rat_to_human_tsv=args.rat_to_human_tsv,
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
     )
