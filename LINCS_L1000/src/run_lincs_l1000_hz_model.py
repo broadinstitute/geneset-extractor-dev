@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import argparse
 import csv
-import importlib.util
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -15,7 +15,7 @@ from lincs_l1000_selection_io import default_model_manifest_path
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run one LINCS L1000 HZ model and emit dig-authored GMT outputs in pipeline layout."
+        description="Run one LINCS L1000 HZ model as a wrapper around dig workflows and signed term-gene conversion."
     )
     parser.add_argument("--model_id", required=True)
     parser.add_argument("--run_root", required=True)
@@ -74,15 +74,6 @@ def manifest_value(settings: dict[str, str], key: str, default: str) -> str:
     return value
 
 
-def load_source_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location(script_path.stem, script_path)
-    if spec is None or spec.loader is None:
-        raise SystemExit(f"Unable to load source script: {script_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def write_tsv(path: Path, rows: list[dict[str, str]], fieldnames: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:
@@ -100,13 +91,7 @@ def parse_gmt(path: Path) -> list[dict[str, str]]:
             parts = line.rstrip("\n").split("\t")
             if len(parts) < 3:
                 continue
-            rows.append(
-                {
-                    "set_name": parts[0],
-                    "description": parts[1],
-                    "gene_count": str(len(parts) - 2),
-                }
-            )
+            rows.append({"set_name": parts[0], "description": parts[1], "gene_count": str(len(parts) - 2)})
     return rows
 
 
@@ -122,7 +107,7 @@ def write_manifest(
     payload = {
         "model_id": model_id,
         "workflow_dir": str(workflow_out),
-        "tissue_extractor_dir": str(extractor_out),
+        "extractor_dir": str(extractor_out),
         "provenance_mirror_local_prefix": provenance_mirror_local_prefix,
         "provenance_mirror_remote_prefix": provenance_mirror_remote_prefix,
     }
@@ -130,49 +115,54 @@ def write_manifest(
     manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def model_source_info(model_id: str) -> tuple[str, Path]:
-    repo = Path(__file__).resolve().parents[3]
+def model_workflow_info(model_id: str) -> tuple[str, str]:
     if model_id == "HZ1":
-        return (
-            "chempert",
-            repo / "notebooks_adapted" / "build_lincs_l1000_chempert_gmt_only.py",
-        )
+        return ("chempert", "lincs_l1000_chempert")
     if model_id == "HZ2":
-        return (
-            "crisprko",
-            repo / "notebooks_adapted" / "build_lincs_l1000_crisprko_gmt_only.py",
-        )
+        return ("crisprko", "lincs_l1000_crisprko")
     raise SystemExit(f"Unsupported LINCS L1000 HZ model_id: {model_id}")
 
 
 def build_workflow_cmd(
     *,
     python_bin: str,
-    runner_script: Path,
     expression_tsv: Path,
     mapping_file: Path,
     workflow_out: Path,
     settings: dict[str, str],
-    kind: str,
+    workflow_name: str,
+    provenance_mirror_local_prefix: str | None,
+    provenance_mirror_remote_prefix: str | None,
 ) -> list[str]:
     cmd = [
         python_bin,
-        str(runner_script),
-        "--expression-tsv",
+        "-m",
+        "geneset_extractors.cli",
+        "workflows",
+        workflow_name,
+        "--expression_tsv",
         str(expression_tsv),
-        "--mapping-file",
+        "--mapping_file",
         str(mapping_file),
-        "--output-dir",
+        "--out_dir",
         str(workflow_out),
-        "--gmt-name",
+        "--organism",
+        "human",
+        "--genome_build",
+        "hg38",
+        "--gmt_name",
         manifest_value(settings, "workflow_gmt_name", "gene_set_library_crisp.gmt"),
-        "--min-gmt-size",
+        "--min_gmt_size",
         manifest_value(settings, "workflow_min_gmt_size", "5"),
     ]
-    if kind == "chempert":
-        cmd.extend(["--z-threshold", manifest_value(settings, "workflow_z_threshold", "3.0")])
-    elif kind == "crisprko":
-        cmd.extend(["--top-n", manifest_value(settings, "workflow_top_n", "250")])
+    if workflow_name == "lincs_l1000_chempert":
+        cmd.extend(["--z_threshold", manifest_value(settings, "workflow_z_threshold", "3.0")])
+    else:
+        cmd.extend(["--top_n", manifest_value(settings, "workflow_top_n", "250")])
+    if provenance_mirror_local_prefix:
+        cmd.extend(["--provenance_mirror_local_prefix", provenance_mirror_local_prefix])
+    if provenance_mirror_remote_prefix:
+        cmd.extend(["--provenance_mirror_remote_prefix", provenance_mirror_remote_prefix])
     return cmd
 
 
@@ -226,11 +216,12 @@ def build_extractor_cmd(
     return cmd
 
 
-def run_command(cmd: list[str], *, cwd: Path, log_path: Path) -> None:
+def run_command(cmd: list[str], *, cwd: Path, env: dict[str, str], log_path: Path) -> None:
     log_line(log_path, f"$ {shell_join(cmd)}")
     completed = subprocess.run(
         cmd,
         cwd=str(cwd),
+        env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -257,7 +248,8 @@ def write_model_commands(
             "## Workflow",
             "",
             "```bash",
-            shell_join(workflow_cmd),
+            f"cd {shlex.quote(str(dig_dir))}",
+            f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {shell_join(workflow_cmd)}",
             "```",
             "",
             "## Extractor",
@@ -276,81 +268,6 @@ def write_model_commands(
     write_text(model_out / "commands.md", text)
 
 
-def build_chempert_tables(*, module, expression_tsv: Path, mapping_file: Path, settings: dict[str, str], workflow_out: Path) -> Path:
-    z_threshold = float(manifest_value(settings, "workflow_z_threshold", "3.0"))
-    min_gmt_size = int(manifest_value(settings, "workflow_min_gmt_size", "5"))
-    chempert = module.preprocess_chempert(expression_tsv, mapping_file, z_threshold)
-    processed_rows = [
-        {
-            "gene": str(row["Gene"]),
-            "term": str(row["Chemical Perturbation"]),
-            "score": str(abs(float(row["z"]))),
-            "signed_score": str(float(row["z"])),
-            "sign": str(int(row["threshold"])),
-        }
-        for _, row in chempert.iterrows()
-    ]
-    write_tsv(workflow_out / "lincs_l1000_processed.tsv", processed_rows, ["gene", "term", "score", "signed_score", "sign"])
-
-    notebook_gmt = workflow_out / "gene_set_library_crisp.gmt"
-    module.write_combined_gmt(chempert, notebook_gmt, min_gmt_size)
-
-    signed_rows = sorted(
-        [
-            {
-                "term": row["term"],
-                "gene_id": row["gene"],
-                "gene_symbol": row["gene"],
-                "score": row["score"],
-                "sign": row["sign"],
-            }
-            for row in processed_rows
-        ],
-        key=lambda row: (
-            row["term"],
-            -int(row["sign"]),
-            row["gene_symbol"],
-        ),
-    )
-    signed_tsv = workflow_out / "lincs_l1000_signed_term_gene.tsv"
-    write_tsv(signed_tsv, signed_rows, ["term", "gene_id", "gene_symbol", "score", "sign"])
-    return signed_tsv
-
-
-def build_crisprko_tables(*, module, expression_tsv: Path, mapping_file: Path, settings: dict[str, str], workflow_out: Path) -> Path:
-    top_n = int(manifest_value(settings, "workflow_top_n", "250"))
-    min_gmt_size = int(manifest_value(settings, "workflow_min_gmt_size", "5"))
-    l1000 = module.preprocess_crisprko(expression_tsv, mapping_file, top_n)
-    processed_rows = [
-        {
-            "gene": str(row["Gene"]),
-            "term": str(row["Gene KO"]),
-            "score": str(abs(float(row[0]))),
-            "signed_score": str(float(row[0])),
-            "sign": str(int(row["Threshold Value"])),
-        }
-        for _, row in l1000.iterrows()
-    ]
-    write_tsv(workflow_out / "lincs_l1000_processed.tsv", processed_rows, ["gene", "term", "score", "signed_score", "sign"])
-
-    notebook_gmt = workflow_out / "gene_set_library_crisp.gmt"
-    module.write_combined_gmt(l1000, notebook_gmt, min_gmt_size)
-
-    signed_tsv = workflow_out / "lincs_l1000_signed_term_gene.tsv"
-    signed_rows = [
-        {
-            "term": row["term"],
-            "gene_id": row["gene"],
-            "gene_symbol": row["gene"],
-            "score": row["score"],
-            "sign": row["sign"],
-        }
-        for row in processed_rows
-    ]
-    write_tsv(signed_tsv, signed_rows, ["term", "gene_id", "gene_symbol", "score", "sign"])
-    return signed_tsv
-
-
 def main() -> int:
     args = parse_args()
     settings_by_model = load_model_settings(Path(args.model_manifest))
@@ -360,37 +277,31 @@ def main() -> int:
 
     expression_tsv = require_existing_file(args.expression_tsv, "expression TSV")
     mapping_file = require_existing_file(args.mapping_file, "mapping file")
-    kind, source_script = model_source_info(args.model_id)
-    if not source_script.exists():
-        raise SystemExit(f"Missing source script for {args.model_id}: {source_script}")
-    module = load_source_module(source_script)
+    _kind, workflow_name = model_workflow_info(args.model_id)
 
     run_root = Path(args.run_root).resolve()
     model_out = run_root / args.model_id
     workflow_out = model_out / "workflow"
-    extractor_out = model_out / "tissue_extractor"
+    extractor_out = model_out / "extractor"
     dig_dir = Path(args.dig_dir).resolve()
     if not dig_dir.exists() or not dig_dir.is_dir():
         raise SystemExit(f"Missing dig-gene-set-extractors directory: {dig_dir}")
-
-    runner_script = (
-        Path(__file__).resolve().parent / "build_lincs_l1000_chempert_hz1.py"
-        if args.model_id == "HZ1"
-        else Path(__file__).resolve().parent / "build_lincs_l1000_crisprko_hz2.py"
-    )
 
     model_out.mkdir(parents=True, exist_ok=True)
     workflow_out.mkdir(parents=True, exist_ok=True)
     extractor_out.mkdir(parents=True, exist_ok=True)
 
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(dig_dir / "src")
     workflow_cmd = build_workflow_cmd(
         python_bin=str(Path(args.python_bin).resolve()),
-        runner_script=runner_script,
         expression_tsv=expression_tsv,
         mapping_file=mapping_file,
         workflow_out=workflow_out,
         settings=settings,
-        kind=kind,
+        workflow_name=workflow_name,
+        provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
+        provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
     )
     signed_term_tsv = workflow_out / "lincs_l1000_signed_term_gene.tsv"
     extractor_cmd = build_extractor_cmd(
@@ -411,33 +322,11 @@ def main() -> int:
         return 0
 
     model_log = model_out / "run.log"
-    run_command(workflow_cmd, cwd=model_out, log_path=model_log)
-
-    if kind == "chempert":
-        build_chempert_tables(
-            module=module,
-            expression_tsv=expression_tsv,
-            mapping_file=mapping_file,
-            settings=settings,
-            workflow_out=workflow_out,
-        )
-    else:
-        build_crisprko_tables(
-            module=module,
-            expression_tsv=expression_tsv,
-            mapping_file=mapping_file,
-            settings=settings,
-            workflow_out=workflow_out,
-        )
-
-    run_command(extractor_cmd, cwd=dig_dir, log_path=model_log)
+    run_command(workflow_cmd, cwd=dig_dir, env=env, log_path=model_log)
+    run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
 
     summary_rows = [{"source_gmt": "genesets.gmt", **row} for row in parse_gmt(extractor_out / "genesets.gmt")]
-    write_tsv(
-        extractor_out / "signature_summary.tsv",
-        summary_rows,
-        ["source_gmt", "set_name", "description", "gene_count"],
-    )
+    write_tsv(extractor_out / "signature_summary.tsv", summary_rows, ["source_gmt", "set_name", "description", "gene_count"])
     write_manifest(
         manifest_path=extractor_out / "run_manifest.json",
         model_id=args.model_id,

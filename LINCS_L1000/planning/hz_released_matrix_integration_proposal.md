@@ -148,16 +148,11 @@ Shared:
 
 ## Proposed Runtime Shape
 
-Add dedicated all-dataset runners:
-
-- `src/run_lincs_l1000_hz_chempert_model.py`
-- `src/run_lincs_l1000_hz_crisprko_model.py`
-
-or one shared runner:
+Use one shared runner:
 
 - `src/run_lincs_l1000_hz_model.py`
 
-with explicit branching by model ID.
+with explicit branching by model ID, but keep the functional matrix-processing logic in dedicated `dig` workflows.
 
 Because these are matrix-level all-dataset workflows, the outer layout should look like:
 
@@ -167,7 +162,7 @@ Because these are matrix-level all-dataset workflows, the outer layout should lo
 Each model should write:
 
 - `workflow/`
-- `tissue_extractor/`
+- `extractor/`
 - `commands.md`
 - `run.log`
 
@@ -185,7 +180,7 @@ As with the revised MoTrPAC `HZ1` path, `dig` should be the authoritative GMT wr
 
 Recommended pattern:
 
-1. run the notebook-replica logic through a pipeline wrapper
+1. run the notebook-replica logic through a dedicated `dig` workflow
 2. materialize a dig-compatible signed table
 3. call a `dig` converter for authoritative GMT emission
 
@@ -268,7 +263,7 @@ For each model:
   - notebook-style processed table
   - audit/summary TSV
   - any intermediate signed term-gene table passed into `dig`
-- `tissue_extractor/`
+- `extractor/`
   - `genesets.gmt`
   - `geneset.tsv`
   - `geneset.full.tsv`
@@ -279,11 +274,11 @@ For each model:
 
 The authoritative GMT should be:
 
-- `tissue_extractor/genesets.gmt`
+- `extractor/genesets.gmt`
 
 ## Required Companion Tracking Files
 
-Because the implementation will adapt notebook-replica scripts, add companion notes like:
+Because the implementation originally adapted notebook-replica scripts, keep companion notes like:
 
 - `src/build_lincs_l1000_chempert_hz1.md`
 - `src/build_lincs_l1000_crisprko_hz2.md`

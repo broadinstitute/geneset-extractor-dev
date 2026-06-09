@@ -30,6 +30,18 @@ Shared:
 
 - `dig-gene-set-extractors/`
 
+## Runtime shape
+
+`HZ1` runs through:
+
+- `geneset_extractors.cli workflows lincs_l1000_chempert`
+- `geneset_extractors.cli convert signed_term_gene`
+
+`HZ2` runs through:
+
+- `geneset_extractors.cli workflows lincs_l1000_crisprko`
+- `geneset_extractors.cli convert signed_term_gene`
+
 ## Output behavior
 
 If `--out_root` is omitted, outputs go under:
@@ -43,7 +55,7 @@ The all-signatures output tree is:
 
 The authoritative GMT output for each model is:
 
-- `tissue_extractor/genesets.gmt`
+- `extractor/genesets.gmt`
 
 Optional provenance mirror inputs supported by the build entrypoint:
 
