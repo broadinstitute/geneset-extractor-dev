@@ -52,14 +52,13 @@ def resolve_input_path(path_value: str | None, *, base_dir: Path) -> str | None:
     return str(path)
 
 
-def sanitize_name_token(value: str) -> str:
-    token = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value).strip())
-    token = re.sub(r"_+", "_", token).strip("_")
-    return token or "tissue"
+def compact_name_token(value: str) -> str:
+    parts = [part for part in re.sub(r"[^A-Za-z0-9]+", " ", str(value).strip()).split() if part]
+    return "".join(parts) or "tissue"
 
 
-def gtex_aging_signature_name(tissue_id: str) -> str:
-    return f"GTEx_aging_{sanitize_name_token(tissue_id)}"
+def gtex_aging_signature_name(tissue_label: str) -> str:
+    return f"GTEx_aging_{compact_name_token(tissue_label)}"
 
 
 def load_model_settings(manifest_path: Path) -> dict[str, dict[str, str]]:
@@ -110,7 +109,6 @@ def build_workflow_cmd(
     workflow_out: Path,
     organism: str,
     genome_build: str,
-    tissue_id: str,
     tissue_label: str,
     expression_gct: Path,
     sample_attributes_tsv: Path,
@@ -172,7 +170,7 @@ def build_extractor_cmd(
     extractor_out: Path,
     organism: str,
     genome_build: str,
-    tissue_id: str,
+    tissue_label: str,
     settings: dict[str, str],
     gtf_path: str | None,
     provenance_mirror_local_prefix: str | None,
@@ -197,7 +195,7 @@ def build_extractor_cmd(
         "--genome_build",
         genome_build,
         "--signature_name",
-        gtex_aging_signature_name(tissue_id),
+        gtex_aging_signature_name(tissue_label),
         "--postprocess_mode",
         settings["extractor_postprocess_mode"],
         "--score_mode",
@@ -377,7 +375,7 @@ def main() -> int:
         extractor_out=extractor_out,
         organism=args.organism,
         genome_build=args.genome_build,
-        tissue_id=tissue_label,
+        tissue_label=tissue_label,
         settings=settings,
         gtf_path=resolved_gtf,
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
@@ -401,7 +399,7 @@ def main() -> int:
         extractor_out=extractor_out,
         organism=args.organism,
         genome_build=args.genome_build,
-        tissue_id=tissue_label,
+        tissue_label=tissue_label,
         settings=settings,
         gtf_path=resolved_gtf,
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,

@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from build_tissue_inputs import expanded_age_comparison_label
 from run_age_binned_model import build_extractor_cmd as build_age_binned_extractor_cmd
 from run_continuous_age_model import build_extractor_cmd as build_continuous_extractor_cmd
-from run_continuous_age_model import gtex_tissue_signature_name
+from run_continuous_age_model import gtex_aging_signature_name
 
 
 def test_expanded_age_comparison_label_uses_full_age_bins():
@@ -23,7 +23,7 @@ def test_age_binned_extractor_cmd_uses_gtex_gmt_naming():
         extractor_out=Path("/tmp/extractor"),
         organism="human",
         genome_build="hg38",
-        tissue_id="adipose_subcutaneous",
+        tissue_label="Adipose - Subcutaneous",
         settings={
             "extractor_postprocess_mode": "harmonizome",
             "extractor_score_mode": "signed_neglog10padj",
@@ -48,7 +48,7 @@ def test_age_binned_extractor_cmd_uses_gtex_gmt_naming():
     )
 
     assert "--comparison_name_column" in cmd and "gmt_comparison_label" in cmd
-    assert "--signature_name" in cmd and "GTEx_aging_adipose_subcutaneous" in cmd
+    assert "--signature_name" in cmd and "GTEx_aging_AdiposeSubcutaneous" in cmd
     assert "--gmt_name_separator" in cmd and "_" in cmd
     assert "--gmt_signed_labels" in cmd and "up_dn" in cmd
 
@@ -79,12 +79,12 @@ def test_continuous_age_extractor_cmd_uses_gtex_tissue_names():
             "EXTRACTOR_GMT_BIOTYPE_ALLOWLIST": "",
             "ANNOTATION_MODE": "none",
         },
-        signature_name=gtex_tissue_signature_name("adipose_subcutaneous"),
+        signature_name=gtex_aging_signature_name("Adipose - Subcutaneous"),
         gtf_path=None,
         provenance_mirror_local_prefix=None,
         provenance_mirror_remote_prefix=None,
     )
 
-    assert "--signature_name" in cmd and "GTEx_tissue_adipose_subcutaneous" in cmd
+    assert "--signature_name" in cmd and "GTEx_aging_AdiposeSubcutaneous" in cmd
     assert "--gmt_name_separator" in cmd and "_" in cmd
     assert "--gmt_signed_labels" in cmd and "up_dn" in cmd

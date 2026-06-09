@@ -60,14 +60,13 @@ def resolve_input_path(path_value: str | None, *, base_dir: Path) -> str | None:
     return str(path)
 
 
-def sanitize_name_token(value: str) -> str:
-    token = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value).strip())
-    token = re.sub(r"_+", "_", token).strip("_")
-    return token or "tissue"
+def compact_name_token(value: str) -> str:
+    parts = [part for part in re.sub(r"[^A-Za-z0-9]+", " ", str(value).strip()).split() if part]
+    return "".join(parts) or "tissue"
 
 
-def gtex_tissue_signature_name(tissue_id: str) -> str:
-    return f"GTEx_{sanitize_name_token(tissue_id)}"
+def gtex_aging_signature_name(tissue_label: str) -> str:
+    return f"GTEx_aging_{compact_name_token(tissue_label)}"
 
 
 def _model_sort_key(model_id: str) -> tuple[str, int]:
@@ -502,8 +501,8 @@ def write_tissue_method_note(path: Path, tissue_id: str, model_id: str) -> None:
 This extractor emits one combined GMT for `{tissue_id}` under model `{model_id}`.
 
 Examples:
-- `GTEx_{tissue_id}_up`: genes with positive age-associated scores
-- `GTEx_{tissue_id}_dn`: genes with negative age-associated scores
+- `GTEx_aging_{tissue_id}_up`: genes with positive age-associated scores
+- `GTEx_aging_{tissue_id}_dn`: genes with negative age-associated scores
 
 These are derived from one continuous-age regression across all retained tissue samples, not from separate age-bin contrasts.
 """
@@ -629,7 +628,7 @@ def main() -> int:
         settings = model_settings[model_id]
         model_out = run_root / model_id
         workflow_out = model_out / "workflow"
-        extractor_out = model_out / "tissue_extractor"
+        extractor_out = model_out / "extractor"
         tissue_deg_tsv = workflow_out / "deg_long.tsv"
         model_log = model_out / "run.log"
         model_out.mkdir(parents=True, exist_ok=True)
@@ -658,7 +657,7 @@ def main() -> int:
             organism=args.organism,
             genome_build=args.genome_build,
             settings=settings,
-            signature_name=gtex_tissue_signature_name(tissue_label),
+            signature_name=gtex_aging_signature_name(tissue_label),
             gtf_path=resolved_gtf,
             provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
             provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
