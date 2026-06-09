@@ -44,7 +44,7 @@ However, it can still be made to look like the existing models externally.
 `HZ1` should sit alongside the other MoTrPAC models and expose the same broad file categories:
 
 - `models/HZ1/workflow/`
-- `models/HZ1/tissue_extractor/`
+- `models/HZ1/extractor/`
 - `models/HZ1/commands.md`
 - `models/HZ1/run.log`
 
@@ -143,7 +143,7 @@ Optional passthroughs:
 Suggested authoritative outputs:
 
 - `motrpac_outputs/genesets/all_tissues/models/HZ1/workflow/`
-- `motrpac_outputs/genesets/all_tissues/models/HZ1/tissue_extractor/`
+- `motrpac_outputs/genesets/all_tissues/models/HZ1/extractor/`
 - `motrpac_outputs/genesets/all_tissues/models/HZ1/commands.md`
 - `motrpac_outputs/genesets/all_tissues/models/HZ1/run.log`
 
@@ -153,7 +153,7 @@ Within `workflow/`:
 - `motrpac_processing_audit.tsv`
 - optional additional notebook outputs depending on mode
 
-Within `tissue_extractor/`:
+Within `extractor/`:
 
 - `genesets.gmt`
 - `geneset.tsv`
@@ -166,7 +166,7 @@ Optional adapter files for pipeline consistency:
 - `signature_summary.tsv`
 - `run_manifest.json`
 
-The notebook-replica workflow outputs can still remain under `workflow/` for audit and comparison, but `dig` should write the authoritative GMT under `tissue_extractor/`.
+The notebook-replica workflow outputs can still remain under `workflow/` for audit and comparison, but `dig` should write the authoritative GMT under `extractor/`.
 
 This gives `HZ1` the same broad outer shape as:
 
@@ -196,10 +196,18 @@ Current models:
   - tissue-specific
   - raw-count based
   - one DEG model per tissue
+- `TR2`
+  - tissue-specific
+  - raw-count based
+  - one pooled DEG model per tissue without the sex covariate
 - `TW1`
   - tissue-specific
   - raw-count based
   - one DEG model per `tissue × sex × timepoint`
+- `TW2`
+  - tissue-specific
+  - raw-count based
+  - one DEG model per `tissue × timepoint` with sex as a covariate
 
 Proposed `HZ1`:
 
@@ -210,6 +218,15 @@ Proposed `HZ1`:
 So `HZ1` should be modeled as a parallel family, not a variant of `TR1` or `TW1`.
 
 But it should still be presented through the same outer model layout conventions as `TR1` and `TW1`.
+
+Additional `HZ` variants can coexist alongside this released-DEA model:
+
+- `HZ2`
+  - raw-count-derived aggregated library from pooled tissue contrasts
+- `HZ3`
+  - raw-count-derived aggregated library from stratified tissue contrasts
+
+Those variants are related algorithmically, but `HZ1` remains the released-DEA branch of the aggregated model family.
 
 ## Minimal File Changes If Implemented
 

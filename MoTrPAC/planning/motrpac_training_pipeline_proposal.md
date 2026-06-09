@@ -9,16 +9,33 @@ The pipeline now supports three related model shapes:
   - sex-combined
   - design includes training condition
   - covariate includes sex
+- `TR2`
+  - one model per tissue
+  - sex-combined
+  - design includes training condition only
 - `TW1`
   - one model family per tissue
   - one signature per `tissue × sex × timepoint`
   - training vs control within each stratum
   - notebook-style naming such as `t68-liver_male_8w`
   - implemented through `dig workflows motrpac_timewise` plus `convert rna_deg_multi`
+- `TW2`
+  - one model family per tissue
+  - one signature per `tissue × timepoint`
+  - training vs control within each stratum
+  - sex is pooled within the stratum and used as a covariate
 - `HZ1`
   - one model run across all tissues
   - starts from released DEA tables rather than raw counts
   - implemented through `dig workflows motrpac_released_dea` plus `convert signed_term_gene`
+- `HZ2`
+  - one model run across all tissues
+  - starts from raw counts
+  - aggregates pooled tissue-level raw contrasts into a library
+- `HZ3`
+  - one model run across all tissues
+  - starts from raw counts
+  - aggregates stratified tissue-level raw contrasts into a library
 
 Unlike GTEx, this proposal is for rat transcriptomics inputs. The proposed output policy is:
 
@@ -74,37 +91,38 @@ Under `geneset-extractor-dev/MoTrPAC/planning/`:
 
 ### Proposed `tissue_list.tsv`
 
-For the first pass, one row per available raw-count tissue file.
+The active tissue list is now a stable tissue mapping, not a per-tissue counts-path registry.
 
-Example first row:
+It should contain:
 
-- `liver`
-- `Liver`
-- `inputs/MoTrPAC/motrpac_test/raw_counts_by_tissue/TRNSCRPT_LIVER_RAW_COUNTS.tsv.gz`
-- `true`
+- `tissue_id`
+- `tissue_label`
+- `transcript_tissue_label`
+- `raw_counts_object`
 
 ### Proposed `model_list.tsv`
 
-For the first pass, three models:
+For the active pipeline, seven models:
 
 - `TR1`
+- `TR2`
 - `TW1`
+- `TW2`
 - `HZ1`
+- `HZ2`
+- `HZ3`
 
 Suggested metadata:
 
 - `model_id=TR1`
 - `model_family=training`
-- `description=training_vs_control_with_sex_covariate`
-- `enabled=false`
+- `description=pooled_training_vs_control_with_sex_covariate`
 - `model_id=TW1`
 - `model_family=timewise`
-- `description=timewise_training_vs_control_notebook_style`
-- `enabled=true`
+- `description=stratified_training_vs_control_by_sex_and_timepoint`
 - `model_id=HZ1`
 - `model_family=hz_released_dea`
-- `description=harmonizome_notebook_style_released_dea_all_tissues`
-- `enabled=false`
+- `description=aggregated_library_from_released_dea`
 
 ### Proposed `model_manifest.tsv`
 
@@ -116,6 +134,11 @@ For `TR1`, define:
 - output symbol space: human ortholog
 - annotation mode: feature map plus rat-to-human mapping
 
+For `TR2`, define:
+
+- design formula: `~ intervention`
+- coefficient of interest: training vs control
+
 For `TW1`, define:
 
 - one signature per `tissue × sex × timepoint`
@@ -125,6 +148,14 @@ For `TW1`, define:
 - example:
   - `t68-liver_male_8w`
 
+For `TW2`, define:
+
+- one signature per `tissue × timepoint`
+- training vs control within each stratum
+- include sex as a covariate inside the model
+- example:
+  - `t68-liver_8w`
+
 For `HZ1`, define:
 
 - released-DEA all-tissues workflow
@@ -133,6 +164,16 @@ For `HZ1`, define:
   - `gmt`
 - default GMT format:
   - `legacy`
+
+For `HZ2`, define:
+
+- all-tissues raw-count aggregated workflow
+- aggregate pooled tissue-level training contrasts into one library
+
+For `HZ3`, define:
+
+- all-tissues raw-count aggregated workflow
+- aggregate stratified tissue-level training contrasts into one library
 
 ## Proposed Pipeline Stages
 
@@ -178,28 +219,33 @@ Add:
 
 Responsibilities:
 
-- read prepared counts and sample metadata
-- fit limma/voom with:
-  - `~ intervention + sex`
-- extract the training-vs-control coefficient
-- write one DEG table for the tissue
-- pass that DEG table to `dig-gene-set-extractors` `convert rna_deg`
+- prepare one tissue bundle
+- call `dig workflows motrpac_training`
+- pass the resulting DEG table to `dig convert rna_deg`
 
 `TW1` responsibilities:
 
-- read prepared counts and sample metadata
-- derive notebook-style `tissue × sex × timepoint` comparisons
-- run grouped DE inside `dig`
-- emit one combined `deg_long.tsv`
-- convert grouped comparisons with `rna_deg_multi`
-- emit signatures with notebook-style names such as:
-  - `t68-liver_male_8w`
+- prepare one tissue bundle
+- call `dig workflows motrpac_timewise`
+- convert grouped comparisons with `dig convert rna_deg_multi`
 
 `HZ1` responsibilities:
 
 - run once across all tissues
 - reproduce the released-DEA processing logic inside a dedicated `dig` workflow
 - package outputs into the same outer model layout used by the rest of the pipeline
+
+`TW2` responsibilities:
+
+- prepare one tissue bundle
+- call `dig workflows motrpac_timepoint`
+- convert grouped comparisons with `dig convert rna_deg_multi`
+
+`HZ2` / `HZ3` responsibilities:
+
+- run once across all tissues
+- call `dig workflows motrpac_raw_aggregated`
+- convert the resulting signed term-gene table with `dig convert signed_term_gene`
 
 ### 3. Top-level orchestrator
 
@@ -249,20 +295,21 @@ Model outputs:
 - `workflow/training_deg.tsv`
 - `workflow/run_motrpac_training_limma_voom.R`
 - `workflow/...logs...`
-- `tissue_extractor/genesets.gmt`
-- `tissue_extractor/geneset.tsv`
-- `tissue_extractor/geneset.full.tsv`
-- `tissue_extractor/geneset.meta.json`
-- `tissue_extractor/geneset.provenance.json`
+- `extractor/genesets.gmt`
+- `extractor/geneset.tsv`
+- `extractor/geneset.full.tsv`
+- `extractor/geneset.meta.json`
+- `extractor/geneset.provenance.json`
 
 `HZ1` keeps the same outer model layout but different inner workflow contents:
 
 - `workflow/motrpac_processed.tsv`
 - `workflow/motrpac_processing_audit.tsv`
-- `tissue_extractor/gene_set_library_crisp.gmt`
-- `tissue_extractor/gene_set_library_up_crisp.gmt`
-- `tissue_extractor/gene_set_library_dn_crisp.gmt`
-- adapter `tissue_extractor/genesets.gmt`
+- `extractor/genesets.gmt`
+- `extractor/geneset.tsv`
+- `extractor/geneset.full.tsv`
+- `extractor/geneset.meta.json`
+- `extractor/geneset.provenance.json`
 
 ## Human-Mapped Output Policy
 

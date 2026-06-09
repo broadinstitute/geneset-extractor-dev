@@ -76,6 +76,10 @@ def manifest_value(settings: dict[str, str], key: str, default: str) -> str:
     return value
 
 
+def repo_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
 def build_workflow_cmd(
     *,
     python_bin: str,
@@ -84,9 +88,35 @@ def build_workflow_cmd(
     organism: str,
     genome_build: str,
     settings: dict[str, str],
+    rscript_bin: str,
     provenance_mirror_local_prefix: str | None,
     provenance_mirror_remote_prefix: str | None,
 ) -> list[str]:
+    workflow_stratify_scheme = manifest_value(settings, "workflow_stratify_scheme", "sex_timepoint")
+    if workflow_stratify_scheme == "timepoint":
+        return [
+            python_bin,
+            "-m",
+            "geneset_extractors.cli",
+            "workflows",
+            "motrpac_timepoint",
+            "--counts_tsv",
+            str(prepared_dir / "tissue_counts.tsv"),
+            "--sample_metadata_tsv",
+            str(prepared_dir / "sample_metadata.tsv"),
+            "--out_dir",
+            str(workflow_out),
+            "--organism",
+            organism,
+            "--genome_build",
+            genome_build,
+            "--tissue_id",
+            str(prepared_dir.parent.name),
+            "--rscript_bin",
+            rscript_bin,
+            "--min_samples_per_group",
+            manifest_value(settings, "workflow_min_samples_per_group", "5"),
+        ]
     cmd = [
         python_bin,
         "-m",
@@ -288,6 +318,7 @@ def main() -> int:
         organism=args.organism,
         genome_build=args.genome_build,
         settings=settings,
+        rscript_bin=args.rscript_bin,
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
     )

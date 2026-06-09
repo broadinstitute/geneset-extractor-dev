@@ -90,7 +90,11 @@ def write_workflow_script(
     counts_tsv: Path,
     metadata_tsv: Path,
     output_tsv: Path,
+    include_sex: bool,
 ) -> None:
+    formula_expr = "~ intervention + sex" if include_sex else "~ intervention"
+    coef_name = "interventiontraining"
+    model_formula_label = "intervention + sex" if include_sex else "intervention"
     script = f'''suppressPackageStartupMessages({{
   library(edgeR)
   library(limma)
@@ -110,7 +114,7 @@ meta$sex <- factor(as.character(meta$sex), levels=c("M", "F"))
 meta$intervention <- factor(as.character(meta$intervention), levels=c("control", "training"))
 count_mat <- count_mat[, meta$sample_id, drop=FALSE]
 y <- DGEList(counts=count_mat)
-design <- model.matrix(~ intervention + sex, data=meta)
+design <- model.matrix({formula_expr}, data=meta)
 keep_genes <- filterByExpr(y, design=design)
 y <- y[keep_genes, , keep.lib.sizes=FALSE]
 gene_ids <- gene_ids[keep_genes]
@@ -119,7 +123,7 @@ y <- calcNormFactors(y)
 v <- voom(y, design, plot=FALSE)
 fit <- lmFit(v, design)
 fit <- eBayes(fit)
-tt <- topTable(fit, coef="interventiontraining", number=Inf, sort.by="none")
+tt <- topTable(fit, coef="{coef_name}", number=Inf, sort.by="none")
 tt$comparison_id <- "training_vs_control"
 tt$gene_id <- gene_ids
 tt$gene_symbol <- gene_symbols
@@ -130,7 +134,7 @@ tt$backend <- "r_limma_voom_motrpac_training"
 tt$n_group_a <- sum(meta$intervention == "training")
 tt$n_group_b <- sum(meta$intervention == "control")
 tt$mean_expr <- tt$AveExpr
-tt$model_formula <- "intervention + sex"
+tt$model_formula <- "{model_formula_label}"
 keep_cols <- c("comparison_id", "gene_id", "gene_symbol", "logFC", "t", "P.Value", "adj.P.Val", "group_a", "group_b", "stratum", "backend", "n_group_a", "n_group_b", "mean_expr", "model_formula")
 tt <- tt[, keep_cols, drop=FALSE]
 colnames(tt)[colnames(tt) == "t"] <- "stat"
@@ -211,6 +215,46 @@ def build_extractor_cmd(
     return cmd
 
 
+def build_workflow_cmd(
+    *,
+    python_bin: str,
+    prepared_dir: Path,
+    workflow_out: Path,
+    organism: str,
+    genome_build: str,
+    rscript_bin: str,
+    include_sex: bool,
+    provenance_mirror_local_prefix: str | None,
+    provenance_mirror_remote_prefix: str | None,
+) -> list[str]:
+    cmd = [
+        python_bin,
+        "-m",
+        "geneset_extractors.cli",
+        "workflows",
+        "motrpac_training",
+        "--counts_tsv",
+        str(prepared_dir / "tissue_counts.tsv"),
+        "--sample_metadata_tsv",
+        str(prepared_dir / "sample_metadata.tsv"),
+        "--out_dir",
+        str(workflow_out),
+        "--organism",
+        organism,
+        "--genome_build",
+        genome_build,
+        "--rscript_bin",
+        rscript_bin,
+        "--covariates",
+        "sex" if include_sex else "none",
+    ]
+    if provenance_mirror_local_prefix:
+        cmd.extend(["--provenance_mirror_local_prefix", provenance_mirror_local_prefix])
+    if provenance_mirror_remote_prefix:
+        cmd.extend(["--provenance_mirror_remote_prefix", provenance_mirror_remote_prefix])
+    return cmd
+
+
 def run_command(cmd: list[str], *, cwd: Path, env: dict[str, str], log_path: Path) -> None:
     log_line(log_path, f"$ {shell_join(cmd)}")
     completed = subprocess.run(
@@ -278,17 +322,18 @@ def main() -> int:
     workflow_out.mkdir(parents=True, exist_ok=True)
     extractor_out.mkdir(parents=True, exist_ok=True)
 
-    rscript_bin = resolve_rscript_bin(args.rscript_bin)
-    check_r_packages(rscript_bin)
-
-    workflow_script = workflow_out / "run_motrpac_training_limma_voom.R"
+    include_sex = str(settings.get("workflow_covariates", "sex")).strip().lower() != "none"
     deg_tsv = workflow_out / "training_deg.tsv"
-    workflow_cmd = [rscript_bin, str(workflow_script)]
-    write_workflow_script(
-        script_path=workflow_script,
-        counts_tsv=prepared_dir / "tissue_counts.tsv",
-        metadata_tsv=prepared_dir / "sample_metadata.tsv",
-        output_tsv=deg_tsv,
+    workflow_cmd = build_workflow_cmd(
+        python_bin=str(Path(args.python_bin).resolve()),
+        prepared_dir=prepared_dir,
+        workflow_out=workflow_out,
+        organism=args.organism,
+        genome_build=args.genome_build,
+        rscript_bin=args.rscript_bin,
+        include_sex=include_sex,
+        provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
+        provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
     )
     extractor_cmd = build_extractor_cmd(
         python_bin=str(Path(args.python_bin).resolve()),
@@ -314,7 +359,7 @@ def main() -> int:
     env = dict(os.environ)
     env["PYTHONPATH"] = str(dig_dir / "src")
     model_log = model_out / "run.log"
-    run_command(workflow_cmd, cwd=model_out, env=env, log_path=model_log)
+    run_command(workflow_cmd, cwd=dig_dir, env=env, log_path=model_log)
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
     return 0
 

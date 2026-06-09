@@ -31,7 +31,7 @@ FILTER_MODEL_ID=""
 usage() {
   cat <<'EOF'
 Usage:
-  ./geneset-extractor-dev/run/submit_motrpac_models_cluster.sh --submit [--model_group TW|HZ] [--tissue_id TISSUE|all_tissues] [--model_id MODEL]
+  ./geneset-extractor-dev/run/submit_motrpac_models_cluster.sh --submit [--model_group TR|TW|HZ] [--tissue_id TISSUE|all_tissues] [--model_id MODEL]
   ./geneset-extractor-dev/run/submit_motrpac_models_cluster.sh --help
 
 Required environment variables:
@@ -105,7 +105,7 @@ csv_from_tsv_filter() {
 canonicalize_model_group() {
   case "$1" in
     TW|timewise) printf '%s\n' "TW" ;;
-    HZ|hz_released_dea) printf '%s\n' "HZ" ;;
+    HZ|hz_released_dea|hz_raw_aggregated) printf '%s\n' "HZ" ;;
     TR|training) printf '%s\n' "TR" ;;
     *) return 1 ;;
   esac
@@ -123,7 +123,7 @@ resolve_model_group_for_id() {
     }
     $model_id_col == model_id {
       if ($family_col == "timewise") print "TW"
-      else if ($family_col == "hz_released_dea") print "HZ"
+      else if ($family_col == "hz_released_dea" || $family_col == "hz_raw_aggregated") print "HZ"
       else if ($family_col == "training") print "TR"
       exit
     }
@@ -227,7 +227,7 @@ write_worklist() {
   awk -F $'\t' 'NR > 1 && $4 == "true" {
     group = ""
     if ($2 == "timewise") group = "TW"
-    else if ($2 == "hz_released_dea") group = "HZ"
+    else if ($2 == "hz_released_dea" || $2 == "hz_raw_aggregated") group = "HZ"
     else if ($2 == "training") group = "TR"
     if (group != "") print $1 "\t" group
   }' "${MOTRPAC_MODEL_LIST}" > "${model_tsv}"

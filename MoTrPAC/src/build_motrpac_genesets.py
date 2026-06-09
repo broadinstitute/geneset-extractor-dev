@@ -129,6 +129,11 @@ def main() -> int:
         for model_id in selected_models
         if str(model_by_id[model_id].get("model_family", "")).strip() in {"training", "timewise"}
     ]
+    raw_aggregated_models = [
+        model_id
+        for model_id in selected_models
+        if str(model_by_id[model_id].get("model_family", "")).strip() == "hz_raw_aggregated"
+    ]
 
     out_root = Path(args.out_root).resolve()
     outputs_root = out_root / "genesets"
@@ -143,9 +148,9 @@ def main() -> int:
     feature_to_gene_tsv = None
     rat_to_human_tsv = None
     raw_counts_dir = None
-    if selected_model_families & {"training", "timewise"}:
+    if selected_model_families & {"training", "timewise", "hz_raw_aggregated"}:
         if not args.raw_counts_dir:
-            raise SystemExit("Timewise/training MoTrPAC models require --raw_counts_dir.")
+            raise SystemExit("Timewise/training/raw-aggregated MoTrPAC models require --raw_counts_dir.")
         transcript_metadata_tsv = require_existing_file(args.transcript_metadata_tsv, "transcript metadata TSV")
         phenotype_metadata_tsv = require_existing_file(args.phenotype_metadata_tsv, "phenotype metadata TSV")
         feature_to_gene_tsv = require_existing_file(args.feature_to_gene_tsv, "feature-to-gene TSV")
@@ -159,11 +164,21 @@ def main() -> int:
     gene_info = require_existing_file(args.gene_info, "gene_info") if args.gene_info else None
     gene_csv = require_existing_file(args.gene_csv, "gene.csv") if args.gene_csv else None
 
+    released_hz_models = [
+        model_id
+        for model_id in selected_models
+        if str(model_by_id[model_id].get("model_family", "")).strip() == "hz_released_dea"
+    ]
+
     conflicts: list[str] = []
-    if "hz_released_dea" in selected_model_families:
-        model_out = outputs_root / "all_tissues" / "models" / "HZ1"
+    for model_id in released_hz_models:
+        model_out = outputs_root / "all_tissues" / "models" / model_id
         if dir_nonempty(model_out):
-            conflicts.append(existing_output_message(tissue_id="all_tissues", model_id="HZ1", path=model_out))
+            conflicts.append(existing_output_message(tissue_id="all_tissues", model_id=model_id, path=model_out))
+    for model_id in raw_aggregated_models:
+        model_out = outputs_root / "all_tissues" / "models" / model_id
+        if dir_nonempty(model_out):
+            conflicts.append(existing_output_message(tissue_id="all_tissues", model_id=model_id, path=model_out))
     for tissue_id in selected_tissues:
         tissue_root = outputs_root / tissue_id
         for model_id in tissue_scoped_models:
@@ -174,14 +189,14 @@ def main() -> int:
         raise SystemExit("\n\n".join(conflicts))
 
     if "hz_released_dea" in selected_model_families:
-        if args.overwrite:
-            overwrite_dir(outputs_root / "all_tissues" / "models" / "HZ1")
+        for model_id in released_hz_models:
+            if args.overwrite:
+                overwrite_dir(outputs_root / "all_tissues" / "models" / model_id)
         if feature_annot is None or dea_dir is None or mapping_file is None:
             raise SystemExit(
-                "HZ1 requires --feature_annot, --dea_dir, and --mapping_file."
+                "Released-DEA MoTrPAC HZ models require --feature_annot, --dea_dir, and --mapping_file."
             )
-        hz_models = [model_id for model_id in selected_models if str(model_by_id[model_id].get("model_family", "")).strip() == "hz_released_dea"]
-        for model_id in hz_models:
+        for model_id in released_hz_models:
             run_command(
                 [
                     str(Path(args.python_bin).resolve()),
@@ -205,6 +220,53 @@ def main() -> int:
                 ]
                 + (["--gene_info", str(gene_info)] if gene_info is not None else [])
                 + (["--gene_csv", str(gene_csv)] if gene_csv is not None else [])
+                + (
+                    ["--provenance_mirror_local_prefix", args.provenance_mirror_local_prefix]
+                    if args.provenance_mirror_local_prefix
+                    else []
+                )
+                + (
+                    ["--provenance_mirror_remote_prefix", args.provenance_mirror_remote_prefix]
+                    if args.provenance_mirror_remote_prefix
+                    else []
+                )
+            )
+
+    if "hz_raw_aggregated" in selected_model_families:
+        for model_id in raw_aggregated_models:
+            if args.overwrite:
+                overwrite_dir(outputs_root / "all_tissues" / "models" / model_id)
+            run_command(
+                [
+                    str(Path(args.python_bin).resolve()),
+                    str(src_root / "run_motrpac_hz_raw_aggregated_model.py"),
+                    "--model_id",
+                    model_id,
+                    "--run_root",
+                    str(outputs_root / "all_tissues" / "models"),
+                    "--python_bin",
+                    str(Path(args.python_bin).resolve()),
+                    "--rscript_bin",
+                    args.rscript_bin,
+                    "--dig_dir",
+                    str(dig_dir),
+                    "--raw_counts_dir",
+                    str(raw_counts_dir),
+                    "--transcript_metadata_tsv",
+                    str(transcript_metadata_tsv),
+                    "--phenotype_metadata_tsv",
+                    str(phenotype_metadata_tsv),
+                    "--feature_to_gene_tsv",
+                    str(feature_to_gene_tsv),
+                    "--rat_to_human_tsv",
+                    str(rat_to_human_tsv),
+                    "--model_list",
+                    str(Path(args.model_list).resolve()),
+                    "--tissue_list",
+                    str(Path(args.tissue_list).resolve()),
+                    "--model_manifest",
+                    str(model_manifest),
+                ]
                 + (
                     ["--provenance_mirror_local_prefix", args.provenance_mirror_local_prefix]
                     if args.provenance_mirror_local_prefix
