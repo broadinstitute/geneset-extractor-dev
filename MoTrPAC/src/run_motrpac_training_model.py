@@ -14,6 +14,29 @@ from typing import Any
 from motrpac_selection_io import default_model_manifest_path
 
 
+CANONICAL_TISSUE_TERMS: dict[str, str] = {
+    "adrenals": "T60-Adrenals",
+    "blood": "T30-Blood-RNA",
+    "brown_adipose": "T69-Brown-Adipose",
+    "colon": "T61-Colon",
+    "cortex": "T53-Cortex",
+    "gastrocnemius": "T55-Gastrocnemius",
+    "heart": "T58-Heart",
+    "hippocampus": "T52-Hippocampus",
+    "hypothalamus": "T54-Hypothalamus",
+    "kidney": "T59-Kidney",
+    "liver": "T68-Liver",
+    "lung": "T66-Lung",
+    "ovaries": "T64-Ovaries",
+    "small_intestine": "T67-Small-Intestine",
+    "spleen": "T62-Spleen",
+    "testes": "T63-Testes",
+    "vastus_lateralis": "T56-Vastus-Lateralis",
+    "vena_cava": "T99-Vena-Cava",
+    "white_adipose": "T70-White-Adipose",
+}
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run one MoTrPAC training model and emit human-mapped gene-set outputs."
@@ -90,6 +113,14 @@ def check_r_packages(rscript_bin: str) -> None:
             "R packages 'edgeR' and 'limma' are required for the MoTrPAC training workflow and were not found for "
             f"{rscript_bin}."
         )
+
+
+def motrpac_training_signature_name(*, tissue_id: str, tissue_label: str | None) -> str:
+    tissue_term = CANONICAL_TISSUE_TERMS.get(str(tissue_id).strip(), "")
+    if not tissue_term:
+        fallback = str(tissue_label or tissue_id).strip()
+        tissue_term = fallback.replace(" ", "-")
+    return f"MoTrPAC_{tissue_term}_TrainingVsControl"
 
 
 def write_workflow_script(
@@ -195,6 +226,8 @@ def build_extractor_cmd(
         "true",
         "--gmt_split_signed",
         "true",
+        "--gmt_signed_labels",
+        "Up_Down",
         "--gmt_require_symbol",
         settings["extractor_gmt_require_symbol"],
         "--emit_small_gene_sets",
@@ -389,7 +422,10 @@ def main() -> int:
         extractor_out=extractor_out,
         organism=args.organism,
         genome_build=args.genome_build,
-        signature_name=f"{args.model_id}__training_vs_control",
+        signature_name=motrpac_training_signature_name(
+            tissue_id=args.tissue_id,
+            tissue_label=args.tissue_label,
+        ),
         settings=settings,
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,

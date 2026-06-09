@@ -254,7 +254,7 @@ def build_extractor_cmd(
         "--gmt_name_separator",
         "_",
         "--gmt_signed_labels",
-        "up_dn",
+        "Up_Down",
         "--gmt_require_symbol",
         settings["extractor_gmt_require_symbol"],
         "--emit_small_gene_sets",

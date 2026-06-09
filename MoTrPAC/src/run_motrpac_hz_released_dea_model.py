@@ -160,7 +160,7 @@ def build_extractor_cmd(
         "--gmt_name_separator",
         "_",
         "--gmt_signed_labels",
-        "up_dn",
+        "Up_Down",
         "--gmt_min_genes",
         manifest_value(settings, "workflow_min_genes", "5"),
         "--gmt_require_symbol",
