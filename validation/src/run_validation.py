@@ -4,6 +4,7 @@ from run_eaggl import run_eaggl, run_pigean, save_results
 
 
 client = "eaggl"
+force_rewrite = False
 
 BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/runs/gtex_all_models/genesets"
 OUT_FILE = "../../data/gtex/output.tissue/{}_validation_results.txt"
@@ -69,6 +70,10 @@ def main():
     for tissue in os.listdir(BASE_FOLDER):
         tissue_path = os.path.join(BASE_FOLDER, tissue)
         if os.path.isdir(tissue_path):
+            out_file = OUT_FILE_PIGEAN.format(tissue) if client == "pigean" else OUT_FILE.format(tissue)
+            if not force_rewrite and os.path.exists(out_file):
+                print(f"Skipping validation for tissue {tissue} as output file already exists.")
+                continue
             validate_tissue(tissue)
 
 

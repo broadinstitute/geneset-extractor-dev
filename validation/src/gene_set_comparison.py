@@ -9,7 +9,7 @@ OUT_FILE = "../../data/gtex/output.tissue/adipose_tissue_{}_comparison.tsv"
 DCC_COMP_OUT_FILE = "../../data/gtex/output.tissue/DM_comparison.tsv"
 DM_VS_DM_COMP_OUT_FILE = "../../data/gtex/output.tissue/DM_vs_DM_comparison.tsv"
 
-MODELS = [ "DM", "Harmo", 
+MODELS = [ "DM", "HZ1", "Harmo", 
     "AB1", "AB2", "AB3", "AB4", "AB5", "AB6", "AB7", "AB8", "AB9", "AB10",
     "AB11", "AB12", "AB13", "AB14", "AB15", "AB16", "AB17", "AB18", "AB19", "AB20", "AB21", "AB22", "CFDE1"
 ]
@@ -103,7 +103,8 @@ def compare_gene_sets(gene_set_name, genesets, out_f):
         else:
             left_only, overlap, right_only = gene_set_overlap(base_gene_set, genesets[model2])
             row.append("{}|{}|{}".format(left_only, overlap, right_only))
-    out_f.write("\t".join(row) + "\n")
+    if len("".join(row[1:])) > 1:
+        out_f.write("\t".join(row) + "\n")
 
 
 def main_matrix():
