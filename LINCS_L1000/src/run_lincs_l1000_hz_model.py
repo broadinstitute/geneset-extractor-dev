@@ -123,6 +123,28 @@ def model_workflow_info(model_id: str) -> tuple[str, str]:
     raise SystemExit(f"Unsupported LINCS L1000 HZ model_id: {model_id}")
 
 
+def lincs_term_prefix(model_id: str) -> str:
+    if model_id == "HZ1":
+        return "LINCS_L1000_Chem_Pert"
+    if model_id == "HZ2":
+        return "LINCS_L1000_CRISPR_KO"
+    raise SystemExit(f"Unsupported LINCS L1000 HZ model_id: {model_id}")
+
+
+def prefix_signed_term_table(*, src_path: Path, dst_path: Path, term_prefix: str) -> None:
+    with src_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        fieldnames = list(reader.fieldnames or [])
+        if "term" not in fieldnames:
+            raise SystemExit(f"Signed term-gene table is missing required term column: {src_path}")
+        rows: list[dict[str, str]] = []
+        for row in reader:
+            term = str(row.get("term", "")).strip()
+            row["term"] = f"{term_prefix}_{term}" if term else term_prefix
+            rows.append({str(key): str(value) for key, value in row.items()})
+    write_tsv(dst_path, rows, fieldnames)
+
+
 def build_workflow_cmd(
     *,
     python_bin: str,
@@ -278,6 +300,7 @@ def main() -> int:
     expression_tsv = require_existing_file(args.expression_tsv, "expression TSV")
     mapping_file = require_existing_file(args.mapping_file, "mapping file")
     _kind, workflow_name = model_workflow_info(args.model_id)
+    term_prefix = lincs_term_prefix(args.model_id)
 
     run_root = Path(args.run_root).resolve()
     model_out = run_root / args.model_id
@@ -304,9 +327,10 @@ def main() -> int:
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
     )
     signed_term_tsv = workflow_out / "lincs_l1000_signed_term_gene.tsv"
+    prefixed_signed_term_tsv = workflow_out / "lincs_l1000_signed_term_gene_prefixed.tsv"
     extractor_cmd = build_extractor_cmd(
         python_bin=str(Path(args.python_bin).resolve()),
-        signed_term_tsv=signed_term_tsv,
+        signed_term_tsv=prefixed_signed_term_tsv,
         extractor_out=extractor_out,
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
@@ -323,6 +347,7 @@ def main() -> int:
 
     model_log = model_out / "run.log"
     run_command(workflow_cmd, cwd=dig_dir, env=env, log_path=model_log)
+    prefix_signed_term_table(src_path=signed_term_tsv, dst_path=prefixed_signed_term_tsv, term_prefix=term_prefix)
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
 
     summary_rows = [{"source_gmt": "genesets.gmt", **row} for row in parse_gmt(extractor_out / "genesets.gmt")]
