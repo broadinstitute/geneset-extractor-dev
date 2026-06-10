@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 WORK_ROOT="${WORK_ROOT:-$(pwd)}"
 
-LINCS_CONFIG_ROOT="${LINCS_CONFIG_ROOT:-${REPO_ROOT}/geneset-extractor-dev/LINCS_L1000/planning}"
+LINCS_CONFIG_ROOT="${LINCS_CONFIG_ROOT:-${REPO_ROOT}/geneset-extractor-dev/LINCS_L1000/config}"
 DIG_DIR="${DIG_DIR:-${REPO_ROOT}/dig-gene-set-extractors}"
 
 LINCS_MODEL_LIST="${LINCS_MODEL_LIST:-${LINCS_CONFIG_ROOT}/model_list.tsv}"

@@ -7,7 +7,7 @@ REPO_ROOT="${REPO_ROOT:-${DEFAULT_REPO_ROOT}}"
 SELF_PATH="${REPO_ROOT}/geneset-extractor-dev/run/submit_hubmap_models_cluster_apptainer.sh"
 WORK_ROOT="${WORK_ROOT:-$(pwd)}"
 
-HUBMAP_CONFIG_ROOT="${HUBMAP_CONFIG_ROOT:-${REPO_ROOT}/geneset-extractor-dev/HuBMAP/planning}"
+HUBMAP_CONFIG_ROOT="${HUBMAP_CONFIG_ROOT:-${REPO_ROOT}/geneset-extractor-dev/HuBMAP/config}"
 DIG_DIR="${DIG_DIR:-${REPO_ROOT}/dig-gene-set-extractors}"
 
 HUBMAP_MODEL_LIST="${HUBMAP_MODEL_LIST:-${HUBMAP_CONFIG_ROOT}/model_list.tsv}"

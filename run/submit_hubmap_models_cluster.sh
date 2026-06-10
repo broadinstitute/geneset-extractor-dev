@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 WORK_ROOT="${WORK_ROOT:-$(pwd)}"
 
-HUBMAP_CONFIG_ROOT="${HUBMAP_CONFIG_ROOT:-${REPO_ROOT}/geneset-extractor-dev/HuBMAP/planning}"
+HUBMAP_CONFIG_ROOT="${HUBMAP_CONFIG_ROOT:-${REPO_ROOT}/geneset-extractor-dev/HuBMAP/config}"
 DIG_DIR="${DIG_DIR:-${REPO_ROOT}/dig-gene-set-extractors}"
 
 HUBMAP_MODEL_LIST="${HUBMAP_MODEL_LIST:-${HUBMAP_CONFIG_ROOT}/model_list.tsv}"

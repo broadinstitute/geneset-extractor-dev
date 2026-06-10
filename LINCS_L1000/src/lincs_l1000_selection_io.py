@@ -12,8 +12,8 @@ def lincs_root() -> Path:
     return repo_root() / "geneset-extractor-dev" / "LINCS_L1000"
 
 
-def planning_root() -> Path:
-    return lincs_root() / "planning"
+def config_root() -> Path:
+    return lincs_root() / "config"
 
 
 def default_out_root() -> Path:
@@ -21,11 +21,11 @@ def default_out_root() -> Path:
 
 
 def default_model_list_path() -> Path:
-    return planning_root() / "model_list.tsv"
+    return config_root() / "model_list.tsv"
 
 
 def default_model_manifest_path() -> Path:
-    return planning_root() / "model_manifest.tsv"
+    return config_root() / "model_manifest.tsv"
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:

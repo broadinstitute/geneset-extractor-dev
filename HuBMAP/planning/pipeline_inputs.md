@@ -9,8 +9,8 @@ The current HuBMAP pipeline supports two all-signatures `HZ*` models:
 
 ## Planning inputs
 
-- `planning/model_list.tsv`
-- `planning/model_manifest.tsv`
+- `config/model_list.tsv`
+- `config/model_manifest.tsv`
 
 ## Biological and mapping inputs
 
