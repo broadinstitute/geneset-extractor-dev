@@ -180,11 +180,13 @@ prepare_common() {
   mkdir -p "${WORK_ROOT}" "${QSUB_LOG_ROOT}"
   require_dir "${DIG_DIR}"
 
-  require_var APPTAINER_IMAGE
   require_var HUBMAP_HUMAN_GENE_INFO
   require_var HUBMAP_RAW_ASCTB_DIR
 
-  require_file "${APPTAINER_IMAGE}"
+  if [[ -z "${GENESET_EXTRACTORS_IN_APPTAINER:-}" ]]; then
+    require_var APPTAINER_IMAGE
+    require_file "${APPTAINER_IMAGE}"
+  fi
   require_file "${HUBMAP_MODEL_LIST}"
   require_file "${HUBMAP_MODEL_MANIFEST}"
   require_file "${HUBMAP_HUMAN_GENE_INFO}"

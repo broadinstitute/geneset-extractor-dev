@@ -221,7 +221,6 @@ prepare_common() {
   mkdir -p "${WORK_ROOT}" "${QSUB_LOG_ROOT}"
   require_dir "${DIG_DIR}"
 
-  require_var APPTAINER_IMAGE
   require_var GTEX_V10_COUNTS_GCT
   require_var GTEX_V10_SAMPLE_ATTRIBUTES_TSV
   require_var GTEX_V10_SUBJECT_PHENOTYPES_TSV
@@ -231,7 +230,10 @@ prepare_common() {
   require_var GTEX_V8_HUMAN_GENE_INFO
   require_var GTEX_GTF
 
-  require_file "${APPTAINER_IMAGE}"
+  if [[ -z "${GENESET_EXTRACTORS_IN_APPTAINER:-}" ]]; then
+    require_var APPTAINER_IMAGE
+    require_file "${APPTAINER_IMAGE}"
+  fi
   require_file "${GTEX_MODEL_LIST}"
   require_file "${GTEX_BROAD_TISSUE_LIST}"
   require_file "${GTEX_AGE_BINNED_MODEL_MANIFEST}"

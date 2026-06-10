@@ -227,7 +227,6 @@ prepare_common() {
   mkdir -p "${WORK_ROOT}" "${QSUB_LOG_ROOT}"
   require_dir "${DIG_DIR}"
 
-  require_var APPTAINER_IMAGE
   require_var MOTRPAC_RAW_COUNTS_DIR
   require_var MOTRPAC_TRANSCRIPT_METADATA_TSV
   require_var MOTRPAC_PHENOTYPE_METADATA_TSV
@@ -237,7 +236,10 @@ prepare_common() {
   require_var MOTRPAC_DEA_DIR
   require_var MOTRPAC_MAPPING_FILE
 
-  require_file "${APPTAINER_IMAGE}"
+  if [[ -z "${GENESET_EXTRACTORS_IN_APPTAINER:-}" ]]; then
+    require_var APPTAINER_IMAGE
+    require_file "${APPTAINER_IMAGE}"
+  fi
   require_file "${MOTRPAC_MODEL_LIST}"
   require_file "${MOTRPAC_TISSUE_LIST}"
   require_file "${MOTRPAC_MODEL_MANIFEST}"

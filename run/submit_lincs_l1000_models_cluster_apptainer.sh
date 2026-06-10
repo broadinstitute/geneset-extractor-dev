@@ -173,12 +173,14 @@ prepare_common() {
   mkdir -p "${WORK_ROOT}" "${QSUB_LOG_ROOT}"
   require_dir "${DIG_DIR}"
 
-  require_var APPTAINER_IMAGE
   require_var LINCS_CHEMPERT_EXPRESSION_TSV
   require_var LINCS_CRISPRKO_EXPRESSION_TSV
   require_var LINCS_MAPPING_FILE
 
-  require_file "${APPTAINER_IMAGE}"
+  if [[ -z "${GENESET_EXTRACTORS_IN_APPTAINER:-}" ]]; then
+    require_var APPTAINER_IMAGE
+    require_file "${APPTAINER_IMAGE}"
+  fi
   require_file "${LINCS_MODEL_LIST}"
   require_file "${LINCS_MODEL_MANIFEST}"
   require_file "${LINCS_CHEMPERT_EXPRESSION_TSV}"
