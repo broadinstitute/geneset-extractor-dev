@@ -271,11 +271,12 @@ submit_array() {
 }
 
 main() {
-  parse_cli "$@"
-  prepare_common
   if task_id_from_env >/dev/null 2>&1; then
+    prepare_common
     run_worker
   else
+    parse_cli "$@"
+    prepare_common
     submit_array
   fi
 }
