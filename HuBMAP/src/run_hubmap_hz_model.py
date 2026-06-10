@@ -167,7 +167,11 @@ def build_workflow_cmd(
         cmd.extend(["--asctb_dir", str(resolved_asctb_dir)])
     elif model_id == "HZ2":
         if input_matrix is None:
-            raise SystemExit("HZ2 requires --input_matrix")
+            sibling_hz1_matrix = workflow_out.parent.parent / "HZ1" / "workflow" / "gene_attribute_matrix.txt.gz"
+            if sibling_hz1_matrix.exists():
+                input_matrix = sibling_hz1_matrix
+            else:
+                raise SystemExit("HZ2 requires --input_matrix or an existing HZ1 workflow gene_attribute_matrix.txt.gz")
         cmd = [
             python_bin,
             "-m",

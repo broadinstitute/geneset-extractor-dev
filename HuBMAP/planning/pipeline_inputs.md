@@ -25,6 +25,10 @@ For `HZ2`:
   - `outputs_hubmap/gene_attribute_matrix.txt.gz`
 - `inputs/human_gene_info`
 
+If `HZ1` has already been run in the same output root, `HZ2` can also reuse:
+
+- `genesets/all_signatures/models/HZ1/workflow/gene_attribute_matrix.txt.gz`
+
 ## Software inputs
 
 - `dig-gene-set-extractors/`

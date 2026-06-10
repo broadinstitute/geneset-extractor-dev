@@ -144,9 +144,16 @@ def main() -> int:
             if asctb_dir is not None:
                 cmd.extend(["--asctb_dir", str(asctb_dir)])
         elif model_id == "HZ2":
-            if input_matrix is None:
-                raise SystemExit("HZ2 requires --input_matrix")
-            cmd.extend(["--input_matrix", str(input_matrix)])
+            resolved_input_matrix = input_matrix
+            if resolved_input_matrix is None:
+                sibling_hz1_matrix = outputs_root / "all_signatures" / "models" / "HZ1" / "workflow" / "gene_attribute_matrix.txt.gz"
+                if sibling_hz1_matrix.exists():
+                    resolved_input_matrix = sibling_hz1_matrix
+                elif "HZ1" in selected_models:
+                    resolved_input_matrix = sibling_hz1_matrix
+                else:
+                    raise SystemExit("HZ2 requires --input_matrix or an existing HZ1 workflow gene_attribute_matrix.txt.gz")
+            cmd.extend(["--input_matrix", str(resolved_input_matrix)])
         if args.provenance_mirror_local_prefix:
             cmd.extend(["--provenance_mirror_local_prefix", args.provenance_mirror_local_prefix])
         if args.provenance_mirror_remote_prefix:
