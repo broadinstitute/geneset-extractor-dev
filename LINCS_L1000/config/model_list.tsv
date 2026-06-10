@@ -1,0 +1,3 @@
+model_id	model_family	description	enabled
+HZ1	hz_released_matrix	lincs_l1000_chempert_harmonizome_notebook_style	true
+HZ2	hz_released_matrix	lincs_l1000_crisprko_harmonizome_notebook_style	true

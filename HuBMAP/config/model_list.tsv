@@ -1,0 +1,3 @@
+model_id	model_family	description	enabled
+HZ1	hz_released_asctb	hubmap_asctb_harmonizome_notebook_style	true
+HZ2	hz_released_asctb	hubmap_asctb_augmented_harmonizome_notebook_style	true
