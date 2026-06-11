@@ -387,7 +387,7 @@ def run_aws_command(
             args,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True,
+            universal_newlines=True,
             check=False,
         )
     except FileNotFoundError as exc:
