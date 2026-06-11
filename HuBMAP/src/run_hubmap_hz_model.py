@@ -253,6 +253,20 @@ def build_extractor_cmd(
     return cmd
 
 
+def prefix_unsigned_term_table(*, src_path: Path, dst_path: Path, term_prefix: str) -> None:
+    with src_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        fieldnames = list(reader.fieldnames or [])
+        if "term" not in fieldnames:
+            raise SystemExit(f"Unsigned term-gene table is missing required term column: {src_path}")
+        rows: list[dict[str, str]] = []
+        for row in reader:
+            term = str(row.get("term", "")).strip()
+            row["term"] = f"{term_prefix}_{term}" if term else term_prefix
+            rows.append({str(key): str(value) for key, value in row.items()})
+    write_tsv(dst_path, rows, fieldnames)
+
+
 def run_command(cmd: list[str], *, cwd: Path, env: dict[str, str], log_path: Path) -> None:
     log_line(log_path, f"$ {shell_join(cmd)}")
     completed = subprocess.run(
@@ -342,9 +356,10 @@ def main() -> int:
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
     )
     unsigned_term_tsv = workflow_out / "hubmap_unsigned_term_gene.tsv"
+    prefixed_unsigned_term_tsv = workflow_out / "hubmap_unsigned_term_gene_prefixed.tsv"
     extractor_cmd = build_extractor_cmd(
         python_bin=str(Path(args.python_bin).resolve()),
-        unsigned_term_tsv=unsigned_term_tsv,
+        unsigned_term_tsv=prefixed_unsigned_term_tsv,
         extractor_out=extractor_out,
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
@@ -363,6 +378,7 @@ def main() -> int:
     env["PYTHONPATH"] = str(dig_dir / "src")
     model_log = model_out / "run.log"
     run_command(workflow_cmd, cwd=dig_dir, env=env, log_path=model_log)
+    prefix_unsigned_term_table(src_path=unsigned_term_tsv, dst_path=prefixed_unsigned_term_tsv, term_prefix="HuBMAP")
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
 
     summary_rows = [{"source_gmt": "genesets.gmt", **row} for row in parse_gmt(extractor_out / "genesets.gmt")]
