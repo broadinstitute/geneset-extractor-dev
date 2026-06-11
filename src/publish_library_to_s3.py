@@ -169,10 +169,26 @@ def extract_existing_file_paths_from_provenance(provenance_path):  # type: (Path
     except Exception as exc:
         raise SystemExit(f"Unable to parse provenance JSON {provenance_path}: {exc}") from exc
 
-    paths = []  # type: List[Path]
+    all_input_paths = set()  # type: Set[Path]
+    all_generated_paths = set()  # type: Set[Path]
     for graph in payload.values():
-        input_file_node_ids = set()  # type: Set[str]
-        generated_node_ids = set()  # type: Set[str]
+        file_path_by_id = {}  # type: Dict[str, Path]
+        for node in graph.get("nodes", []):
+            if node.get("type") != "File":
+                continue
+            node_id = node.get("id")
+            if not isinstance(node_id, str):
+                continue
+            c2m2_properties = node.get("c2m2_properties") or {}
+            candidate = c2m2_properties.get("local_id") or node.get("dcc_url") or node.get("drc_url")
+            if not isinstance(candidate, str) or not candidate.startswith("/"):
+                continue
+            path = Path(candidate)
+            if path.exists() and path.is_file() and not should_skip_path(path):
+                file_path_by_id[node_id] = path.resolve()
+
+        input_paths = set()  # type: Set[Path]
+        generated_paths = set()  # type: Set[Path]
         for edge in graph.get("edges", []):
             source = edge.get("source")
             target = edge.get("target")
@@ -184,30 +200,23 @@ def extract_existing_file_paths_from_provenance(provenance_path):  # type: (Path
                 and target.startswith("analysis:")
                 and label in ("data input", "metadata input")
             ):
-                input_file_node_ids.add(source)
+                source_path = file_path_by_id.get(source)
+                if source_path is not None:
+                    input_paths.add(source_path)
             if (
                 isinstance(source, str)
                 and isinstance(target, str)
                 and source.startswith("analysis:")
                 and target.startswith("file:")
             ):
-                generated_node_ids.add(target)
+                target_path = file_path_by_id.get(target)
+                if target_path is not None:
+                    generated_paths.add(target_path)
 
-        root_input_ids = input_file_node_ids.difference(generated_node_ids)
-        for node in graph.get("nodes", []):
-            if node.get("type") != "File":
-                continue
-            node_id = node.get("id")
-            if node_id not in root_input_ids:
-                continue
-            c2m2_properties = node.get("c2m2_properties") or {}
-            candidate = c2m2_properties.get("local_id") or node.get("dcc_url") or node.get("drc_url")
-            if not isinstance(candidate, str) or not candidate.startswith("/"):
-                continue
-            path = Path(candidate)
-            if path.exists() and path.is_file() and not should_skip_path(path):
-                paths.append(path.resolve())
-    return paths
+        all_input_paths.update(input_paths)
+        all_generated_paths.update(generated_paths)
+
+    return sorted(all_input_paths.difference(all_generated_paths))
 
 
 def build_unique_input_relative_paths(paths):  # type: (List[Path]) -> Dict[Path, str]
