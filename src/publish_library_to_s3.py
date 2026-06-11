@@ -163,8 +163,35 @@ def extract_existing_file_paths_from_provenance(provenance_path):  # type: (Path
 
     paths = []  # type: List[Path]
     for graph in payload.values():
+        input_file_node_ids = set()  # type: Set[str]
+        generated_node_ids = set()  # type: Set[str]
+        for edge in graph.get("edges", []):
+            source = edge.get("source")
+            target = edge.get("target")
+            label = edge.get("label")
+            if (
+                isinstance(source, str)
+                and isinstance(target, str)
+                and source.startswith("file:")
+                and target.startswith("analysis:")
+                and label in ("data input", "metadata input")
+            ):
+                input_file_node_ids.add(source)
+            if (
+                isinstance(source, str)
+                and isinstance(target, str)
+                and source.startswith("analysis:")
+                and target.startswith("file:")
+                and label == "data output"
+            ):
+                generated_node_ids.add(target)
+
+        root_input_ids = input_file_node_ids.difference(generated_node_ids)
         for node in graph.get("nodes", []):
             if node.get("type") != "File":
+                continue
+            node_id = node.get("id")
+            if node_id not in root_input_ids:
                 continue
             c2m2_properties = node.get("c2m2_properties") or {}
             candidate = c2m2_properties.get("local_id") or node.get("dcc_url") or node.get("drc_url")
