@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 
 import argparse
 import csv
@@ -8,9 +7,8 @@ import re
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
 
@@ -29,18 +27,27 @@ TRANSIENT_SUFFIXES = {
 }
 
 
-@dataclass(frozen=True)
-class CandidateFile:
-    local_path: Path
-    relative_path: str
-    s3_uri: str
-    size_bytes: int
-    category: str
-    requirement: str
-    upload_path: Path | None = None
+class CandidateFile(object):
+    def __init__(
+        self,
+        local_path,  # type: Path
+        relative_path,  # type: str
+        s3_uri,  # type: str
+        size_bytes,  # type: int
+        category,  # type: str
+        requirement,  # type: str
+        upload_path=None,  # type: Optional[Path]
+    ):
+        self.local_path = local_path
+        self.relative_path = relative_path
+        self.s3_uri = s3_uri
+        self.size_bytes = size_bytes
+        self.category = category
+        self.requirement = requirement
+        self.upload_path = upload_path
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args():  # type: () -> argparse.Namespace
     parser = argparse.ArgumentParser(
         description="Publish one library run output tree plus provenance-resolved rerun inputs to S3."
     )
@@ -69,7 +76,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def ensure_directory(path: Path, label: str) -> Path:
+def ensure_directory(path, label):  # type: (Path, str) -> Path
     resolved = path.expanduser().resolve()
     if not resolved.exists():
         raise SystemExit(f"Missing {label}: {resolved}")
@@ -78,7 +85,7 @@ def ensure_directory(path: Path, label: str) -> Path:
     return resolved
 
 
-def parse_s3_uri(s3_uri: str) -> tuple[str, str]:
+def parse_s3_uri(s3_uri):  # type: (str) -> Tuple[str, str]
     parsed = urlparse(s3_uri)
     if parsed.scheme != "s3" or not parsed.netloc:
         raise SystemExit(f"Expected S3 URI like s3://bucket/prefix, got: {s3_uri}")
@@ -87,21 +94,21 @@ def parse_s3_uri(s3_uri: str) -> tuple[str, str]:
     return bucket, prefix
 
 
-def shell_join(parts: list[str]) -> str:
+def shell_join(parts):  # type: (List[str]) -> str
     return " ".join(_shell_quote(part) for part in parts)
 
 
-def _shell_quote(text: str) -> str:
+def _shell_quote(text):  # type: (str) -> str
     return "'" + text.replace("'", "'\"'\"'") + "'"
 
 
-def log_line(path: Path, text: str) -> None:
+def log_line(path, text):  # type: (Path, str) -> None
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(text.rstrip("\n") + "\n")
 
 
-def should_skip_path(path: Path) -> bool:
+def should_skip_path(path):  # type: (Path) -> bool
     if path.is_symlink():
         return True
     if "__pycache__" in path.parts:
@@ -113,8 +120,8 @@ def should_skip_path(path: Path) -> bool:
     return False
 
 
-def iter_output_candidates(*, local_output_root: Path, s3_output_root: str) -> list[CandidateFile]:
-    candidates: list[CandidateFile] = []
+def iter_output_candidates(*, local_output_root, s3_output_root):  # type: (**Any) -> List[CandidateFile]
+    candidates = []  # type: List[CandidateFile]
     normalized_s3_root = s3_output_root.rstrip("/")
     for path in sorted(local_output_root.rglob("*")):
         if should_skip_path(path) or not path.is_file():
@@ -134,7 +141,7 @@ def iter_output_candidates(*, local_output_root: Path, s3_output_root: str) -> l
     return candidates
 
 
-def iter_provenance_paths(local_output_root: Path) -> list[Path]:
+def iter_provenance_paths(local_output_root):  # type: (Path) -> List[Path]
     paths = []
     for path in sorted(local_output_root.rglob("geneset.provenance.json")):
         if should_skip_path(path):
@@ -143,13 +150,13 @@ def iter_provenance_paths(local_output_root: Path) -> list[Path]:
     return paths
 
 
-def extract_existing_file_paths_from_provenance(provenance_path: Path) -> list[Path]:
+def extract_existing_file_paths_from_provenance(provenance_path):  # type: (Path) -> List[Path]
     try:
         payload = json.loads(provenance_path.read_text(encoding="utf-8"))
     except Exception as exc:
         raise SystemExit(f"Unable to parse provenance JSON {provenance_path}: {exc}") from exc
 
-    paths: list[Path] = []
+    paths = []  # type: List[Path]
     for graph in payload.values():
         for node in graph.get("nodes", []):
             if node.get("type") != "File":
@@ -164,18 +171,18 @@ def extract_existing_file_paths_from_provenance(provenance_path: Path) -> list[P
     return paths
 
 
-def input_relative_path(path: Path) -> str:
+def input_relative_path(path):  # type: (Path) -> str
     return path.as_posix().lstrip("/")
 
 
 def resolve_input_candidates_from_provenance(
     *,
-    local_output_root: Path,
-    provenance_paths: list[Path],
-    s3_input_root: str,
-) -> list[CandidateFile]:
+    local_output_root,  # type: Path
+    provenance_paths,  # type: List[Path]
+    s3_input_root,  # type: str
+):  # type: (**Any) -> List[CandidateFile]
     normalized_s3_root = s3_input_root.rstrip("/")
-    by_path: dict[Path, CandidateFile] = {}
+    by_path = {}  # type: Dict[Path, CandidateFile]
 
     for provenance_path in provenance_paths:
         provenance_rel = provenance_path.relative_to(local_output_root).as_posix()
@@ -204,22 +211,22 @@ def resolve_input_candidates_from_provenance(
     return sorted(by_path.values(), key=lambda candidate: candidate.relative_path)
 
 
-def is_provenance_artifact(path: Path) -> bool:
+def is_provenance_artifact(path):  # type: (Path) -> bool
     return path.name.endswith(".provenance.json") or path.name.endswith(".provenance_graph.json")
 
 
 def build_path_rewrite_map(
     *,
-    local_output_root: Path,
-    output_candidates: list[CandidateFile],
-    input_candidates: list[CandidateFile],
-    s3_output_root: str,
-) -> dict[str, str]:
-    replacements: dict[str, str] = {}
+    local_output_root,  # type: Path
+    output_candidates,  # type: List[CandidateFile]
+    input_candidates,  # type: List[CandidateFile]
+    s3_output_root,  # type: str
+):  # type: (**Any) -> Dict[str, str]
+    replacements = {}  # type: Dict[str, str]
     normalized_output_root = s3_output_root.rstrip("/")
     replacements[str(local_output_root)] = normalized_output_root
 
-    output_dirs: set[Path] = {local_output_root}
+    output_dirs = set([local_output_root])  # type: Set[Path]
     for candidate in output_candidates:
         replacements[str(candidate.local_path)] = candidate.s3_uri
         current = candidate.local_path.parent
@@ -253,12 +260,12 @@ ABSOLUTE_PATH_TOKEN = re.compile(r"/[A-Za-z0-9._:+@%~=\\/-]+")
 
 def iter_output_directory_mirrors(
     *,
-    local_output_root: Path,
-    s3_output_root: str,
-    output_candidates: list[CandidateFile],
-) -> list[tuple[str, str]]:
+    local_output_root,  # type: Path
+    s3_output_root,  # type: str
+    output_candidates,  # type: List[CandidateFile]
+):  # type: (**Any) -> List[Tuple[str, str]]
     normalized_output_root = s3_output_root.rstrip("/")
-    directories: set[Path] = {local_output_root}
+    directories = set([local_output_root])  # type: Set[Path]
     for candidate in output_candidates:
         current = candidate.local_path.parent
         while True:
@@ -270,7 +277,7 @@ def iter_output_directory_mirrors(
             if current == local_output_root:
                 break
             current = current.parent
-    mirrored: list[tuple[str, str]] = []
+    mirrored = []  # type: List[Tuple[str, str]]
     for directory in directories:
         relative = directory.relative_to(local_output_root).as_posix()
         s3_uri = normalized_output_root if relative == "." else f"{normalized_output_root}/{relative}"
@@ -280,12 +287,12 @@ def iter_output_directory_mirrors(
 
 def augment_rewrite_map_from_provenance(
     *,
-    provenance_paths: list[Path],
-    replacements: dict[str, str],
-    output_candidates: list[CandidateFile],
-    local_output_root: Path,
-    s3_output_root: str,
-) -> dict[str, str]:
+    provenance_paths,  # type: List[Path]
+    replacements,  # type: Dict[str, str]
+    output_candidates,  # type: List[CandidateFile]
+    local_output_root,  # type: Path
+    s3_output_root,  # type: str
+):  # type: (**Any) -> Dict[str, str]
     by_relative_output = {
         candidate.relative_path: candidate.s3_uri
         for candidate in output_candidates
@@ -322,14 +329,14 @@ def augment_rewrite_map_from_provenance(
     return dict(sorted(augmented.items(), key=lambda item: len(item[0]), reverse=True))
 
 
-def rewrite_string_paths(text: str, replacements: dict[str, str]) -> str:
+def rewrite_string_paths(text, replacements):  # type: (str, Dict[str, str]) -> str
     updated = text
     for local_path, remote_path in replacements.items():
         updated = updated.replace(local_path, remote_path)
     return updated
 
 
-def rewrite_json_value(value: object, replacements: dict[str, str]) -> object:
+def rewrite_json_value(value, replacements):  # type: (Any, Dict[str, str]) -> Any
     if isinstance(value, dict):
         return {key: rewrite_json_value(inner, replacements) for key, inner in value.items()}
     if isinstance(value, list):
@@ -341,11 +348,11 @@ def rewrite_json_value(value: object, replacements: dict[str, str]) -> object:
 
 def stage_rewritten_provenance_files(
     *,
-    output_candidates: list[CandidateFile],
-    replacements: dict[str, str],
-) -> list[CandidateFile]:
+    output_candidates,  # type: List[CandidateFile]
+    replacements,  # type: Dict[str, str]
+):  # type: (**Any) -> List[CandidateFile]
     staged_root = Path(tempfile.mkdtemp(prefix="publish_library_to_s3_", dir="/tmp"))
-    rewritten: list[CandidateFile] = []
+    rewritten = []  # type: List[CandidateFile]
     for candidate in output_candidates:
         if not is_provenance_artifact(candidate.local_path):
             rewritten.append(candidate)
@@ -370,10 +377,10 @@ def stage_rewritten_provenance_files(
 
 
 def run_aws_command(
-    args: list[str],
+    args,  # type: List[str]
     *,
-    log_path: Path,
-) -> subprocess.CompletedProcess[str]:
+    log_path,  # type: Path
+):  # type: (**Any) -> subprocess.CompletedProcess
     log_line(log_path, f"$ {shell_join(args)}")
     try:
         completed = subprocess.run(
@@ -392,10 +399,10 @@ def run_aws_command(
 
 def s3_object_exists(
     *,
-    aws_cli_bin: str,
-    s3_uri: str,
-    log_path: Path,
-) -> tuple[bool, str]:
+    aws_cli_bin,  # type: str
+    s3_uri,  # type: str
+    log_path,  # type: Path
+):  # type: (**Any) -> Tuple[bool, str]
     bucket, key = parse_s3_uri(s3_uri)
     completed = run_aws_command(
         [aws_cli_bin, "s3api", "head-object", "--bucket", bucket, "--key", key],
@@ -411,11 +418,11 @@ def s3_object_exists(
 
 def upload_file(
     *,
-    aws_cli_bin: str,
-    local_path: Path,
-    s3_uri: str,
-    log_path: Path,
-) -> tuple[bool, str]:
+    aws_cli_bin,  # type: str
+    local_path,  # type: Path
+    s3_uri,  # type: str
+    log_path,  # type: Path
+):  # type: (**Any) -> Tuple[bool, str]
     completed = run_aws_command(
         [aws_cli_bin, "s3", "cp", str(local_path), s3_uri],
         log_path=log_path,
@@ -423,7 +430,7 @@ def upload_file(
     return completed.returncode == 0, (completed.stdout or "").strip()
 
 
-def write_manifest(path: Path, rows: Iterable[dict[str, object]]) -> None:
+def write_manifest(path, rows):  # type: (Path, Iterable[Dict[str, Any]]) -> None
     fieldnames = [
         "category",
         "local_path",
@@ -443,12 +450,12 @@ def write_manifest(path: Path, rows: Iterable[dict[str, object]]) -> None:
             writer.writerow(row)
 
 
-def write_summary(path: Path, payload: dict[str, object]) -> None:
+def write_summary(path, payload):  # type: (Path, Dict[str, Any]) -> None
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def main() -> int:
+def main():  # type: () -> int
     args = parse_args()
     local_output_root = ensure_directory(Path(args.local_output_root), "local output root")
     _bucket, _prefix = parse_s3_uri(args.s3_output_root)
@@ -500,7 +507,7 @@ def main() -> int:
     log_line(log_path, f"discovered_input_files={len(input_candidates)}")
 
     candidates = output_candidates + input_candidates
-    manifest_rows: list[dict[str, object]] = []
+    manifest_rows = []  # type: List[Dict[str, Any]]
     uploaded_count = 0
     skipped_existing_count = 0
     failed_count = 0
@@ -511,7 +518,7 @@ def main() -> int:
             s3_uri=candidate.s3_uri,
             log_path=log_path,
         )
-        row: dict[str, object] = {
+        row = {
             "category": candidate.category,
             "local_path": str(candidate.local_path),
             "relative_path": candidate.relative_path,
