@@ -1,11 +1,12 @@
-# Proposal: Publish Model Outputs To Mirrored S3 Paths
+# Proposal: Publish Library Outputs And Inputs To Mirrored S3 Paths
 
 This proposal describes a repository-level publishing method for `geneset-extractor-dev/` that:
 
 1. takes a local output directory containing model results
-2. takes an AWS S3 bucket URI and treats it as the mirror root for those outputs
-3. checks whether the mirrored files already exist in S3
-4. uploads only the new files to S3
+2. takes an AWS S3 URI that mirrors that local output root
+3. takes an AWS S3 URI where provenance-discovered rerun inputs should be published
+4. checks whether the mirrored files already exist in S3
+5. uploads only the new files to S3 unless `--overwrite` is set
 
 The goal is to make publication reproducible, explicit, and compatible with the existing provenance model that already understands local-to-remote mirror prefixes.
 
@@ -28,25 +29,23 @@ without reuploading files that are already present.
 
 Add a new top-level publisher script:
 
-- `geneset-extractor-dev/src/publish_outputs_to_s3.py`
+- `geneset-extractor-dev/src/publish_library_to_s3.py`
 
 and matching shell wrapper:
 
-- `geneset-extractor-dev/run/publish_outputs_to_s3.sh`
+- `geneset-extractor-dev/run/publish_library_to_s3.sh`
 
 ### Required CLI inputs
 
-- `--output_root`
+- `--local_output_root`
   - local directory containing generated outputs
-- `--s3_root`
-  - destination S3 URI prefix
+- `--s3_output_root`
+  - destination S3 URI prefix mirroring the local output root
+- `--s3_input_root`
+  - destination S3 URI prefix for provenance-discovered rerun inputs
 
 ### Optional CLI inputs
 
-- `--include_glob`
-  - optional glob filter for which files to consider
-- `--exclude_glob`
-  - optional glob filter for skipping files
 - `--manifest_out`
   - optional TSV/JSON manifest path describing the publish decision
 - `--overwrite`
@@ -64,25 +63,51 @@ and matching shell wrapper:
 
 The publish rule should be:
 
-- local relative path under `output_root`
-- becomes the same relative path under `s3_root`
+- local relative path under `local_output_root`
+- becomes the same relative path under `s3_output_root`
+
+and provenance-discovered rerun inputs:
+
+- absolute local path from provenance, with the leading slash removed
+- becomes the same relative path under `s3_input_root`
 
 Example:
 
 - local:
   - `/data/runs/gtex_outputs/genesets/adipose_tissue/models/AB1/tissue_extractor/genesets.gmt`
-- `output_root`:
+- `local_output_root`:
   - `/data/runs/gtex_outputs`
 - relative path:
   - `genesets/adipose_tissue/models/AB1/tissue_extractor/genesets.gmt`
 - S3 mirror:
   - `s3://bucket/prefix/genesets/adipose_tissue/models/AB1/tissue_extractor/genesets.gmt`
 
+Input example:
+
+- local:
+  - `/data/inputs/GTEx/v10/GTEx_Analysis_v10_RNASeQCv2.4.2_gene_reads.gct.gz`
+- relative path:
+  - `data/inputs/GTEx/v10/GTEx_Analysis_v10_RNASeQCv2.4.2_gene_reads.gct.gz`
+- S3 mirror:
+  - `s3://bucket/input-prefix/data/inputs/GTEx/v10/GTEx_Analysis_v10_RNASeQCv2.4.2_gene_reads.gct.gz`
+
 This is intentionally simple and consistent with how provenance mirror prefixes already behave.
+
+## Input Resolution
+
+The publisher should resolve required rerun inputs from the final output provenance files:
+
+- scan `extractor/geneset.provenance.json` under `local_output_root`
+- collect file nodes that are external to `local_output_root`
+- treat those external files as the publishable rerun inputs needed to reproduce the final GMTs
+
+This keeps the published input set aligned with what the recorded provenance actually says is needed for rerun, rather than relying on a library-specific heuristic list.
+
+All external provenance file paths should be mirrored under `s3_input_root` by stripping the leading slash from the local path.
 
 ## File Discovery
 
-The script should recursively walk `output_root` and build a candidate file list.
+The script should recursively walk `local_output_root` and build a candidate file list.
 
 Recommended default behavior:
 
@@ -167,7 +192,7 @@ Bulk `aws s3 sync` should not be the primary method here because:
 
 The script should always produce a manifest, either to a caller-provided path or by default under:
 
-- `<output_root>/publish_manifest.tsv`
+- `<local_output_root>/publish_library_manifest.tsv`
 
 Suggested columns:
 
@@ -187,28 +212,33 @@ Suggested columns:
 
 Optional companion JSON:
 
-- `<output_root>/publish_manifest.json`
+- `<local_output_root>/publish_summary.json`
 
 This makes publication inspectable and scriptable.
 
-## Provenance-Oriented Path Rewriting
+## Provenance Rewriting
 
-The request says “modifies the local output paths to a mirror under the S3 URI.”
+Uploaded provenance artifacts should not preserve any local filesystem paths.
 
-The safest interpretation is:
+For every uploaded:
 
-- do not rewrite the physical local file paths
-- do compute and record the mirrored S3 paths for every published file
+- `*.provenance.json`
+- `*.provenance_graph.json`
 
-If provenance-oriented rewriting is requested, do it only in explicit publish metadata, not by mutating the biological outputs in place.
+the publisher should stage a rewritten copy for upload such that:
 
-Recommended outputs:
+- output file paths point at the mirrored `s3_output_root`
+- provenance-discovered rerun input paths point at the mirrored `s3_input_root`
+- commands embedded in provenance are rewritten to use those mirrored S3 paths
+- `local_id`
+- `dcc_url`
+- `drc_url`
+- `command`
+- `observed_command`
 
-- `publish_manifest.tsv`
-- optional `publish_summary.json`
-- optional update to selected provenance summaries if `--update_provenance_json` is passed
+contain no local filesystem paths after rewriting
 
-That avoids destructive postprocessing of existing run outputs.
+The local run tree should not be mutated in place. Rewriting should happen only in staged upload copies.
 
 ## Proposed Non-Destructive Policy
 
@@ -242,7 +272,7 @@ This gives the user:
 
 Write a companion log file:
 
-- `<output_root>/publish_outputs_to_s3.log`
+- `<local_output_root>/publish_library_to_s3.log`
 
 Contents should include:
 
@@ -257,9 +287,9 @@ Contents should include:
 
 Recommended new files:
 
-- `geneset-extractor-dev/src/publish_outputs_to_s3.py`
-- `geneset-extractor-dev/run/publish_outputs_to_s3.sh`
-- `geneset-extractor-dev/proposals/publish_outputs_to_s3_proposal.md`
+- `geneset-extractor-dev/src/publish_library_to_s3.py`
+- `geneset-extractor-dev/run/publish_library_to_s3.sh`
+- `geneset-extractor-dev/proposals/publish_library_to_s3_proposal.md`
 
 Optional future shared docs:
 
@@ -269,18 +299,20 @@ Optional future shared docs:
 ## Example Command
 
 ```bash
-bash geneset-extractor-dev/run/publish_outputs_to_s3.sh \
-  --output_root ./gtex_outputs_raw_runtime_test \
-  --s3_root s3://dig-gene-set-data/gtex/test_publish \
+bash geneset-extractor-dev/run/publish_library_to_s3.sh \
+  --local_output_root ./gtex_outputs_raw_runtime_test \
+  --s3_output_root s3://dig-gene-set-data/gtex/test_publish \
+  --s3_input_root s3://dig-gene-set-data-inputs/gtex/test_publish \
   --dry_run
 ```
 
 Real upload:
 
 ```bash
-bash geneset-extractor-dev/run/publish_outputs_to_s3.sh \
-  --output_root ./gtex_outputs_raw_runtime_test \
-  --s3_root s3://dig-gene-set-data/gtex/test_publish
+bash geneset-extractor-dev/run/publish_library_to_s3.sh \
+  --local_output_root ./gtex_outputs_raw_runtime_test \
+  --s3_output_root s3://dig-gene-set-data/gtex/test_publish \
+  --s3_input_root s3://dig-gene-set-data-inputs/gtex/test_publish
 ```
 
 ## Recommended First Implementation Scope
@@ -289,6 +321,7 @@ Implement only:
 
 - recursive file discovery
 - mirror-path construction
+- provenance-based rerun-input discovery
 - per-file existence checks with `head-object`
 - per-file upload with `aws s3 cp`
 - manifest and log writing
@@ -307,10 +340,12 @@ That narrower first version is enough to make publication reliable and auditable
 The recommended publishing method is:
 
 - input:
-  - local `output_root`
-  - remote `s3_root`
+  - local `local_output_root`
+  - remote `s3_output_root`
+  - remote `s3_input_root`
 - compute:
   - mirrored S3 path for every output artifact
+  - mirrored S3 path for every provenance-discovered rerun input
 - check:
   - whether each object already exists in S3
 - upload:
