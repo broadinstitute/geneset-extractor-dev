@@ -3,6 +3,7 @@
 import argparse
 import csv
 import json
+import os
 import re
 import subprocess
 import sys
@@ -383,12 +384,16 @@ def run_aws_command(
 ):  # type: (**Any) -> subprocess.CompletedProcess
     log_line(log_path, f"$ {shell_join(args)}")
     try:
+        child_env = os.environ.copy()
+        child_env["AWS_PAGER"] = ""
         completed = subprocess.run(
             args,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
             universal_newlines=True,
             check=False,
+            env=child_env,
         )
     except FileNotFoundError as exc:
         raise SystemExit(f"Missing AWS CLI executable: {args[0]}") from exc
@@ -505,6 +510,15 @@ def main():  # type: () -> int
     log_line(log_path, f"discovered_output_files={len(output_candidates)}")
     log_line(log_path, f"scanned_provenance_files={len(provenance_paths)}")
     log_line(log_path, f"discovered_input_files={len(input_candidates)}")
+    print(
+        "publish_library_to_s3 "
+        "outputs={0} provenance_files={1} inputs={2}".format(
+            len(output_candidates),
+            len(provenance_paths),
+            len(input_candidates),
+        ),
+        flush=True,
+    )
 
     candidates = output_candidates + input_candidates
     manifest_rows = []  # type: List[Dict[str, Any]]
@@ -512,7 +526,18 @@ def main():  # type: () -> int
     skipped_existing_count = 0
     failed_count = 0
 
-    for candidate in candidates:
+    total_candidates = len(candidates)
+    for index, candidate in enumerate(candidates, 1):
+        if index == 1 or index % 25 == 0 or index == total_candidates:
+            print(
+                "checking_s3 {0}/{1} category={2} path={3}".format(
+                    index,
+                    total_candidates,
+                    candidate.category,
+                    candidate.relative_path,
+                ),
+                flush=True,
+            )
         exists, existence_error = s3_object_exists(
             aws_cli_bin=args.aws_cli_bin,
             s3_uri=candidate.s3_uri,
