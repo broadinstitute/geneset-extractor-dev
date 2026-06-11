@@ -90,6 +90,14 @@ def ensure_directory(path, label):  # type: (Path, str) -> Path
     return resolved
 
 
+def is_within_directory(path, root):  # type: (Path, Path) -> bool
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
 def parse_s3_uri(s3_uri):  # type: (str) -> Tuple[str, str]
     parsed = urlparse(s3_uri)
     if parsed.scheme != "s3" or not parsed.netloc:
@@ -253,11 +261,8 @@ def resolve_input_candidates_from_provenance(
         for source_path in extract_existing_file_paths_from_provenance(provenance_path):
             if source_path in output_file_paths:
                 continue
-            try:
-                source_path.relative_to(local_output_root)
+            if is_within_directory(source_path, local_output_root):
                 continue
-            except ValueError:
-                pass
             existing = by_path.get(source_path)
             requirement = f"provenance:{provenance_rel}"
             if existing:
