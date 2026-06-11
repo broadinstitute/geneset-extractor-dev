@@ -141,7 +141,10 @@ def should_skip_path(path):  # type: (Path) -> bool
 def iter_output_candidates(*, local_output_root, s3_output_root):  # type: (**Any) -> List[CandidateFile]
     candidates = []  # type: List[CandidateFile]
     normalized_s3_root = s3_output_root.rstrip("/")
-    for path in sorted(local_output_root.rglob("*")):
+    print("scanning_output_tree root={0}".format(local_output_root), flush=True)
+    for index, path in enumerate(sorted(local_output_root.rglob("*")), 1):
+        if index == 1 or index % 5000 == 0:
+            print("scanning_output_tree entries_seen={0} files_kept={1}".format(index, len(candidates)), flush=True)
         if should_skip_path(path) or not path.is_file():
             continue
         relative_path = path.relative_to(local_output_root).as_posix()
@@ -156,15 +159,20 @@ def iter_output_candidates(*, local_output_root, s3_output_root):  # type: (**An
                 upload_path=None,
             )
         )
+    print("scanning_output_tree complete files_kept={0}".format(len(candidates)), flush=True)
     return candidates
 
 
 def iter_provenance_paths(local_output_root):  # type: (Path) -> List[Path]
     paths = []
-    for path in sorted(local_output_root.rglob("geneset.provenance.json")):
+    print("scanning_provenance_files root={0}".format(local_output_root), flush=True)
+    for index, path in enumerate(sorted(local_output_root.rglob("geneset.provenance.json")), 1):
+        if index == 1 or index % 250 == 0:
+            print("scanning_provenance_files found={0}".format(index), flush=True)
         if should_skip_path(path):
             continue
         paths.append(path)
+    print("scanning_provenance_files complete found={0}".format(len(paths)), flush=True)
     return paths
 
 
@@ -269,7 +277,17 @@ def resolve_input_candidates_from_provenance(
     by_path = {}  # type: Dict[Path, CandidateFile]
     output_file_paths = {candidate.local_path.resolve() for candidate in output_candidates}  # type: Set[Path]
 
-    for provenance_path in provenance_paths:
+    print("resolving_provenance_inputs files={0}".format(len(provenance_paths)), flush=True)
+    for index, provenance_path in enumerate(provenance_paths, 1):
+        if index == 1 or index % 100 == 0 or index == len(provenance_paths):
+            print(
+                "resolving_provenance_inputs {0}/{1} unique_inputs={2}".format(
+                    index,
+                    len(provenance_paths),
+                    len(by_path),
+                ),
+                flush=True,
+            )
         provenance_rel = provenance_path.relative_to(local_output_root).as_posix()
         for source_path in extract_existing_file_paths_from_provenance(provenance_path):
             if source_path in output_file_paths:
@@ -297,6 +315,7 @@ def resolve_input_candidates_from_provenance(
         candidate.relative_path = relative_paths[source_path]
         candidate.s3_uri = f"{normalized_s3_root}/{candidate.relative_path}"
 
+    print("resolving_provenance_inputs complete unique_inputs={0}".format(len(by_path)), flush=True)
     return sorted(by_path.values(), key=lambda candidate: candidate.relative_path)
 
 
