@@ -421,6 +421,40 @@ def s3_object_exists(
     return False, stdout.strip()
 
 
+def list_s3_keys_under_prefix(
+    *,
+    aws_cli_bin,  # type: str
+    s3_uri_root,  # type: str
+    log_path,  # type: Path
+):  # type: (**Any) -> Tuple[Set[str], str]
+    bucket, prefix = parse_s3_uri(s3_uri_root)
+    keys = set()  # type: Set[str]
+    continuation_token = None  # type: Optional[str]
+
+    while True:
+        command = [aws_cli_bin, "s3api", "list-objects-v2", "--bucket", bucket, "--prefix", prefix]
+        if continuation_token:
+            command.extend(["--continuation-token", continuation_token])
+        completed = run_aws_command(command, log_path=log_path)
+        if completed.returncode != 0:
+            return set(), (completed.stdout or "").strip()
+        try:
+            payload = json.loads(completed.stdout or "{}")
+        except Exception as exc:
+            return set(), "Unable to parse list-objects-v2 response for {0}: {1}".format(s3_uri_root, exc)
+        for item in payload.get("Contents", []):
+            key = item.get("Key")
+            if isinstance(key, str):
+                keys.add(key)
+        if not payload.get("IsTruncated"):
+            break
+        continuation_token = payload.get("NextContinuationToken")
+        if not continuation_token:
+            break
+
+    return keys, ""
+
+
 def upload_file(
     *,
     aws_cli_bin,  # type: str
@@ -525,6 +559,26 @@ def main():  # type: () -> int
     uploaded_count = 0
     skipped_existing_count = 0
     failed_count = 0
+    output_bucket, output_prefix = parse_s3_uri(args.s3_output_root)
+    input_bucket, input_prefix = parse_s3_uri(args.s3_input_root)
+
+    print("listing_s3 output_prefix={0}".format(args.s3_output_root), flush=True)
+    output_existing_keys, output_list_error = list_s3_keys_under_prefix(
+        aws_cli_bin=args.aws_cli_bin,
+        s3_uri_root=args.s3_output_root,
+        log_path=log_path,
+    )
+    if output_list_error:
+        raise SystemExit("Unable to list existing S3 output objects: {0}".format(output_list_error))
+
+    print("listing_s3 input_prefix={0}".format(args.s3_input_root), flush=True)
+    input_existing_keys, input_list_error = list_s3_keys_under_prefix(
+        aws_cli_bin=args.aws_cli_bin,
+        s3_uri_root=args.s3_input_root,
+        log_path=log_path,
+    )
+    if input_list_error:
+        raise SystemExit("Unable to list existing S3 input objects: {0}".format(input_list_error))
 
     total_candidates = len(candidates)
     for index, candidate in enumerate(candidates, 1):
@@ -538,11 +592,6 @@ def main():  # type: () -> int
                 ),
                 flush=True,
             )
-        exists, existence_error = s3_object_exists(
-            aws_cli_bin=args.aws_cli_bin,
-            s3_uri=candidate.s3_uri,
-            log_path=log_path,
-        )
         row = {
             "category": candidate.category,
             "local_path": str(candidate.local_path),
@@ -554,12 +603,11 @@ def main():  # type: () -> int
             "upload_attempted": "false",
             "error_message": "",
         }
-        if existence_error:
-            row["status"] = "failed"
-            row["error_message"] = existence_error
-            failed_count += 1
-            manifest_rows.append(row)
-            continue
+        candidate_bucket, candidate_key = parse_s3_uri(candidate.s3_uri)
+        if candidate.category == "output":
+            exists = candidate_bucket == output_bucket and candidate_key in output_existing_keys
+        else:
+            exists = candidate_bucket == input_bucket and candidate_key in input_existing_keys
         if exists and not args.overwrite:
             row["status"] = "skipped_existing"
             skipped_existing_count += 1
