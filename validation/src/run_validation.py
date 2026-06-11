@@ -1,14 +1,10 @@
 import os
+import argparse
 
 from run_eaggl import run_eaggl, run_pigean, save_results
 
-
-client = "eaggl"
-force_rewrite = False
-
-BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/runs/gtex_all_models/genesets"
-OUT_FILE = "../../data/gtex/output.tissue/{}_validation_results.txt"
-OUT_FILE_PIGEAN = "../../data/gtex/output.tissue.pigean/{}_validation_results_pigean.txt"
+DEFAULT_BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/runs/gtex_all_models/genesets"
+DEFAULT_OUT_FOLDER = "../../data/gtex/output.tissue"
 
 
 def parse_gmt_file(gmt_file):
@@ -35,7 +31,7 @@ def get_gmt_file(folder_path):
     return None
 
 
-def run_validation(folder_path, out_file, model=None):
+def run_validation(folder_path, out_file, model=None, method="eaggl"):
     print("Running validation for folder:", folder_path)
     gmt_file = get_gmt_file(folder_path)
     if gmt_file is None:
@@ -47,34 +43,60 @@ def run_validation(folder_path, out_file, model=None):
         for gene_set in gene_sets:
             gene_set_name = f"{model}__{gene_set['gene_set']}" if model else gene_set['gene_set']
             print("Gene set:", gene_set_name, "Number of genes:", len(gene_set['genes']))
-            if client == "eaggl":
+            if method == "eaggl":
                 results = run_eaggl(gene_set['genes'])
             else:
                 results = run_pigean(gene_set['genes'])
             save_results(out_f, gene_set_name, len(gene_set['genes']), results)
 
 
-def validate_tissue(tissue):
-    base_folder = os.path.join(BASE_FOLDER, tissue, "models")
-    for folder in os.listdir(base_folder):
-        folder_path = os.path.join(base_folder, folder)
+def validate_tissue(tissue, base_folder, out_file_template, method="eaggl", force_rewrite=False):
+    tissue_path = os.path.join(base_folder, tissue, "models")
+    if not os.path.isdir(tissue_path):
+        print(f"Tissue folder not found: {tissue_path}")
+        return
+    out_file = out_file_template.format(tissue)
+    if not force_rewrite and os.path.exists(out_file):
+        print(f"Skipping validation for tissue {tissue} as output file already exists.")
+        return
+    for folder in os.listdir(tissue_path):
+        folder_path = os.path.join(tissue_path, folder)
         if os.path.isdir(folder_path):
             try:
-                out_file = OUT_FILE_PIGEAN.format(tissue) if client == "pigean" else OUT_FILE.format(tissue)
-                run_validation(folder_path, out_file, model=folder)
+                run_validation(folder_path, out_file, model=folder, method=method)
             except Exception as e:
                 print(f"Error validating folder {folder_path}: {e}")
 
 
 def main():
-    for tissue in os.listdir(BASE_FOLDER):
-        tissue_path = os.path.join(BASE_FOLDER, tissue)
-        if os.path.isdir(tissue_path):
-            out_file = OUT_FILE_PIGEAN.format(tissue) if client == "pigean" else OUT_FILE.format(tissue)
-            if not force_rewrite and os.path.exists(out_file):
-                print(f"Skipping validation for tissue {tissue} as output file already exists.")
-                continue
-            validate_tissue(tissue)
+    parser = argparse.ArgumentParser(description="Validate gene sets using EAGGL/PIGEAN")
+    parser.add_argument("-b", "--base-folder", required=True, help="Base folder for genesets")
+    parser.add_argument("-o", "--output-folder", required=True, help="Output folder for results")
+    parser.add_argument("-t", "--tissue", action="append", help="Tissue(s) to process (can be repeated)")
+    parser.add_argument("-m", "--method", choices=["eaggl", "pigean"], default="eaggl", help="Enrichment method")
+    parser.add_argument("--force-rewrite", action="store_true", help="Force rewrite of existing output files")
+    args = parser.parse_args()
+    
+    # Construct output file template based on method
+    if args.method == "pigean":
+        out_folder = args.output_folder.replace("output.tissue", "output.tissue.pigean")
+    else:
+        out_folder = args.output_folder
+    
+    # Create output folder if it doesn't exist
+    os.makedirs(out_folder, exist_ok=True)
+    
+    out_file_template = os.path.join(out_folder, "{}_validation_results_{}.txt".format("{}", args.method))
+    
+    # Determine which tissues to process
+    if args.tissue:
+        tissues = args.tissue
+    else:
+        tissues = [d for d in os.listdir(args.base_folder) if os.path.isdir(os.path.join(args.base_folder, d))]
+    
+    for tissue in tissues:
+        print(f"Processing tissue: {tissue} with method: {args.method}")
+        validate_tissue(tissue, args.base_folder, out_file_template, method=args.method, force_rewrite=args.force_rewrite)
 
 
 if __name__ == "__main__":
