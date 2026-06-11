@@ -190,7 +190,6 @@ def extract_existing_file_paths_from_provenance(provenance_path):  # type: (Path
                 and isinstance(target, str)
                 and source.startswith("analysis:")
                 and target.startswith("file:")
-                and label == "data output"
             ):
                 generated_node_ids.add(target)
 
