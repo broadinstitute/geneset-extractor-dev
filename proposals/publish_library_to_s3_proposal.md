@@ -5,7 +5,7 @@ This proposal describes a repository-level publishing method for `geneset-extrac
 1. takes a local output directory containing model results
 2. takes an AWS S3 URI that mirrors that local output root
 3. takes an AWS S3 URI where provenance-discovered rerun inputs should be published
-4. checks whether the mirrored files already exist in S3
+4. optionally checks whether the mirrored files already exist in S3
 5. uploads only the new files to S3 unless `--overwrite` is set
 
 The goal is to make publication reproducible, explicit, and compatible with the existing provenance model that already understands local-to-remote mirror prefixes.
@@ -52,6 +52,10 @@ and matching shell wrapper:
   - if set, allow replacing objects already present in S3
 - `--dry_run`
   - compute mirror paths and existence checks without uploading
+- `--force_publish`
+  - skip S3 existence checks entirely
+  - useful for generating a local-to-remote map quickly
+  - for real uploads, should only be used with `--overwrite`
 - `--aws_cli_bin`
   - explicit AWS CLI executable, default `aws`
 - `--require_hash_match`
@@ -132,24 +136,21 @@ This is better than a narrow allowlist because the output trees intentionally co
 
 ## S3 Existence Check
 
-For each candidate local file:
+By default, the publisher should:
 
 1. compute its mirrored S3 URI
-2. query whether the S3 object exists
-3. classify the object as:
-   - `missing`
-   - `present`
-   - `present_but_overwrite_requested`
+2. prefetch existing keys under `s3_output_root`
+3. prefetch existing keys under `s3_input_root`
+4. classify candidates locally against those prefetched key sets
 
-Recommended implementation:
+This avoids one network request per file.
 
-- use `aws s3api head-object`
-- parse bucket/key from the S3 URI
+If `--force_publish` is set:
 
-Why:
-
-- `head-object` is explicit and script-friendly
-- it avoids listing an entire prefix when only one file is needed
+- skip both S3 prefix listings
+- do not classify objects as already present
+- use `would_upload_unchecked` during dry runs
+- require `--overwrite` for real uploads
 
 ### Optional stronger comparison
 
@@ -172,6 +173,11 @@ Default behavior:
 If `--overwrite` is passed:
 
 - upload both missing and present files
+
+If `--force_publish` is passed:
+
+- dry runs should emit unchecked upload plans quickly
+- real uploads should proceed only together with `--overwrite`
 
 Recommended implementation:
 

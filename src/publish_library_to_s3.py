@@ -77,6 +77,11 @@ def parse_args():  # type: () -> argparse.Namespace
     )
     parser.add_argument("--overwrite", action="store_true", help="Overwrite objects that already exist in S3.")
     parser.add_argument("--dry_run", action="store_true", help="Evaluate and log actions without uploading.")
+    parser.add_argument(
+        "--force_publish",
+        action="store_true",
+        help="Skip S3 existence checks and prefix listings. For real uploads, requires --overwrite.",
+    )
     parser.add_argument("--aws_cli_bin", default="aws", help="AWS CLI executable to use. Default: aws.")
     return parser.parse_args()
 
@@ -590,6 +595,8 @@ def write_summary(path, payload):  # type: (Path, Dict[str, Any]) -> None
 
 def main():  # type: () -> int
     args = parse_args()
+    if args.force_publish and not args.dry_run and not args.overwrite:
+        raise SystemExit("--force_publish requires --overwrite for non-dry-run uploads.")
     local_output_root = ensure_directory(Path(args.local_output_root), "local output root")
     _bucket, _prefix = parse_s3_uri(args.s3_output_root)
     _input_bucket, _input_prefix = parse_s3_uri(args.s3_input_root)
@@ -661,24 +668,28 @@ def main():  # type: () -> int
     failed_count = 0
     output_bucket, output_prefix = parse_s3_uri(args.s3_output_root)
     input_bucket, input_prefix = parse_s3_uri(args.s3_input_root)
+    output_existing_keys = set()  # type: Set[str]
+    input_existing_keys = set()  # type: Set[str]
+    if args.force_publish:
+        print("force_publish=true", flush=True)
+    else:
+        print("listing_s3 output_prefix={0}".format(args.s3_output_root), flush=True)
+        output_existing_keys, output_list_error = list_s3_keys_under_prefix(
+            aws_cli_bin=args.aws_cli_bin,
+            s3_uri_root=args.s3_output_root,
+            log_path=log_path,
+        )
+        if output_list_error:
+            raise SystemExit("Unable to list existing S3 output objects: {0}".format(output_list_error))
 
-    print("listing_s3 output_prefix={0}".format(args.s3_output_root), flush=True)
-    output_existing_keys, output_list_error = list_s3_keys_under_prefix(
-        aws_cli_bin=args.aws_cli_bin,
-        s3_uri_root=args.s3_output_root,
-        log_path=log_path,
-    )
-    if output_list_error:
-        raise SystemExit("Unable to list existing S3 output objects: {0}".format(output_list_error))
-
-    print("listing_s3 input_prefix={0}".format(args.s3_input_root), flush=True)
-    input_existing_keys, input_list_error = list_s3_keys_under_prefix(
-        aws_cli_bin=args.aws_cli_bin,
-        s3_uri_root=args.s3_input_root,
-        log_path=log_path,
-    )
-    if input_list_error:
-        raise SystemExit("Unable to list existing S3 input objects: {0}".format(input_list_error))
+        print("listing_s3 input_prefix={0}".format(args.s3_input_root), flush=True)
+        input_existing_keys, input_list_error = list_s3_keys_under_prefix(
+            aws_cli_bin=args.aws_cli_bin,
+            s3_uri_root=args.s3_input_root,
+            log_path=log_path,
+        )
+        if input_list_error:
+            raise SystemExit("Unable to list existing S3 input objects: {0}".format(input_list_error))
 
     total_candidates = len(candidates)
     for index, candidate in enumerate(candidates, 1):
@@ -703,11 +714,14 @@ def main():  # type: () -> int
             "upload_attempted": "false",
             "error_message": "",
         }
-        candidate_bucket, candidate_key = parse_s3_uri(candidate.s3_uri)
-        if candidate.category == "output":
-            exists = candidate_bucket == output_bucket and candidate_key in output_existing_keys
+        if args.force_publish:
+            exists = False
         else:
-            exists = candidate_bucket == input_bucket and candidate_key in input_existing_keys
+            candidate_bucket, candidate_key = parse_s3_uri(candidate.s3_uri)
+            if candidate.category == "output":
+                exists = candidate_bucket == output_bucket and candidate_key in output_existing_keys
+            else:
+                exists = candidate_bucket == input_bucket and candidate_key in input_existing_keys
         if exists and not args.overwrite:
             row["status"] = "skipped_existing"
             skipped_existing_count += 1
@@ -716,7 +730,10 @@ def main():  # type: () -> int
 
         row["upload_attempted"] = "true"
         if args.dry_run:
-            row["status"] = "would_overwrite" if exists and args.overwrite else "would_upload"
+            if args.force_publish:
+                row["status"] = "would_upload_unchecked"
+            else:
+                row["status"] = "would_overwrite" if exists and args.overwrite else "would_upload"
             manifest_rows.append(row)
             continue
 
@@ -755,6 +772,7 @@ def main():  # type: () -> int
         "s3_input_root": args.s3_input_root,
         "dry_run": bool(args.dry_run),
         "overwrite": bool(args.overwrite),
+        "force_publish": bool(args.force_publish),
         "n_output_candidates": len(output_candidates),
         "n_provenance_files": len(provenance_paths),
         "n_input_candidates": len(input_candidates),
