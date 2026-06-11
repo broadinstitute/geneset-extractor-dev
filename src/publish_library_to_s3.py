@@ -251,11 +251,6 @@ def build_path_rewrite_map(
 
     for candidate in input_candidates:
         replacements[str(candidate.local_path)] = candidate.s3_uri
-        current = candidate.local_path.parent
-        while current != current.parent:
-            s3_dir = candidate.s3_uri.rsplit("/", 1)[0]
-            replacements.setdefault(str(current), s3_dir)
-            current = current.parent
 
     return dict(sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True))
 
