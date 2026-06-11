@@ -240,15 +240,19 @@ def build_unique_input_relative_paths(paths):  # type: (List[Path]) -> Dict[Path
 def resolve_input_candidates_from_provenance(
     *,
     local_output_root,  # type: Path
+    output_candidates,  # type: List[CandidateFile]
     provenance_paths,  # type: List[Path]
     s3_input_root,  # type: str
 ):  # type: (**Any) -> List[CandidateFile]
     normalized_s3_root = s3_input_root.rstrip("/")
     by_path = {}  # type: Dict[Path, CandidateFile]
+    output_file_paths = {candidate.local_path.resolve() for candidate in output_candidates}  # type: Set[Path]
 
     for provenance_path in provenance_paths:
         provenance_rel = provenance_path.relative_to(local_output_root).as_posix()
         for source_path in extract_existing_file_paths_from_provenance(provenance_path):
+            if source_path in output_file_paths:
+                continue
             try:
                 source_path.relative_to(local_output_root)
                 continue
@@ -602,6 +606,7 @@ def main():  # type: () -> int
     provenance_paths = iter_provenance_paths(local_output_root)
     input_candidates = resolve_input_candidates_from_provenance(
         local_output_root=local_output_root,
+        output_candidates=output_candidates,
         provenance_paths=provenance_paths,
         s3_input_root=args.s3_input_root,
     )
