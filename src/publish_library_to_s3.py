@@ -630,23 +630,24 @@ def main():  # type: () -> int
         provenance_paths=provenance_paths,
         s3_input_root=args.s3_input_root,
     )
-    replacements = build_path_rewrite_map(
-        local_output_root=local_output_root,
-        output_candidates=output_candidates,
-        input_candidates=input_candidates,
-        s3_output_root=args.s3_output_root,
-    )
-    replacements = augment_rewrite_map_from_provenance(
-        provenance_paths=provenance_paths,
-        replacements=replacements,
-        output_candidates=output_candidates,
-        local_output_root=local_output_root,
-        s3_output_root=args.s3_output_root,
-    )
-    output_candidates = stage_rewritten_provenance_files(
-        output_candidates=output_candidates,
-        replacements=replacements,
-    )
+    if not args.dry_run:
+        replacements = build_path_rewrite_map(
+            local_output_root=local_output_root,
+            output_candidates=output_candidates,
+            input_candidates=input_candidates,
+            s3_output_root=args.s3_output_root,
+        )
+        replacements = augment_rewrite_map_from_provenance(
+            provenance_paths=provenance_paths,
+            replacements=replacements,
+            output_candidates=output_candidates,
+            local_output_root=local_output_root,
+            s3_output_root=args.s3_output_root,
+        )
+        output_candidates = stage_rewritten_provenance_files(
+            output_candidates=output_candidates,
+            replacements=replacements,
+        )
 
     log_line(log_path, f"discovered_output_files={len(output_candidates)}")
     log_line(log_path, f"scanned_provenance_files={len(provenance_paths)}")
