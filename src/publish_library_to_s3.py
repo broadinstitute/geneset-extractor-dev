@@ -71,6 +71,10 @@ def parse_args():  # type: () -> argparse.Namespace
         "--manifest_out",
         help="Optional TSV manifest path. Defaults to <local_output_root>/publish_library_manifest.tsv.",
     )
+    parser.add_argument(
+        "--path_map_out",
+        help="Optional TSV path for a compact local-path to remote-URI reference table.",
+    )
     parser.add_argument("--overwrite", action="store_true", help="Overwrite objects that already exist in S3.")
     parser.add_argument("--dry_run", action="store_true", help="Evaluate and log actions without uploading.")
     parser.add_argument("--aws_cli_bin", default="aws", help="AWS CLI executable to use. Default: aws.")
@@ -489,6 +493,22 @@ def write_manifest(path, rows):  # type: (Path, Iterable[Dict[str, Any]]) -> Non
             writer.writerow(row)
 
 
+def write_path_map(path, rows):  # type: (Path, Iterable[Dict[str, Any]]) -> None
+    fieldnames = [
+        "category",
+        "local_path",
+        "remote_uri",
+        "relative_path",
+        "requirement",
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, delimiter="\t", fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+
 def write_summary(path, payload):  # type: (Path, Dict[str, Any]) -> None
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -504,6 +524,11 @@ def main():  # type: () -> int
         Path(args.manifest_out).expanduser().resolve()
         if args.manifest_out
         else local_output_root / "publish_library_manifest.tsv"
+    )
+    path_map_path = (
+        Path(args.path_map_out).expanduser().resolve()
+        if args.path_map_out
+        else None
     )
     log_path = local_output_root / "publish_library_to_s3.log"
     summary_path = local_output_root / "publish_summary.json"
@@ -636,6 +661,19 @@ def main():  # type: () -> int
         manifest_rows.append(row)
 
     write_manifest(manifest_path, manifest_rows)
+    if path_map_path is not None:
+        path_map_rows = []
+        for candidate in candidates:
+            path_map_rows.append(
+                {
+                    "category": candidate.category,
+                    "local_path": str(candidate.local_path),
+                    "remote_uri": candidate.s3_uri,
+                    "relative_path": candidate.relative_path,
+                    "requirement": candidate.requirement,
+                }
+            )
+        write_path_map(path_map_path, path_map_rows)
     summary_payload = {
         "local_output_root": str(local_output_root),
         "s3_output_root": args.s3_output_root,
@@ -649,6 +687,7 @@ def main():  # type: () -> int
         "n_skipped_existing": skipped_existing_count,
         "n_failed": failed_count,
         "manifest_path": str(manifest_path),
+        "path_map_path": str(path_map_path) if path_map_path is not None else None,
         "log_path": str(log_path),
     }
     write_summary(summary_path, summary_payload)
