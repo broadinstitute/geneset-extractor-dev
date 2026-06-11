@@ -203,8 +203,38 @@ def extract_existing_file_paths_from_provenance(provenance_path):  # type: (Path
     return paths
 
 
-def input_relative_path(path):  # type: (Path) -> str
-    return path.as_posix().lstrip("/")
+def build_unique_input_relative_paths(paths):  # type: (List[Path]) -> Dict[Path, str]
+    unique_paths = sorted(set(paths))
+    if not unique_paths:
+        return {}
+
+    suffix_lengths = {path: 1 for path in unique_paths}  # type: Dict[Path, int]
+
+    while True:
+        by_suffix = {}  # type: Dict[str, List[Path]]
+        for path in unique_paths:
+            path_parts = [part for part in path.parts if part != "/"]
+            suffix_length = min(suffix_lengths[path], len(path_parts))
+            suffix = "/".join(path_parts[-suffix_length:])
+            by_suffix.setdefault(suffix, []).append(path)
+
+        collisions = [group for group in by_suffix.values() if len(group) > 1]
+        if not collisions:
+            resolved = {}  # type: Dict[Path, str]
+            for suffix, group in by_suffix.items():
+                if len(group) == 1:
+                    resolved[group[0]] = suffix
+            return resolved
+
+        progressed = False
+        for group in collisions:
+            for path in group:
+                path_parts = [part for part in path.parts if part != "/"]
+                if suffix_lengths[path] < len(path_parts):
+                    suffix_lengths[path] += 1
+                    progressed = True
+        if not progressed:
+            return {path: path.as_posix().lstrip("/") for path in unique_paths}
 
 
 def resolve_input_candidates_from_provenance(
@@ -232,13 +262,18 @@ def resolve_input_candidates_from_provenance(
                 requirement = " | ".join(sorted(prior))
             by_path[source_path] = CandidateFile(
                 local_path=source_path,
-                relative_path=input_relative_path(source_path),
-                s3_uri=f"{normalized_s3_root}/{input_relative_path(source_path)}",
+                relative_path="",
+                s3_uri="",
                 size_bytes=source_path.stat().st_size,
                 category="input",
                 requirement=requirement,
                 upload_path=None,
             )
+
+    relative_paths = build_unique_input_relative_paths(list(by_path.keys()))
+    for source_path, candidate in by_path.items():
+        candidate.relative_path = relative_paths[source_path]
+        candidate.s3_uri = f"{normalized_s3_root}/{candidate.relative_path}"
 
     return sorted(by_path.values(), key=lambda candidate: candidate.relative_path)
 
