@@ -391,13 +391,57 @@ def iter_output_directory_mirrors(
     return sorted(mirrored, key=lambda item: len(item[0]), reverse=True)
 
 
+def _common_path_prefix(parts_lists):  # type: (List[List[str]]) -> List[str]
+    if not parts_lists:
+        return []
+    prefix = list(parts_lists[0])
+    for parts in parts_lists[1:]:
+        limit = min(len(prefix), len(parts))
+        index = 0
+        while index < limit and prefix[index] == parts[index]:
+            index += 1
+        prefix = prefix[:index]
+        if not prefix:
+            break
+    return prefix
+
+
+def build_input_directory_mirrors(
+    *,
+    input_candidates,  # type: List[CandidateFile]
+    s3_input_root,  # type: str
+):  # type: (**Any) -> Dict[str, str]
+    by_directory = {}  # type: Dict[Path, List[CandidateFile]]
+    normalized_input_root = s3_input_root.rstrip("/")
+    for candidate in input_candidates:
+        current = candidate.local_path.parent.resolve()
+        while current != current.parent:
+            by_directory.setdefault(current, []).append(candidate)
+            current = current.parent
+
+    mirrors = {}  # type: Dict[str, str]
+    for directory, candidates in by_directory.items():
+        parent_parts_lists = []
+        for candidate in candidates:
+            relative_parts = [part for part in candidate.relative_path.split("/") if part]
+            parent_parts_lists.append(relative_parts[:-1])
+        common_parts = _common_path_prefix(parent_parts_lists)
+        s3_uri = normalized_input_root
+        if common_parts:
+            s3_uri = "{0}/{1}".format(normalized_input_root, "/".join(common_parts))
+        mirrors[str(directory)] = s3_uri
+    return dict(sorted(mirrors.items(), key=lambda item: len(item[0]), reverse=True))
+
+
 def augment_rewrite_map_from_provenance(
     *,
     provenance_paths,  # type: List[Path]
     replacements,  # type: Dict[str, str]
     output_candidates,  # type: List[CandidateFile]
+    input_candidates,  # type: List[CandidateFile]
     local_output_root,  # type: Path
     s3_output_root,  # type: str
+    s3_input_root,  # type: str
 ):  # type: (**Any) -> Dict[str, str]
     by_relative_output = {
         candidate.relative_path: candidate.s3_uri
@@ -407,6 +451,10 @@ def augment_rewrite_map_from_provenance(
         local_output_root=local_output_root,
         s3_output_root=s3_output_root,
         output_candidates=output_candidates,
+    )
+    input_dirs = build_input_directory_mirrors(
+        input_candidates=input_candidates,
+        s3_input_root=s3_input_root,
     )
     augmented = dict(replacements)
 
@@ -430,7 +478,12 @@ def augment_rewrite_map_from_provenance(
                 suffix = f"/{relative_dir}"
                 if token.endswith(suffix):
                     augmented[token] = s3_uri
+                    matched = True
                     break
+            if matched:
+                continue
+            if token in input_dirs:
+                augmented[token] = input_dirs[token]
 
     return dict(sorted(augmented.items(), key=lambda item: len(item[0]), reverse=True))
 
@@ -681,8 +734,10 @@ def main():  # type: () -> int
             provenance_paths=provenance_paths,
             replacements=replacements,
             output_candidates=output_candidates,
+            input_candidates=input_candidates,
             local_output_root=local_output_root,
             s3_output_root=args.s3_output_root,
+            s3_input_root=args.s3_input_root,
         )
         output_candidates = stage_rewritten_provenance_files(
             output_candidates=output_candidates,
