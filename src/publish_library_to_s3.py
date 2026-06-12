@@ -138,14 +138,17 @@ def should_skip_path(path):  # type: (Path) -> bool
     return False
 
 
-def iter_output_candidates(*, local_output_root, s3_output_root):  # type: (**Any) -> List[CandidateFile]
+def iter_output_candidates(*, local_output_root, s3_output_root, excluded_paths=None):  # type: (**Any) -> List[CandidateFile]
     candidates = []  # type: List[CandidateFile]
     normalized_s3_root = s3_output_root.rstrip("/")
+    excluded_resolved_paths = set(path.resolve() for path in (excluded_paths or []))  # type: Set[Path]
     print("scanning_output_tree root={0}".format(local_output_root), flush=True)
     for index, path in enumerate(sorted(local_output_root.rglob("*")), 1):
         if index == 1 or index % 5000 == 0:
             print("scanning_output_tree entries_seen={0} files_kept={1}".format(index, len(candidates)), flush=True)
         if should_skip_path(path) or not path.is_file():
+            continue
+        if path.resolve() in excluded_resolved_paths:
             continue
         relative_path = path.relative_to(local_output_root).as_posix()
         candidates.append(
@@ -612,6 +615,17 @@ def write_summary(path, payload):  # type: (Path, Dict[str, Any]) -> None
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def build_publisher_artifact_paths(*, log_path, manifest_path, summary_path, path_map_path):  # type: (**Any) -> Set[Path]
+    paths = {
+        log_path.resolve(),
+        manifest_path.resolve(),
+        summary_path.resolve(),
+    }  # type: Set[Path]
+    if path_map_path is not None:
+        paths.add(path_map_path.resolve())
+    return paths
+
+
 def main():  # type: () -> int
     args = parse_args()
     if args.force_publish and not args.dry_run and not args.overwrite:
@@ -637,10 +651,17 @@ def main():  # type: () -> int
 
     invocation = ["python3", str(Path(__file__).resolve()), *sys.argv[1:]]
     log_line(log_path, f"$ {shell_join(invocation)}")
+    publisher_artifact_paths = build_publisher_artifact_paths(
+        log_path=log_path,
+        manifest_path=manifest_path,
+        summary_path=summary_path,
+        path_map_path=path_map_path,
+    )
 
     output_candidates = iter_output_candidates(
         local_output_root=local_output_root,
         s3_output_root=args.s3_output_root,
+        excluded_paths=publisher_artifact_paths,
     )
     provenance_paths = iter_provenance_paths(local_output_root)
     input_candidates = resolve_input_candidates_from_provenance(
