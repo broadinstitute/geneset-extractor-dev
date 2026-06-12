@@ -1,7 +1,8 @@
 import os
+import argparse
 
 BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/runs/gtex_all_models/genesets"
-OUT_FILE = "../../data/gtex/output.tissue/model_counts.txt"
+DEFAULT_OUT_FILE = "../../data/gtex/output.tissue/model_counts.txt"
 
 MODELS = ["AB1", "AB2", "AB3", "AB4", "AB5", "AB6", "AB7", "AB8", "AB9", "AB10", 
           "AB11", "AB12", "AB13", "AB14", "AB15", "AB16", "AB17", "AB18", "AB19", "AB20", "AB21", "AB22",
@@ -58,10 +59,15 @@ def validate_tissue(tissue, out_f):
 
 
 def main():
-    with open(OUT_FILE, 'w') as out_f:
+    parser = argparse.ArgumentParser(description="Count gene sets per model")
+    parser.add_argument("-b", "--base-folder", default=BASE_FOLDER, help="Base folder for genesets")
+    parser.add_argument("-o", "--output-file", default=DEFAULT_OUT_FILE, help="Output file for counts")
+    args = parser.parse_args()
+    
+    with open(args.output_file, 'w') as out_f:
         out_f.write("Tissue\t" + "\t".join(MODELS) + "\n")
-        for tissue in sorted(os.listdir(BASE_FOLDER)):
-            tissue_path = os.path.join(BASE_FOLDER, tissue)
+        for tissue in sorted(os.listdir(args.base_folder)):
+            tissue_path = os.path.join(args.base_folder, tissue)
             if os.path.isdir(tissue_path):
                 validate_tissue(tissue, out_f)
 

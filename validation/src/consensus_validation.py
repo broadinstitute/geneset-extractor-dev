@@ -1,4 +1,5 @@
 import os
+import argparse
 from collections import defaultdict
 import sys
 
@@ -7,12 +8,9 @@ from validation_summary import key, parse_gtex_gene_set_name_suffix
 from gene_set_comparison import load_genesets
 from run_eaggl import run_eaggl, run_pigean, save_results
 
-CLIENT = "eaggl"
+DEFAULT_BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/runs/gtex_all_models/genesets"
+DEFAULT_OUT_FOLDER = "../../data/gtex/output.tissue"
 MIN_GENES_FOR_CONSENSUS = 4
-
-BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/runs/gtex_all_models/genesets"
-CONSENSUS_OUT_FILE = "../../data/gtex/output.tissue/consensus_analysis.txt"
-CONSENSUS_PIGEAN_OUT_FILE = "../../data/gtex/output.tissue.pigean/consensus_analysis_pigean.txt"
 
 def consensus_counts(gene_sets):
     """
@@ -45,11 +43,11 @@ def consensus_thresholds(gene_sets, thresholds=(0.90, 0.75, 0.50, 0.25)):
     return result
 
 
-def analyze_consensus(gene_set_name,gene_set, out_f):
+def analyze_consensus(gene_set_name, gene_set, out_f, method="eaggl"):
     thresholds = consensus_thresholds(gene_set)
     for threshold, genes in thresholds.items():
         print("Genes in at least {}% of gene sets:".format(int(threshold[2:])), len(genes))
-        if CLIENT == "eaggl":
+        if method == "eaggl":
             results = run_eaggl(genes)
         else:
             results = run_pigean(genes)
@@ -70,15 +68,32 @@ def filter_genesets(gene_sets, min_genes=10, prefix=""):
 
 
 def main():
-    genesets = load_genesets()
-    consensus_file = CONSENSUS_PIGEAN_OUT_FILE if CLIENT == "pigean" else CONSENSUS_OUT_FILE
-    filtered_genesets = filter_genesets(genesets, min_genes=MIN_GENES_FOR_CONSENSUS, prefix="AB")
+    parser = argparse.ArgumentParser(description="Analyze consensus gene sets")
+    parser.add_argument("-b", "--base-folder", default=DEFAULT_BASE_FOLDER, help="Base folder for genesets")
+    parser.add_argument("-o", "--output-folder", default=DEFAULT_OUT_FOLDER, help="Output folder for results")
+    parser.add_argument("-m", "--method", choices=["eaggl", "pigean"], default="eaggl", help="Enrichment method")
+    parser.add_argument("--min-genes", type=int, default=MIN_GENES_FOR_CONSENSUS, help="Minimum genes for consensus")
+    parser.add_argument("--prefix", default="AB", help="Model prefix filter (e.g., AB, AC, CFDE1)")
+    args = parser.parse_args()
+    
+    # Construct output file path
+    if args.method == "pigean":
+        out_folder = args.output_folder.replace("output.tissue", "output.tissue.pigean")
+    else:
+        out_folder = args.output_folder
+    consensus_file = os.path.join(out_folder, f"consensus_analysis_{args.method}.txt")
+    
+    # Load and filter genesets
+    genesets = load_genesets(args.base_folder)
+    filtered_genesets = filter_genesets(genesets, min_genes=args.min_genes, prefix=args.prefix)
+    
     for gene_set_name, gene_set in filtered_genesets.items():
         print(f"Gene set: {gene_set_name}, Number of source gene sets: {len(gene_set)}")
+    
     with open(consensus_file, 'w') as out_f:
         for gene_set_name, gene_set in filtered_genesets.items():
             print(f"Analyzing consensus for gene set: {gene_set_name}")
-            analyze_consensus(gene_set_name, gene_set, out_f)
+            analyze_consensus(gene_set_name, gene_set, out_f, method=args.method)
 
 
 if __name__ == "__main__":

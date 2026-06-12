@@ -1,13 +1,12 @@
 import os
+import argparse
 
 from collections import defaultdict
 from run_validation import parse_gmt_file
 from validation_summary import key, parse_gtex_gene_set_name_suffix, parse_drc_gene_set_name_suffix
 
-BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/runs/gtex_all_models/genesets"
-OUT_FILE = "../../data/gtex/output.tissue/adipose_tissue_{}_comparison.tsv"
-DCC_COMP_OUT_FILE = "../../data/gtex/output.tissue/DM_comparison.tsv"
-DM_VS_DM_COMP_OUT_FILE = "../../data/gtex/output.tissue/DM_vs_DM_comparison.tsv"
+DEFAULT_BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/runs/gtex_all_models/genesets"
+DEFAULT_OUT_FOLDER = "../../data/gtex/output.tissue"
 
 MODELS = [ "DM", "HZ1", "Harmo", 
     "AB1", "AB2", "AB3", "AB4", "AB5", "AB6", "AB7", "AB8", "AB9", "AB10",
@@ -44,10 +43,12 @@ def load_genesets_for_tissue(tissue_folder):
     return genesets
 
 
-def load_genesets():
+def load_genesets(base_folder=None):
+    if base_folder is None:
+        base_folder = DEFAULT_BASE_FOLDER
     tissue_genesets = defaultdict(dict)
-    for tissue in os.listdir(BASE_FOLDER):
-        tissue_folder = os.path.join(BASE_FOLDER, tissue)
+    for tissue in os.listdir(base_folder):
+        tissue_folder = os.path.join(base_folder, tissue)
         if os.path.isdir(tissue_folder):
             print("Loading gene sets for tissue:", tissue)
             path = os.path.join(tissue_folder, "models")
@@ -173,5 +174,16 @@ def main_DM_vs_DM():
 
 
 if __name__ == "__main__":
-    main_DM_vs_AB_models()
-    main_DM_vs_DM()
+    parser = argparse.ArgumentParser(description="Compare gene sets across models")
+    parser.add_argument("-b", "--base-folder", default=DEFAULT_BASE_FOLDER, help="Base folder for genesets")
+    parser.add_argument("-o", "--output-folder", default=DEFAULT_OUT_FOLDER, help="Output folder for results")
+    parser.add_argument("--dm-comparison", action="store_true", help="Run DM vs AB models comparison")
+    parser.add_argument("--dm-vs-dm", action="store_true", help="Run DM vs DM comparison")
+    args = parser.parse_args()
+    
+    if args.dm_comparison:
+        main_DM_vs_AB_models()
+    elif args.dm_vs_dm:
+        main_DM_vs_DM()
+    else:
+        print("Please specify --dm-comparison or --dm-vs-dm")

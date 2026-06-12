@@ -1,24 +1,11 @@
 import csv
 import os
+import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
 
-PIGEAN = False
-
-BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/runs/gtex_all_models/genesets"
-
-if PIGEAN:
-    IN_FILE = "../../data/gtex/output.tissue.pigean/{}_validation_results_pigean.txt"
-    HARMONIZOME_FILE = "../../data/gtex/output.tissue.pigean/harmonizome_pigean_validation.txt"
-    DATA_MATRIX_FILE = "../../data/gtex/output.tissue.pigean/data_matrix_validation.txt"
-    DATA_MATRIX_PIGEAN_FILE = "../../data/gtex/output.tissue.pigean/data_matrix_pigean_validation.txt"
-    CONSENSUS_FILE = "../../data/gtex/output.tissue.pigean/consensus_analysis.txt"
-else:
-    IN_FILE = "../../data/gtex/output.tissue/{}_validation_results.txt"
-    HARMONIZOME_FILE = "../../data/gtex/output.tissue/harmonizome_validation.txt"
-    DATA_MATRIX_FILE = "../../data/gtex/output.tissue/data_matrix_validation.txt"
-    DATA_MATRIX_PIGEAN_FILE = "../../data/gtex/output.tissue/data_matrix_pigean_validation.txt"
-    CONSENSUS_FILE = "../../data/gtex/output.tissue/consensus_analysis.txt"
+DEFAULT_BASE_FOLDER = "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/runs/gtex_all_models/genesets"
+DEFAULT_IN_FOLDER = "../../data/gtex/output.tissue"
 
 
 def plot_gene_set_by_model(df, gene_set_name_suffix):
@@ -149,12 +136,15 @@ def add_key_column_drc(df):
     return df
 
 
-def summarize_tissue(tissue):
-    #check if input file exists
-    if not os.path.exists(IN_FILE.format(tissue)):
-        print(f"Input file {IN_FILE.format(tissue)} not found. Skipping tissue {tissue}.")
+def summarize_tissue(tissue, base_folder, input_folder, method="eaggl"):
+    # Construct the input file path based on method
+    in_file = os.path.join(input_folder, f"{tissue}_validation_results_{method}.txt")
+    
+    # check if input file exists
+    if not os.path.exists(in_file):
+        print(f"Input file {in_file} not found. Skipping tissue {tissue}.")
         return None
-    df = pd.read_csv(IN_FILE.format(tissue), sep='\t', header=None, names=['model','gene_set_name_suffix','gene_set_name', 'gene_set_size', 'rank', 'enriched_gene_sets_name', 'enriched_gene_set_size', 'enriched_gene_set_p_value'])
+    df = pd.read_csv(in_file, sep='\t', header=None, names=['model','gene_set_name_suffix','gene_set_name', 'gene_set_size', 'rank', 'enriched_gene_sets_name', 'enriched_gene_set_size', 'enriched_gene_set_p_value'])
     df['tissue'] = tissue
     
     # Create top enriched gene set dataframe
@@ -202,42 +192,55 @@ def create_pivot_tables(df):
 
 
 def main():
-    if PIGEAN:
-        output_path = "../../data/gtex/output.tissue.pigean/test_top_gene_sets.tsv"
-        pivot_ab_output_path = "../../data/gtex/output.tissue.pigean/test_negative_control_counts_AB.tsv"
-        pivot_ac_output_path = "../../data/gtex/output.tissue.pigean/test_negative_control_counts_AC.tsv"
+    parser = argparse.ArgumentParser(description="Summarize validation results")
+    parser.add_argument("-b", "--base-folder", required=True, help="Base folder for genesets")
+    parser.add_argument("-o", "--output-folder", required=True, help="Output folder for results")
+    parser.add_argument("-m", "--method", choices=["eaggl", "pigean"], default="eaggl", help="Enrichment method")
+    args = parser.parse_args()
+    
+    # Determine input and output folders based on method
+    if args.method == "pigean":
+        input_folder = args.output_folder.replace("output.tissue", "output.tissue.pigean") if "output.tissue" in args.output_folder else args.output_folder + ".pigean"
     else:
-        output_path = "../../data/gtex/output.tissue/test_top_gene_sets.tsv"
-        pivot_ab_output_path = "../../data/gtex/output.tissue/test_negative_control_counts_AB.tsv"
-        pivot_ac_output_path = "../../data/gtex/output.tissue/test_negative_control_counts_AC.tsv"
+        input_folder = args.output_folder
+    
+    # Construct file paths
+    harmonizome_file = os.path.join(input_folder, f"harmonizome_validation_{args.method}.txt")
+    data_matrix_file = os.path.join(input_folder, f"data_matrix_validation_{args.method}.txt")
+    data_matrix_pigean_file = os.path.join(input_folder, "data_matrix_pigean_validation.txt")
+    consensus_file = os.path.join(input_folder, "consensus_analysis.txt")
+    output_path = os.path.join(input_folder, f"test_top_gene_sets_{args.method}.tsv")
+    pivot_ab_output_path = os.path.join(input_folder, f"test_negative_control_counts_AB_{args.method}.tsv")
+    pivot_ac_output_path = os.path.join(input_folder, f"test_negative_control_counts_AC_{args.method}.tsv")
+    
     df = None
+    
     # process harmonizome file
-    if os.path.exists(HARMONIZOME_FILE):
-        harmonizome_df = pd.read_csv(HARMONIZOME_FILE, sep='\t', names=['gene_set_name_suffix','model','gene_set_name', 'gene_set_size', 'rank', 'enriched_gene_sets_name', 'enriched_gene_set_size', 'enriched_gene_set_p_value'])
+    if os.path.exists(harmonizome_file):
+        harmonizome_df = pd.read_csv(harmonizome_file, sep='\t', names=['gene_set_name_suffix','model','gene_set_name', 'gene_set_size', 'rank', 'enriched_gene_sets_name', 'enriched_gene_set_size', 'enriched_gene_set_p_value'])
         # select only rows where gene_set_name_suffix starts with "GTEx"
         harmonizome_df = harmonizome_df[harmonizome_df['gene_set_name_suffix'].str.startswith("GTEx")]
         
         harmonizome_df['model'] = 'HAR'
         harmonizome_df['tissue'] = 'harmonizome'
         print(f"Processed harmonizome file with {len(harmonizome_df)} rows.")
-        # print(harmonizome_df.head())
         summarize_harmonizome_df = create_top_enriched_df(harmonizome_df)
         summarize_harmonizome_df = add_key_column_drc(summarize_harmonizome_df)
         print("\nTop enriched gene sets for harmonizome:")
         print(summarize_harmonizome_df.head(10))
         df = summarize_harmonizome_df
     else:
-        print(f"Harmonizome file {HARMONIZOME_FILE} not found. Skipping.")
+        print(f"Harmonizome file {harmonizome_file} not found. Skipping.")
+    
     # process data matrix file
-    if os.path.exists(DATA_MATRIX_FILE):
-        data_matrix_df = pd.read_csv(DATA_MATRIX_FILE, sep='\t', names=['gene_set_name_suffix','model','gene_set_name', 'gene_set_size', 'rank', 'enriched_gene_sets_name', 'enriched_gene_set_size', 'enriched_gene_set_p_value'])
+    if os.path.exists(data_matrix_file):
+        data_matrix_df = pd.read_csv(data_matrix_file, sep='\t', names=['gene_set_name_suffix','model','gene_set_name', 'gene_set_size', 'rank', 'enriched_gene_sets_name', 'enriched_gene_set_size', 'enriched_gene_set_p_value'])
         # select only rows where gene_set_name_suffix starts with "GTEx"
         data_matrix_df = data_matrix_df[data_matrix_df['gene_set_name_suffix'].str.startswith("GTEx")]
 
         data_matrix_df['model'] = 'DTMX'
         data_matrix_df['tissue'] = 'data_matrix'
         print(f"Processed data matrix file with {len(data_matrix_df)} rows.")
-        # print(data_matrix_df.head())
         summarize_data_matrix_df = create_top_enriched_df(data_matrix_df)
         summarize_data_matrix_df = add_key_column_drc(summarize_data_matrix_df)
         print("\nTop enriched gene sets for data matrix:")
@@ -247,18 +250,17 @@ def main():
         else:
             df = summarize_data_matrix_df
     else:
-        print(f"Data matrix file {DATA_MATRIX_FILE} not found. Skipping.")
+        print(f"Data matrix file {data_matrix_file} not found. Skipping.")
 
     # process data matrix pigean file
-    if os.path.exists(DATA_MATRIX_PIGEAN_FILE):
-        data_matrix_pigean_df = pd.read_csv(DATA_MATRIX_PIGEAN_FILE, sep='\t', names=['gene_set_name_suffix','model','gene_set_name', 'gene_set_size', 'rank', 'enriched_gene_sets_name', 'enriched_gene_set_size', 'enriched_gene_set_p_value'])
+    if os.path.exists(data_matrix_pigean_file):
+        data_matrix_pigean_df = pd.read_csv(data_matrix_pigean_file, sep='\t', names=['gene_set_name_suffix','model','gene_set_name', 'gene_set_size', 'rank', 'enriched_gene_sets_name', 'enriched_gene_set_size', 'enriched_gene_set_p_value'])
         # select only rows where gene_set_name_suffix starts with "GTEx"
         data_matrix_pigean_df = data_matrix_pigean_df[data_matrix_pigean_df['gene_set_name_suffix'].str.startswith("GTEx")]
 
         data_matrix_pigean_df['model'] = 'DM_PG'
         data_matrix_pigean_df['tissue'] = 'data_matrix_pigean'
         print(f"Processed data matrix pigean file with {len(data_matrix_pigean_df)} rows.")
-        # print(data_matrix_pigean_df.head())
         summarize_data_matrix_pigean_df = create_top_enriched_df(data_matrix_pigean_df)
         summarize_data_matrix_pigean_df = add_key_column_drc(summarize_data_matrix_pigean_df)
         print("\nTop enriched gene sets for data matrix pigean:")
@@ -267,10 +269,12 @@ def main():
             df = pd.concat([df, summarize_data_matrix_pigean_df], ignore_index=True)
         else:
             df = summarize_data_matrix_pigean_df
+    else:
+        print(f"Data matrix pigean file {data_matrix_pigean_file} not found. Skipping.")
 
-    # process concensus analysis file
-    if os.path.exists(CONSENSUS_FILE):
-        consensus_df = pd.read_csv(CONSENSUS_FILE, sep='\t', names=['model','gene_set_name_suffix','gene_set_name', 'gene_set_size', 'rank', 'enriched_gene_sets_name', 'enriched_gene_set_size', 'enriched_gene_set_p_value'])
+    # process consensus analysis file
+    if os.path.exists(consensus_file):
+        consensus_df = pd.read_csv(consensus_file, sep='\t', names=['model','gene_set_name_suffix','gene_set_name', 'gene_set_size', 'rank', 'enriched_gene_sets_name', 'enriched_gene_set_size', 'enriched_gene_set_p_value'])
         consensus_df['tissue'] = 'consensus_analysis'
         print(f"Processed consensus analysis file with {len(consensus_df)} rows.")
         summarize_consensus_df = create_top_enriched_df(consensus_df)
@@ -281,43 +285,50 @@ def main():
             df = pd.concat([df, summarize_consensus_df], ignore_index=True)
         else:
             df = summarize_consensus_df
+    else:
+        print(f"Consensus analysis file {consensus_file} not found. Skipping.")
 
     # Process each tissue file and concatenate results
-    for tissue in sorted(os.listdir(BASE_FOLDER)):
-        tissue_path = os.path.join(BASE_FOLDER, tissue)
+    for tissue in sorted(os.listdir(args.base_folder)):
+        tissue_path = os.path.join(args.base_folder, tissue)
         if os.path.isdir(tissue_path):
-            tissue_df = summarize_tissue(tissue)
+            tissue_df = summarize_tissue(tissue, args.base_folder, input_folder, args.method)
             if tissue_df is not None:
-                tissue_df = add_key_column_gtex(tissue_df)
+                # tissue_df = add_key_column_gtex(tissue_df)
+                tissue_df['key'] = tissue_df['gene_set_name_suffix']
             if df is None:
                 df = tissue_df
             else: 
                 if tissue_df is not None:
                     df = pd.concat([df, tissue_df], ignore_index=True)
-    df.to_csv(output_path, sep='\t', index=False)
-    print(f"\nSaved top gene sets to {output_path}")
     
-    # Create and save pivot tables
-    ab_pivot, ac_pivot = create_pivot_tables(df)
-    ab_pivot.to_csv(pivot_ab_output_path, sep='\t')
-    print(f"Saved AB models pivot table to {pivot_ab_output_path}")
-    ac_pivot.to_csv(pivot_ac_output_path, sep='\t')
-    print(f"Saved AC models pivot table to {pivot_ac_output_path}")
+    if df is not None:
+        df.to_csv(output_path, sep='\t', index=False)
+        print(f"\nSaved top gene sets to {output_path}")
+        
+        # Create and save pivot tables
+        ab_pivot, ac_pivot = create_pivot_tables(df)
+        ab_pivot.to_csv(pivot_ab_output_path, sep='\t')
+        print(f"Saved AB models pivot table to {pivot_ab_output_path}")
+        ac_pivot.to_csv(pivot_ac_output_path, sep='\t')
+        print(f"Saved AC models pivot table to {pivot_ac_output_path}")
 
-    # evaluate model performance
-    # count across all tissues, use 25 for missing values
-    # filer out rows where key ends with "_"
-    ab_pivot = ab_pivot[~ab_pivot.index.str.endswith("_")]
-    ac_pivot = ac_pivot[~ac_pivot.index.str.endswith("_")]
-    pivot_ab_filled = ab_pivot.fillna(25)
-    pivot_ac_filled = ac_pivot.fillna(25)
-    # calculate average negative control count for each model    
-    ab_model_performance = pivot_ab_filled.sum().sort_values()
-    ac_model_performance = pivot_ac_filled.sum().sort_values()
-    print("\nAverage negative control count for AB models:")    
-    print(ab_model_performance)
-    print("\nAverage negative control count for AC models:")
-    print(ac_model_performance)
+        # evaluate model performance
+        # count across all tissues, use 25 for missing values
+        # filter out rows where key ends with "_"
+        ab_pivot = ab_pivot[~ab_pivot.index.str.endswith("_")]
+        ac_pivot = ac_pivot[~ac_pivot.index.str.endswith("_")]
+        pivot_ab_filled = ab_pivot.fillna(25)
+        pivot_ac_filled = ac_pivot.fillna(25)
+        # calculate average negative control count for each model    
+        ab_model_performance = pivot_ab_filled.sum().sort_values()
+        ac_model_performance = pivot_ac_filled.sum().sort_values()
+        print("\nAverage negative control count for AB models:")    
+        print(ab_model_performance)
+        print("\nAverage negative control count for AC models:")
+        print(ac_model_performance)
+    else:
+        print("No data processed. Check that input files exist and are readable.")
 
 
 if __name__ == "__main__":
