@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 IMAGE_TAG="${IMAGE_TAG:-geneset-extractors-liger:md_liger}"
 INPUT_ROOT="${INPUT_ROOT:-/Users/mduby/Data/Broad/GeneSetIncubator/Liger/H5adTestDataDocker}"

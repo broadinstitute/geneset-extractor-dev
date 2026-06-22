@@ -39,6 +39,7 @@ dependencies:
   # the R-based DE backends in dig-gene-set-extractors.
   - r-base>=4.3
   - r-remotes
+  - r-biocmanager
   - r-seurat
   - r-dplyr
   - r-purrr
