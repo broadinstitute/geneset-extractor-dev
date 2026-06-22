@@ -39,7 +39,7 @@ Environment overrides:
   OVERWRITE=1
 
 This script:
-  1. builds the Docker image from geneset-extractor.Dockerfile
+  1. builds the Docker image from geneset-extractor.Dockerfile with --no-cache
   2. mounts this repo at /work
   3. mounts INPUT_ROOT read-only at /inputs
   4. runs the LIGER h5ad batch workflow
@@ -59,6 +59,7 @@ fi
 mkdir -p "${OUTPUT_ROOT}"
 
 docker build \
+  --no-cache \
   -f "${REPO_ROOT}/geneset-extractor.Dockerfile" \
   -t "${IMAGE_TAG}" \
   --build-arg DIG_BRANCH=md_liger \
