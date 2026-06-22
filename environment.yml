@@ -47,7 +47,23 @@ dependencies:
   - r-proxy
   - r-reticulate
   - r-anndata
+  - r-hdf5r
+  - r-rcppplanc
+  - r-leidenalg
   - r-lme4
   - bioconductor-edger
   - bioconductor-limma
   - bioconductor-variancepartition
+  - bioconductor-xvector
+  - bioconductor-sparsearray
+  - bioconductor-delayedarray
+  - bioconductor-rhdf5
+  - bioconductor-rhdf5filters
+  - bioconductor-rhdf5lib
+  - bioconductor-hdf5array
+  - bioconductor-summarizedexperiment
+  - bioconductor-singlecellexperiment
+  - bioconductor-biostrings
+  - bioconductor-keggrest
+  - bioconductor-annotationdbi
+  - bioconductor-genomicranges
