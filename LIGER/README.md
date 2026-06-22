@@ -23,9 +23,10 @@ python LIGER/src/run_liger_h5ad_batch.py
 From the repository root:
 
 ```bash
-INPUT_ROOT=/Users/mduby/Data/Broad/GeneSetIncubator/Liger/H5adTestDataDocker \
-OUTPUT_ROOT=/Users/mduby/Code/DccWorkspace/ServerGeneSetCompute/LIGER/outputs/docker_run \
-run/run_liger_docker.sh
+INPUT_ROOT=/Data/Broad/GeneSetIncubator/Liger/MarcTestH5ad \
+OUTPUT_ROOT=/Data/Broad/GeneSetIncubator/Liger/MarcTestOutput \
+OVERWRITE=1 \
+./run/run_liger_docker.sh
 ```
 
 That wrapper builds `geneset-extractor.Dockerfile` with:
