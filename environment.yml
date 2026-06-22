@@ -30,12 +30,22 @@ dependencies:
   - scipy>=1.10
   - scikit-learn>=1.2
   - statsmodels>=0.14
+  - h5py
+  - anndata
   - jsonschema>=4.0
   - pytest>=8
 
   # R runtime plus packages used by GTEx continuous-age runs and
   # the R-based DE backends in dig-gene-set-extractors.
   - r-base>=4.3
+  - r-remotes
+  - r-seurat
+  - r-dplyr
+  - r-purrr
+  - r-clue
+  - r-proxy
+  - r-reticulate
+  - r-anndata
   - r-lme4
   - bioconductor-edger
   - bioconductor-limma

@@ -31,6 +31,7 @@
 !Metabolomics/
 !GlyGen/
 !HuBMAP/
+!LIGER/
 !MoTrPAC/
 !KOMP2/
 !src/
@@ -45,6 +46,7 @@
 !Metabolomics/**/
 !GlyGen/**/
 !HuBMAP/**/
+!LIGER/**/
 !MoTrPAC/**/
 !KOMP2/**/
 !src/**/
@@ -126,6 +128,13 @@
 !HuBMAP/**/*.md
 !HuBMAP/**/*.pdf
 !HuBMAP/**/*.png
+!LIGER/**/*.py
+!LIGER/**/*.r
+!LIGER/**/*.R
+!LIGER/**/*.sh
+!LIGER/**/*.md
+!LIGER/**/*.pdf
+!LIGER/**/*.png
 !MoTrPAC/**/*.py
 !MoTrPAC/**/*.r
 !MoTrPAC/**/*.R
