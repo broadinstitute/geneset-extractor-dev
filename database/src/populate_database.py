@@ -150,6 +150,13 @@ class GeneSeCoDatabasePopulator:
 
             candidate_id += 1
 
+    def resolve_collection_name(self, data_file: DataFileRef, fallback_collection_name: str) -> str:
+        """Resolve the collection/prefix name for a gene set source."""
+        if data_file.is_s3 and len(data_file.path_parts) > 1:
+            return data_file.path_parts[0]
+
+        return fallback_collection_name
+
     def get_s3_client(self):
         """Lazily initialize the S3 client."""
         if boto3 is None:
@@ -834,8 +841,8 @@ class GeneSeCoDatabasePopulator:
             logger.info("Initializing reference data...")
             species_id = self.insert_species(species_code, species_name)
             namespace_id = self.insert_namespace(namespace_label, species_code)
-            collection_id = self.insert_collection(collection_name)
             license_id = self.insert_gene_set_license(license_code)
+            initialized_collection_names = set()
             
             # Process each GMT file
             total_gene_sets = 0
@@ -845,6 +852,11 @@ class GeneSeCoDatabasePopulator:
             for gmt_file in gmt_files:
                 logger.info(f"Processing GMT file: {gmt_file.location}")
                 gene_sets = self.parse_gmt_file(gmt_file)
+                effective_collection_name = self.resolve_collection_name(gmt_file, collection_name)
+
+                if effective_collection_name not in initialized_collection_names:
+                    self.insert_collection(effective_collection_name)
+                    initialized_collection_names.add(effective_collection_name)
                 
                 for gene_set_name, genes in gene_sets:
                     try:
@@ -857,9 +869,9 @@ class GeneSeCoDatabasePopulator:
                         
                         # Build unified standard name: {collection}__{tissue}__{gene_set_name}
                         if tissue:
-                            standard_name = f"{collection_name}__{tissue}__{gene_set_name}"
+                            standard_name = f"{effective_collection_name}__{tissue}__{gene_set_name}"
                         else:
-                            standard_name = f"{collection_name}__{gene_set_name}"
+                            standard_name = f"{effective_collection_name}__{gene_set_name}"
                         
                         # Load provenance and metadata if required
                         provenance_data = None
@@ -881,7 +893,7 @@ class GeneSeCoDatabasePopulator:
                         # Insert gene set with explicit ID
                         gene_set_id, gene_set_was_inserted = self.insert_gene_set(
                             standard_name=standard_name,
-                            collection_name=collection_name,
+                            collection_name=effective_collection_name,
                             license_code=license_code,
                             gene_set_id=gene_set_id
                         )

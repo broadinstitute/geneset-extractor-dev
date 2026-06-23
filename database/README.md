@@ -25,6 +25,8 @@ For each GMT file directory or S3 prefix, it looks for `geneset.provenance.json`
 ### Naming and IDs
 
 - Derives a tissue name from the GMT file's directory path when possible and builds a standardized gene set name:
+- For local filesystem loads, the standardized name prefix comes from `--collection-name`.
+- For S3 loads, the standardized name prefix comes from the top-level directory in the S3 object key. For example, `s3://bucket/MarcTestOutput/rna_sc_programs/models/.../genesets.gmt` produces a prefix of `MarcTestOutput`.
 
 ### Example
 
