@@ -16,6 +16,7 @@
 !MoTrPAC/
 !KOMP2/
 !database
+!notes/
 
 !LINCS_L1000/**/
 !RummaGEO/**/
@@ -28,6 +29,7 @@
 !MoTrPAC/**/
 !KOMP2/**/
 !database/**/
+!notes/**/
 
 # Allow certain filetypes
 !LINCS_L1000/**/*.py
@@ -104,3 +106,6 @@
 !database/**/*.sql
 !database/**/*.sh
 !database/**/*.md
+!notes/**/*.txt
+!notes/**/*.sql
+
