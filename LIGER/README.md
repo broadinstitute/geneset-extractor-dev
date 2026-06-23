@@ -39,12 +39,12 @@ and then mounts:
 - the input h5ad tree at `/inputs` read-only
 - the host output directory at `/liger_outputs`
 
-Input directory structure (tissue/cell_type.h5ad) where INPUT_ROOT=InputtData:
+Input directory structure (tissue/cell_type.h5ad) where INPUT_ROOT=InputData:
 
 ```bash
-InputtData/kidney/parietal epithelial cell.h5ad
-InputtData/kidney/Vascular Smooth Muscle Cell Pericyte.h5ad
-InputtData/pancreas/plasmablast.h5ad
+InputData/kidney/parietal epithelial cell.h5ad
+InputData/kidney/Vascular Smooth Muscle Cell Pericyte.h5ad
+InputData/pancreas/plasmablast.h5ad
 ```
 
 ## Raw docker commands
