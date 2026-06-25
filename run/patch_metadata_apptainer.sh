@@ -130,7 +130,7 @@ if [[ -n "${APPTAINER_EXTRA_ARGS}" ]]; then
 fi
 EXEC_CMD+=(
   "${APPTAINER_IMAGE}"
-  bash -lc
+  bash --noprofile --norc -c
   "export PYTHON_BIN='${APPTAINER_PYTHON_BIN}'; bash '${PATCH_WRAPPER}'$(printf ' %q' "${FORWARDED_ARGS[@]}")"
 )
 
