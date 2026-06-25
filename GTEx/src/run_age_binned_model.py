@@ -37,6 +37,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--age_binned_model_manifest", default=str(default_age_binned_model_manifest_path()))
     parser.add_argument("--write_commands_only", action="store_true")
+    parser.add_argument("--write_model_only", action="store_true")
     return parser.parse_args()
 
 
@@ -507,6 +508,17 @@ def main() -> int:
         extractor_cmd=extractor_cmd,
         dig_dir=dig_dir,
     )
+    if args.write_model_only:
+        write_json(
+            extractor_out / "geneset.model.json",
+            build_model_sidecar_payload(
+                model_id=args.model_id,
+                tissue_id=tissue_id,
+                tissue_label=tissue_label,
+                settings=settings,
+            ),
+        )
+        return 0
 
     if args.write_commands_only:
         return 0

@@ -44,6 +44,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--continuous_age_model_manifest", default=str(default_continuous_age_model_manifest_path()))
     parser.add_argument("--write_commands_only", action="store_true")
+    parser.add_argument("--write_model_only", action="store_true")
     return parser.parse_args()
 
 
@@ -734,6 +735,20 @@ def main() -> int:
         }
 
         if args.write_commands_only:
+            statuses.append(status_row)
+            continue
+
+        if args.write_model_only:
+            write_json(
+                extractor_out / "geneset.model.json",
+                build_model_sidecar_payload(
+                    model_id=model_id,
+                    tissue_id=args.tissue_id,
+                    tissue_label=tissue_label,
+                    settings=settings,
+                ),
+            )
+            status_row["status"] = "model_only"
             statuses.append(status_row)
             continue
 

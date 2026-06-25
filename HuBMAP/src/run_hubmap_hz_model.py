@@ -29,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--provenance_mirror_local_prefix")
     parser.add_argument("--provenance_mirror_remote_prefix")
     parser.add_argument("--write_commands_only", action="store_true")
+    parser.add_argument("--write_model_only", action="store_true")
     return parser.parse_args()
 
 
@@ -436,6 +437,13 @@ def main() -> int:
         provenance_cmd=provenance_cmd,
         dig_dir=dig_dir,
     )
+    if args.write_model_only:
+        write_model_sidecar(
+            path=extractor_out / "geneset.model.json",
+            model_id=args.model_id,
+            settings=settings,
+        )
+        return 0
     if args.write_commands_only:
         return 0
 

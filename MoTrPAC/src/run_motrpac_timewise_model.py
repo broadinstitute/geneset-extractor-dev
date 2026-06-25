@@ -38,6 +38,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--provenance_mirror_remote_prefix")
     parser.add_argument("--model_manifest", default=str(default_model_manifest_path()))
     parser.add_argument("--write_commands_only", action="store_true")
+    parser.add_argument("--write_model_only", action="store_true")
     return parser.parse_args()
 
 
@@ -532,6 +533,46 @@ def main() -> int:
         dig_dir=dig_dir,
         extractor_cmd=extractor_cmd,
     )
+    if args.write_model_only:
+        write_text(
+            extractor_out / "geneset.model.json",
+            json.dumps(
+                {
+                    "schema_version": "1",
+                    "library": "MoTrPAC",
+                    "model_id": args.model_id,
+                    "model_group": "TW",
+                    "model_label": "timewise",
+                    "workflow_name": (
+                        "motrpac_timepoint"
+                        if manifest_value(settings, "workflow_stratify_scheme", "sex_timepoint") == "timepoint"
+                        else "motrpac_timewise"
+                    ),
+                    "extractor_name": "rna_deg_multi",
+                    "parameters": {
+                        "stratify_scheme": manifest_value(settings, "workflow_stratify_scheme", "sex_timepoint"),
+                        "covariates": manifest_value(settings, "workflow_covariates", "none"),
+                        "min_samples_per_group": manifest_value(settings, "workflow_min_samples_per_group", "5"),
+                        "postprocess_mode": settings["extractor_postprocess_mode"],
+                        "score_mode": settings["extractor_score_mode"],
+                        "select": settings["extractor_select"],
+                    },
+                    "inputs": {
+                        "tissue_id": args.tissue_id,
+                        "tissue_label": args.tissue_label or args.tissue_id,
+                        "organism": "human",
+                        "genome_build": "hg38",
+                    },
+                    "naming": {
+                        "comparison_style": manifest_value(settings, "workflow_stratify_scheme", "sex_timepoint"),
+                        "gene_set_pattern": "MoTrPAC_<tissue>_<sex_or_timepoint>_up|dn",
+                    },
+                },
+                indent=2,
+                sort_keys=True,
+            ) + "\n",
+        )
+        return 0
     if args.write_commands_only:
         return 0
 
