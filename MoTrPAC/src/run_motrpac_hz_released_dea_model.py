@@ -302,6 +302,36 @@ def write_manifest(
     manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def write_model_sidecar(
+    *,
+    path: Path,
+    model_id: str,
+    settings: dict[str, str],
+) -> None:
+    payload = {
+        "schema_version": "1",
+        "library": "MoTrPAC",
+        "model_id": model_id,
+        "model_group": "HZ",
+        "model_label": "released_dea",
+        "workflow_name": "motrpac_released_dea",
+        "extractor_name": "signed_term_gene",
+        "parameters": {
+            "padj_max": manifest_value(settings, "workflow_padj_max", "0.05"),
+            "min_genes": manifest_value(settings, "workflow_min_genes", "5"),
+        },
+        "inputs": {
+            "organism": "human",
+            "genome_build": "hg38",
+        },
+        "naming": {
+            "comparison_style": "signed_term",
+            "gene_set_pattern": "MoTrPAC_<term>_up|dn",
+        },
+    }
+    write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def ensure_supported_settings(settings: dict[str, str]) -> None:
     unsupported_true_flags = [
         "workflow_write_matrices",
@@ -383,6 +413,11 @@ def main() -> int:
     if not signed_term_tsv.exists():
         raise SystemExit(f"Expected signed term-gene table after workflow: {signed_term_tsv}")
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
+    write_model_sidecar(
+        path=extractor_out / "geneset.model.json",
+        model_id=args.model_id,
+        settings=settings,
+    )
     run_command(provenance_cmd, cwd=dig_dir, env=env, log_path=model_log)
 
     summary_rows = [{"source_gmt": "genesets.gmt", **row} for row in parse_gmt(extractor_out / "genesets.gmt")]

@@ -381,6 +381,38 @@ def build_provenance_rebuild_cmd(
     return cmd
 
 
+def write_model_sidecar(
+    *,
+    path: Path,
+    model_id: str,
+    settings: dict[str, str],
+) -> None:
+    payload = {
+        "schema_version": "1",
+        "library": "MoTrPAC",
+        "model_id": model_id,
+        "model_group": "HZ",
+        "model_label": "aggregated",
+        "workflow_name": "motrpac_raw_aggregated",
+        "extractor_name": "signed_term_gene",
+        "parameters": {
+            "source_model": manifest_value(settings, "workflow_source_model", ""),
+            "min_samples_per_group": manifest_value(settings, "workflow_min_samples_per_group", "5"),
+            "padj_max": manifest_value(settings, "workflow_padj_max", "0.05"),
+            "min_genes": manifest_value(settings, "workflow_min_genes", "5"),
+        },
+        "inputs": {
+            "organism": "human",
+            "genome_build": "hg38",
+        },
+        "naming": {
+            "comparison_style": "aggregated",
+            "gene_set_pattern": "MoTrPAC_<tissue>_<label>_up|dn",
+        },
+    }
+    write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def main() -> int:
     args = parse_args()
     dig_dir = Path(args.dig_dir).resolve()
@@ -473,6 +505,11 @@ def main() -> int:
 
     run_command(workflow_cmd, cwd=dig_dir, env=env, log_path=model_log)
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
+    write_model_sidecar(
+        path=extractor_out / "geneset.model.json",
+        model_id=args.model_id,
+        settings=settings,
+    )
     run_command(provenance_cmd, cwd=dig_dir, env=env, log_path=model_log)
     gmt_rows = parse_gmt(extractor_out / "genesets.gmt")
     write_tsv(extractor_out / "signature_summary.tsv", gmt_rows, ["set_name", "description", "gene_count"])

@@ -136,6 +136,39 @@ def write_manifest(
     manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def write_model_sidecar(
+    *,
+    path: Path,
+    model_id: str,
+    settings: dict[str, str],
+) -> None:
+    workflow_name = "hubmap_asctb" if model_id == "HZ1" else "hubmap_asctb_augmented"
+    payload = {
+        "schema_version": "1",
+        "library": "HuBMAP",
+        "model_id": model_id,
+        "model_group": "HZ",
+        "model_label": "asctb" if model_id == "HZ1" else "asctb_augmented",
+        "workflow_name": workflow_name,
+        "extractor_name": "unsigned_term_gene",
+        "parameters": {
+            "term_prefix": "HuBMAP",
+            "gmt_min_genes": 5,
+            "augmentation_threshold": manifest_value(settings, "workflow_augmentation_threshold", ""),
+            "cap_multiplier": manifest_value(settings, "workflow_cap_multiplier", ""),
+        },
+        "inputs": {
+            "organism": "human",
+            "genome_build": "hg38",
+        },
+        "naming": {
+            "comparison_style": "unsigned_term",
+            "gene_set_pattern": "HuBMAP_<term>",
+        },
+    }
+    write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def build_workflow_cmd(
     *,
     python_bin: str,
@@ -411,6 +444,11 @@ def main() -> int:
     model_log = model_out / "run.log"
     run_command(workflow_cmd, cwd=dig_dir, env=env, log_path=model_log)
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
+    write_model_sidecar(
+        path=extractor_out / "geneset.model.json",
+        model_id=args.model_id,
+        settings=settings,
+    )
     run_command(provenance_cmd, cwd=dig_dir, env=env, log_path=model_log)
 
     summary_rows = [{"source_gmt": "genesets.gmt", **row} for row in parse_gmt(extractor_out / "genesets.gmt")]

@@ -358,6 +358,65 @@ def write_run_manifest(
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def write_grouped_model_sidecars(
+    *,
+    extractor_out: Path,
+    model_id: str,
+    tissue_id: str,
+    tissue_label: str | None,
+    settings: dict[str, str],
+) -> None:
+    manifest_path = extractor_out / "manifest.tsv"
+    if not manifest_path.exists():
+        return
+    workflow_name = (
+        "motrpac_timepoint"
+        if manifest_value(settings, "workflow_stratify_scheme", "sex_timepoint") == "timepoint"
+        else "motrpac_timewise"
+    )
+    comparison_style = (
+        "timepoint"
+        if workflow_name == "motrpac_timepoint"
+        else manifest_value(settings, "workflow_stratify_scheme", "sex_timepoint")
+    )
+    for row in read_manifest_rows(manifest_path):
+        meta_rel = str(row.get("meta_path", "")).strip()
+        if not meta_rel:
+            continue
+        payload = {
+            "schema_version": "1",
+            "library": "MoTrPAC",
+            "model_id": model_id,
+            "model_group": "TW",
+            "model_label": "timewise",
+            "workflow_name": workflow_name,
+            "extractor_name": "rna_deg_multi",
+            "parameters": {
+                "stratify_scheme": manifest_value(settings, "workflow_stratify_scheme", "sex_timepoint"),
+                "covariates": manifest_value(settings, "workflow_covariates", "none"),
+                "min_samples_per_group": manifest_value(settings, "workflow_min_samples_per_group", "5"),
+                "postprocess_mode": settings["extractor_postprocess_mode"],
+                "score_mode": settings["extractor_score_mode"],
+                "select": settings["extractor_select"],
+            },
+            "inputs": {
+                "tissue_id": tissue_id,
+                "tissue_label": tissue_label or tissue_id,
+                "organism": "human",
+                "genome_build": "hg38",
+            },
+            "naming": {
+                "comparison_label": str(row.get("label", "")).strip(),
+                "comparison_style": comparison_style,
+                "gene_set_pattern": "MoTrPAC_<tissue>_<sex_or_timepoint>_up|dn",
+            },
+        }
+        write_text(
+            (extractor_out / meta_rel).with_name("geneset.model.json"),
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        )
+
+
 def build_provenance_rebuild_cmd(
     *,
     python_bin: str,
@@ -484,6 +543,13 @@ def main() -> int:
     model_log = model_out / "run.log"
     run_command(workflow_cmd, cwd=dig_dir, env=env, log_path=model_log)
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
+    write_grouped_model_sidecars(
+        extractor_out=extractor_out,
+        model_id=args.model_id,
+        tissue_id=args.tissue_id,
+        tissue_label=args.tissue_label,
+        settings=settings,
+    )
     rebuild_grouped_provenance(
         python_bin=str(Path(args.python_bin).resolve()),
         extractor_out=extractor_out,

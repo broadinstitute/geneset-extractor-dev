@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import shlex
 import subprocess
@@ -101,6 +102,93 @@ def write_tsv_rows(path: Path, rows: list[dict[str, str]], fieldnames: list[str]
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
+
+
+def model_group(model_id: str) -> str:
+    return "".join(ch for ch in str(model_id) if ch.isalpha()) or str(model_id)
+
+
+def model_label(model_id: str) -> str:
+    group = model_group(model_id)
+    if group == "AB":
+        return "age_binned"
+    if group == "HZ":
+        return "age_reference_matched"
+    return group.lower()
+
+
+def write_json(path: Path, payload: dict[str, object]) -> None:
+    write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def build_model_sidecar_payload(
+    *,
+    model_id: str,
+    tissue_id: str,
+    tissue_label: str,
+    settings: dict[str, str],
+    comparison_label: str | None = None,
+) -> dict[str, object]:
+    return {
+        "schema_version": "1",
+        "library": "GTEx",
+        "model_id": model_id,
+        "model_group": model_group(model_id),
+        "model_label": model_label(model_id),
+        "workflow_name": "gtex_age_binned",
+        "extractor_name": "rna_deg_multi",
+        "parameters": {
+            "de_mode": settings["workflow_de_mode"],
+            "balance_groups": settings["workflow_balance_groups"],
+            "balance_seed": settings["workflow_balance_seed"],
+            "gene_filter_scope": settings["workflow_gene_filter_scope"],
+            "backend": settings["workflow_backend"],
+            "covariates": settings["workflow_covariates"],
+            "postprocess_mode": settings["extractor_postprocess_mode"],
+            "score_mode": settings["extractor_score_mode"],
+            "select": settings["extractor_select"],
+        },
+        "inputs": {
+            "tissue_id": tissue_id,
+            "tissue_label": tissue_label,
+            "organism": "human",
+            "genome_build": "hg38",
+        },
+        "naming": {
+            "signature_name": gtex_aging_signature_name(tissue_label),
+            "comparison_label": comparison_label or "",
+            "comparison_style": "age_pair",
+            "gene_set_pattern": "GTEx_aging_<tissue>_<ageGroup1>_<ageGroup2>_up|dn",
+        },
+    }
+
+
+def write_grouped_model_sidecars(
+    *,
+    extractor_out: Path,
+    model_id: str,
+    tissue_id: str,
+    tissue_label: str,
+    settings: dict[str, str],
+) -> None:
+    manifest_path = extractor_out / "manifest.tsv"
+    if not manifest_path.exists():
+        return
+    for row in read_tsv_rows(manifest_path):
+        meta_rel = str(row.get("meta_path", "")).strip()
+        if not meta_rel:
+            continue
+        sidecar_path = (extractor_out / meta_rel).with_name("geneset.model.json")
+        write_json(
+            sidecar_path,
+            build_model_sidecar_payload(
+                model_id=model_id,
+                tissue_id=tissue_id,
+                tissue_label=tissue_label,
+                settings=settings,
+                comparison_label=str(row.get("label", "")).strip(),
+            ),
+        )
 
 
 def build_workflow_cmd(
@@ -437,6 +525,13 @@ def main() -> int:
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
     )
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
+    write_grouped_model_sidecars(
+        extractor_out=extractor_out,
+        model_id=args.model_id,
+        tissue_id=tissue_id,
+        tissue_label=tissue_label,
+        settings=settings,
+    )
     rebuild_grouped_provenance(
         python_bin=args.python_bin,
         extractor_out=extractor_out,

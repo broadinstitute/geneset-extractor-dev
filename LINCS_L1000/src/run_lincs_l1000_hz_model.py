@@ -115,6 +115,40 @@ def write_manifest(
     manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def write_model_sidecar(
+    *,
+    path: Path,
+    model_id: str,
+    settings: dict[str, str],
+    workflow_name: str,
+    term_prefix: str,
+) -> None:
+    payload = {
+        "schema_version": "1",
+        "library": "LINCS_L1000",
+        "model_id": model_id,
+        "model_group": "HZ",
+        "model_label": "chem_pert" if model_id == "HZ1" else "crispr_ko",
+        "workflow_name": workflow_name,
+        "extractor_name": "signed_term_gene",
+        "parameters": {
+            "term_prefix": term_prefix,
+            "min_gmt_size": manifest_value(settings, "workflow_min_gmt_size", "5"),
+            "z_threshold": manifest_value(settings, "workflow_z_threshold", ""),
+            "top_n": manifest_value(settings, "workflow_top_n", ""),
+        },
+        "inputs": {
+            "organism": "human",
+            "genome_build": "hg38",
+        },
+        "naming": {
+            "comparison_style": "signed_term",
+            "gene_set_pattern": f"{term_prefix}_<term>_up|dn",
+        },
+    }
+    write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def model_workflow_info(model_id: str) -> tuple[str, str]:
     if model_id == "HZ1":
         return ("chempert", "lincs_l1000_chempert")
@@ -382,6 +416,13 @@ def main() -> int:
     model_log = model_out / "run.log"
     run_command(workflow_cmd, cwd=dig_dir, env=env, log_path=model_log)
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
+    write_model_sidecar(
+        path=extractor_out / "geneset.model.json",
+        model_id=args.model_id,
+        settings=settings,
+        workflow_name=workflow_name,
+        term_prefix=term_prefix,
+    )
     run_command(provenance_cmd, cwd=dig_dir, env=env, log_path=model_log)
 
     summary_rows = [{"source_gmt": "genesets.gmt", **row} for row in parse_gmt(extractor_out / "genesets.gmt")]

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import shlex
 import shutil
@@ -121,6 +122,43 @@ def motrpac_training_signature_name(*, tissue_id: str, tissue_label: str | None)
         fallback = str(tissue_label or tissue_id).strip()
         tissue_term = fallback.replace(" ", "-")
     return f"MoTrPAC_{tissue_term}_TrainingVsControl"
+
+
+def write_model_sidecar(
+    *,
+    path: Path,
+    model_id: str,
+    tissue_id: str,
+    tissue_label: str | None,
+    settings: dict[str, str],
+) -> None:
+    payload = {
+        "schema_version": "1",
+        "library": "MoTrPAC",
+        "model_id": model_id,
+        "model_group": "TR",
+        "model_label": "training_vs_control",
+        "workflow_name": "motrpac_training",
+        "extractor_name": "rna_deg",
+        "parameters": {
+            "covariates": settings.get("workflow_covariates", "sex"),
+            "postprocess_mode": settings["extractor_postprocess_mode"],
+            "score_mode": settings["extractor_score_mode"],
+            "select": settings["extractor_select"],
+        },
+        "inputs": {
+            "tissue_id": tissue_id,
+            "tissue_label": tissue_label or tissue_id,
+            "organism": "human",
+            "genome_build": "hg38",
+        },
+        "naming": {
+            "signature_name": motrpac_training_signature_name(tissue_id=tissue_id, tissue_label=tissue_label),
+            "comparison_style": "single_contrast",
+            "gene_set_pattern": "MoTrPAC_<tissue>_TrainingVsControl_up|dn",
+        },
+    }
+    write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
 def write_workflow_script(
@@ -492,6 +530,13 @@ def main() -> int:
     model_log = model_out / "run.log"
     run_command(workflow_cmd, cwd=dig_dir, env=env, log_path=model_log)
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
+    write_model_sidecar(
+        path=extractor_out / "geneset.model.json",
+        model_id=args.model_id,
+        tissue_id=args.tissue_id,
+        tissue_label=args.tissue_label,
+        settings=settings,
+    )
     run_command(provenance_cmd, cwd=dig_dir, env=env, log_path=model_log)
     return 0
 

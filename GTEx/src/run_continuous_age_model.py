@@ -124,6 +124,46 @@ def log_line(path: Path, text: str) -> None:
         handle.write(text.rstrip("\n") + "\n")
 
 
+def write_json(path: Path, payload: dict[str, Any]) -> None:
+    write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def build_model_sidecar_payload(
+    *,
+    model_id: str,
+    tissue_id: str,
+    tissue_label: str,
+    settings: dict[str, str],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "1",
+        "library": "GTEx",
+        "model_id": model_id,
+        "model_group": "AC",
+        "model_label": "age_continuous",
+        "workflow_name": "gtex_continuous_age",
+        "extractor_name": "rna_deg",
+        "parameters": {
+            "covariates": settings["WORKFLOW_COVARIATES"],
+            "annotation_mode": settings["ANNOTATION_MODE"],
+            "postprocess_mode": settings["EXTRACTOR_POSTPROCESS_MODE"],
+            "score_mode": settings["EXTRACTOR_SCORE_MODE"],
+            "select": settings["EXTRACTOR_SELECT"],
+        },
+        "inputs": {
+            "tissue_id": tissue_id,
+            "tissue_label": tissue_label,
+            "organism": "human",
+            "genome_build": "hg38",
+        },
+        "naming": {
+            "signature_name": gtex_aging_signature_name(tissue_label),
+            "comparison_style": "continuous_age",
+            "gene_set_pattern": "GTEx_aging_<tissue>_up|dn",
+        },
+    }
+
+
 def parse_age_midpoint(age_bin: str) -> float:
     match = AGE_BIN_PATTERN.match(age_bin)
     if not match:
@@ -702,6 +742,15 @@ def main() -> int:
             write_text(tissue_deg_tsv.with_suffix(".log"), f"continuous age workflow completed for {model_id}\n")
             write_tissue_method_note(extractor_out / "naming_reference.md", args.tissue_id, model_id)
             run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
+            write_json(
+                extractor_out / "geneset.model.json",
+                build_model_sidecar_payload(
+                    model_id=model_id,
+                    tissue_id=args.tissue_id,
+                    tissue_label=tissue_label,
+                    settings=settings,
+                ),
+            )
             run_command(provenance_cmd, cwd=dig_dir, env=env, log_path=model_log)
             status_row["status"] = "complete"
             continuous_meta_tsv = workflow_out / "continuous_sample_metadata.tsv"
