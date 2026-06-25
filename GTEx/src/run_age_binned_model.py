@@ -109,6 +109,7 @@ def build_workflow_cmd(
     workflow_out: Path,
     organism: str,
     genome_build: str,
+    tissue_id: str,
     tissue_label: str,
     expression_gct: Path,
     sample_attributes_tsv: Path,
@@ -274,6 +275,36 @@ def build_provenance_rebuild_cmd(
     return cmd
 
 
+def rebuild_grouped_provenance(
+    *,
+    python_bin: str,
+    extractor_out: Path,
+    upstream_provenance_graph_json: Path,
+    provenance_mirror_local_prefix: str | None,
+    provenance_mirror_remote_prefix: str | None,
+    cwd: Path,
+    env: dict[str, str],
+    log_path: Path,
+) -> None:
+    manifest_path = extractor_out / "manifest.tsv"
+    if not manifest_path.exists():
+        return
+    for row in read_tsv_rows(manifest_path):
+        meta_rel = str(row.get("meta_path", "")).strip()
+        prov_rel = str(row.get("provenance_path", "")).strip()
+        if not meta_rel or not prov_rel:
+            continue
+        provenance_cmd = build_provenance_rebuild_cmd(
+            python_bin=python_bin,
+            metadata_json=extractor_out / meta_rel,
+            upstream_provenance_graph_json=upstream_provenance_graph_json,
+            provenance_out=extractor_out / prov_rel,
+            provenance_mirror_local_prefix=provenance_mirror_local_prefix,
+            provenance_mirror_remote_prefix=provenance_mirror_remote_prefix,
+        )
+        run_command(provenance_cmd, cwd=cwd, env=env, log_path=log_path)
+
+
 def run_command(cmd: list[str], *, cwd: Path, env: dict[str, str], log_path: Path) -> None:
     log_line(log_path, f"$ {shell_join(cmd)}")
     completed = subprocess.run(
@@ -317,7 +348,7 @@ def write_model_commands(
             f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {shell_join(extractor_cmd)}",
             "```",
             "",
-            "Note: `rna_deg_multi` writes grouped extractor outputs with per-group provenance.",
+            "Note: `rna_deg_multi` writes grouped extractor outputs and this wrapper rebuilds per-group provenance from `manifest.tsv`.",
         ]
     )
     write_text(model_out / "commands.md", text)
@@ -406,6 +437,16 @@ def main() -> int:
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
     )
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
+    rebuild_grouped_provenance(
+        python_bin=args.python_bin,
+        extractor_out=extractor_out,
+        upstream_provenance_graph_json=workflow_out / "deg_long.provenance_graph.json",
+        provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
+        provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
+        cwd=dig_dir,
+        env=env,
+        log_path=model_log,
+    )
     return 0
 
 

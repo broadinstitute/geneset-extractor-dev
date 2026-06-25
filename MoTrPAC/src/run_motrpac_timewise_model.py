@@ -325,6 +325,10 @@ def write_model_commands(
         f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {shell_join(extractor_cmd)}",
         "```",
         "",
+        "## Provenance",
+        "",
+        "Per-comparison provenance is rebuilt from `manifest.tsv` after extraction.",
+        "",
     ]
     write_text(model_out / "commands.md", "\n".join(lines))
 
@@ -352,6 +356,64 @@ def write_run_manifest(
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def build_provenance_rebuild_cmd(
+    *,
+    python_bin: str,
+    metadata_json: Path,
+    upstream_provenance_graph_json: Path,
+    provenance_out: Path,
+    provenance_mirror_local_prefix: str | None,
+    provenance_mirror_remote_prefix: str | None,
+) -> list[str]:
+    cmd = [
+        python_bin,
+        "-m",
+        "geneset_extractors.cli",
+        "provenance",
+        "build",
+        str(metadata_json),
+        "--out",
+        str(provenance_out),
+        "--upstream_provenance_graph_json",
+        str(upstream_provenance_graph_json),
+    ]
+    if provenance_mirror_local_prefix:
+        cmd.extend(["--provenance_mirror_local_prefix", provenance_mirror_local_prefix])
+    if provenance_mirror_remote_prefix:
+        cmd.extend(["--provenance_mirror_remote_prefix", provenance_mirror_remote_prefix])
+    return cmd
+
+
+def rebuild_grouped_provenance(
+    *,
+    python_bin: str,
+    extractor_out: Path,
+    upstream_provenance_graph_json: Path,
+    provenance_mirror_local_prefix: str | None,
+    provenance_mirror_remote_prefix: str | None,
+    cwd: Path,
+    env: dict[str, str],
+    log_path: Path,
+) -> None:
+    manifest_path = extractor_out / "manifest.tsv"
+    if not manifest_path.exists():
+        return
+    for row in read_manifest_rows(manifest_path):
+        meta_rel = str(row.get("meta_path", "")).strip()
+        prov_rel = str(row.get("provenance_path", "")).strip()
+        if not meta_rel or not prov_rel:
+            continue
+        provenance_cmd = build_provenance_rebuild_cmd(
+            python_bin=python_bin,
+            metadata_json=extractor_out / meta_rel,
+            upstream_provenance_graph_json=upstream_provenance_graph_json,
+            provenance_out=extractor_out / prov_rel,
+            provenance_mirror_local_prefix=provenance_mirror_local_prefix,
+            provenance_mirror_remote_prefix=provenance_mirror_remote_prefix,
+        )
+        run_command(provenance_cmd, cwd=cwd, env=env, log_path=log_path)
 
 
 def main() -> int:
@@ -422,6 +484,16 @@ def main() -> int:
     model_log = model_out / "run.log"
     run_command(workflow_cmd, cwd=dig_dir, env=env, log_path=model_log)
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
+    rebuild_grouped_provenance(
+        python_bin=str(Path(args.python_bin).resolve()),
+        extractor_out=extractor_out,
+        upstream_provenance_graph_json=workflow_out / "deg_long.provenance_graph.json",
+        provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
+        provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
+        cwd=dig_dir,
+        env=env,
+        log_path=model_log,
+    )
 
     manifest_rows = read_manifest_rows(extractor_out / "manifest.tsv")
     summary_rows = [

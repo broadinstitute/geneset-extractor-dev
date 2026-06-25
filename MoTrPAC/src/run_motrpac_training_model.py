@@ -330,6 +330,34 @@ def build_workflow_cmd(
     return cmd
 
 
+def build_provenance_rebuild_cmd(
+    *,
+    python_bin: str,
+    metadata_json: Path,
+    upstream_provenance_graph_json: Path,
+    provenance_out: Path,
+    provenance_mirror_local_prefix: str | None,
+    provenance_mirror_remote_prefix: str | None,
+) -> list[str]:
+    cmd = [
+        python_bin,
+        "-m",
+        "geneset_extractors.cli",
+        "provenance",
+        "build",
+        str(metadata_json),
+        "--out",
+        str(provenance_out),
+        "--upstream_provenance_graph_json",
+        str(upstream_provenance_graph_json),
+    ]
+    if provenance_mirror_local_prefix:
+        cmd.extend(["--provenance_mirror_local_prefix", provenance_mirror_local_prefix])
+    if provenance_mirror_remote_prefix:
+        cmd.extend(["--provenance_mirror_remote_prefix", provenance_mirror_remote_prefix])
+    return cmd
+
+
 def run_command(cmd: list[str], *, cwd: Path, env: dict[str, str], log_path: Path) -> None:
     log_line(log_path, f"$ {shell_join(cmd)}")
     completed = subprocess.run(
@@ -353,6 +381,7 @@ def write_model_commands(
     model_id: str,
     workflow_cmd: list[str],
     extractor_cmd: list[str],
+    provenance_cmd: list[str],
     dig_dir: Path,
 ) -> None:
     text = "\n".join(
@@ -370,6 +399,13 @@ def write_model_commands(
             "```bash",
             f"cd {shlex.quote(str(dig_dir))}",
             f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {shell_join(extractor_cmd)}",
+            "```",
+            "",
+            "## Provenance",
+            "",
+            "```bash",
+            f"cd {shlex.quote(str(dig_dir))}",
+            f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {shell_join(provenance_cmd)}",
             "```",
             "",
         ]
@@ -432,11 +468,20 @@ def main() -> int:
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
     )
+    provenance_cmd = build_provenance_rebuild_cmd(
+        python_bin=str(Path(args.python_bin).resolve()),
+        metadata_json=extractor_out / "geneset.meta.json",
+        upstream_provenance_graph_json=workflow_out / "training_deg.provenance_graph.json",
+        provenance_out=extractor_out / "geneset.provenance.json",
+        provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
+        provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
+    )
     write_model_commands(
         model_out=model_out,
         model_id=args.model_id,
         workflow_cmd=workflow_cmd,
         extractor_cmd=extractor_cmd,
+        provenance_cmd=provenance_cmd,
         dig_dir=dig_dir,
     )
     if args.write_commands_only:
@@ -447,6 +492,7 @@ def main() -> int:
     model_log = model_out / "run.log"
     run_command(workflow_cmd, cwd=dig_dir, env=env, log_path=model_log)
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
+    run_command(provenance_cmd, cwd=dig_dir, env=env, log_path=model_log)
     return 0
 
 

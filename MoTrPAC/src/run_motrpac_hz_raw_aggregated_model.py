@@ -353,6 +353,34 @@ def build_workflow_cmd(
     return cmd
 
 
+def build_provenance_rebuild_cmd(
+    *,
+    python_bin: str,
+    metadata_json: Path,
+    upstream_provenance_graph_json: Path,
+    provenance_out: Path,
+    provenance_mirror_local_prefix: str | None,
+    provenance_mirror_remote_prefix: str | None,
+) -> list[str]:
+    cmd = [
+        python_bin,
+        "-m",
+        "geneset_extractors.cli",
+        "provenance",
+        "build",
+        str(metadata_json),
+        "--out",
+        str(provenance_out),
+        "--upstream_provenance_graph_json",
+        str(upstream_provenance_graph_json),
+    ]
+    if provenance_mirror_local_prefix:
+        cmd.extend(["--provenance_mirror_local_prefix", provenance_mirror_local_prefix])
+    if provenance_mirror_remote_prefix:
+        cmd.extend(["--provenance_mirror_remote_prefix", provenance_mirror_remote_prefix])
+    return cmd
+
+
 def main() -> int:
     args = parse_args()
     dig_dir = Path(args.dig_dir).resolve()
@@ -402,6 +430,14 @@ def main() -> int:
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
     )
+    provenance_cmd = build_provenance_rebuild_cmd(
+        python_bin=str(Path(args.python_bin).resolve()),
+        metadata_json=extractor_out / "geneset.meta.json",
+        upstream_provenance_graph_json=workflow_out / "motrpac_signed_term_gene.provenance_graph.json",
+        provenance_out=extractor_out / "geneset.provenance.json",
+        provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
+        provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
+    )
     write_text(
         model_out / "commands.md",
         "\n".join(
@@ -422,6 +458,13 @@ def main() -> int:
                 f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {shell_join(extractor_cmd)}",
                 "```",
                 "",
+                "## Provenance",
+                "",
+                "```bash",
+                f"cd {shlex.quote(str(dig_dir))}",
+                f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {shell_join(provenance_cmd)}",
+                "```",
+                "",
             ]
         ),
     )
@@ -430,6 +473,7 @@ def main() -> int:
 
     run_command(workflow_cmd, cwd=dig_dir, env=env, log_path=model_log)
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
+    run_command(provenance_cmd, cwd=dig_dir, env=env, log_path=model_log)
     gmt_rows = parse_gmt(extractor_out / "genesets.gmt")
     write_tsv(extractor_out / "signature_summary.tsv", gmt_rows, ["set_name", "description", "gene_count"])
     return 0
