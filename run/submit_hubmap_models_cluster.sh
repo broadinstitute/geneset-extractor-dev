@@ -326,8 +326,15 @@ submit_one_array() {
   )
 
   local qsub_output job_id
-  qsub_output="$("${qsub_cmd[@]}")"
-  printf '%s\n' "${qsub_output}"
+  printf '$' >&2
+  printf ' %q' "${qsub_cmd[@]}" >&2
+  printf '\n' >&2
+  if ! qsub_output="$("${qsub_cmd[@]}" 2>&1)"; then
+    printf '%s\n' "${qsub_output}" >&2
+    echo "HuBMAP qsub submission failed." >&2
+    exit 1
+  fi
+  printf '%s\n' "${qsub_output}" >&2
   job_id="$(extract_qsub_job_id "${qsub_output}")"
   if [[ -z "${job_id}" ]]; then
     echo "Failed to parse qsub job id from submission output: ${qsub_output}" >&2
@@ -422,21 +429,25 @@ submit_array() {
   write_worklist
   filter_refresh_existing_worklist
   local task_count
+  local job_id
   task_count="$(worklist_task_count)"
   if [[ "${task_count}" -le 0 ]]; then
     echo "No HuBMAP tasks selected." >&2
     exit 1
   fi
   if [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
-    submit_one_array "${HUBMAP_WORKLIST}" "hubmap_all_models" >/dev/null
+    job_id="$(submit_one_array "${HUBMAP_WORKLIST}" "hubmap_all_models")"
+    printf 'Submitted HuBMAP array job %s\n' "${job_id}" >&2
     return
   fi
   if [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then
-    submit_one_array "${HUBMAP_WORKLIST}" "hubmap_all_models" >/dev/null
+    job_id="$(submit_one_array "${HUBMAP_WORKLIST}" "hubmap_all_models")"
+    printf 'Submitted HuBMAP array job %s\n' "${job_id}" >&2
     return
   fi
   if [[ -n "${HUBMAP_INPUT_MATRIX:-}" ]]; then
-    submit_one_array "${HUBMAP_WORKLIST}" "hubmap_all_models" >/dev/null
+    job_id="$(submit_one_array "${HUBMAP_WORKLIST}" "hubmap_all_models")"
+    printf 'Submitted HuBMAP array job %s\n' "${job_id}" >&2
     return
   fi
 
@@ -459,11 +470,14 @@ submit_array() {
     filter_worklist_for_model "${HUBMAP_WORKLIST}" "HZ1" "${hz1_worklist}"
     filter_worklist_for_model "${HUBMAP_WORKLIST}" "HZ2" "${hz2_worklist}"
     hz1_job_id="$(submit_one_array "${hz1_worklist}" "hubmap_hz1")"
-    submit_one_array "${hz2_worklist}" "hubmap_hz2" "${hz1_job_id}" >/dev/null
+    printf 'Submitted HuBMAP array job %s\n' "${hz1_job_id}" >&2
+    job_id="$(submit_one_array "${hz2_worklist}" "hubmap_hz2" "${hz1_job_id}")"
+    printf 'Submitted HuBMAP array job %s\n' "${job_id}" >&2
     return
   fi
 
-  submit_one_array "${HUBMAP_WORKLIST}" "hubmap_all_models" >/dev/null
+  job_id="$(submit_one_array "${HUBMAP_WORKLIST}" "hubmap_all_models")"
+  printf 'Submitted HuBMAP array job %s\n' "${job_id}" >&2
 }
 
 main() {
