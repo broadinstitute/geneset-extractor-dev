@@ -9,6 +9,7 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,6 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--provenance_mirror_local_prefix")
     parser.add_argument("--provenance_mirror_remote_prefix")
+    parser.add_argument("--s3_input_root")
     parser.add_argument("--show_template_vars", action="store_true")
     return parser.parse_args()
 
@@ -101,6 +103,169 @@ def run_command(cmd: list[str], *, cwd: Path, env: dict[str, str]) -> None:
     subprocess.run(cmd, cwd=str(cwd), env=env, check=True)
 
 
+def parse_s3_uri(s3_uri: str) -> tuple[str, str]:
+    parsed = urlparse(s3_uri)
+    if parsed.scheme != "s3" or not parsed.netloc:
+        raise SystemExit(f"Expected S3 URI like s3://bucket/prefix, got: {s3_uri}")
+    return parsed.netloc, parsed.path.lstrip("/")
+
+
+def is_within_directory(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def extract_existing_file_paths_from_provenance(provenance_path: Path) -> list[Path]:
+    try:
+        payload = json.loads(provenance_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise SystemExit(f"Unable to parse provenance JSON {provenance_path}: {exc}") from exc
+
+    all_input_paths: set[Path] = set()
+    all_generated_paths: set[Path] = set()
+    for graph in payload.values():
+        if not isinstance(graph, dict):
+            continue
+        file_path_by_id: dict[str, Path] = {}
+        for node in graph.get("nodes", []):
+            if not isinstance(node, dict) or node.get("type") != "File":
+                continue
+            node_id = node.get("id")
+            if not isinstance(node_id, str):
+                continue
+            c2m2_properties = node.get("c2m2_properties") or {}
+            candidate = c2m2_properties.get("local_id") or node.get("dcc_url") or node.get("drc_url")
+            if not isinstance(candidate, str) or not candidate.startswith("/"):
+                continue
+            path = Path(candidate)
+            if path.exists() and path.is_file():
+                file_path_by_id[node_id] = path.resolve()
+
+        input_paths: set[Path] = set()
+        generated_paths: set[Path] = set()
+        for edge in graph.get("edges", []):
+            if not isinstance(edge, dict):
+                continue
+            source = edge.get("source")
+            target = edge.get("target")
+            label = edge.get("label")
+            if (
+                isinstance(source, str)
+                and isinstance(target, str)
+                and source.startswith("file:")
+                and target.startswith("analysis:")
+                and label in ("data input", "metadata input")
+            ):
+                source_path = file_path_by_id.get(source)
+                if source_path is not None:
+                    input_paths.add(source_path)
+            if (
+                isinstance(source, str)
+                and isinstance(target, str)
+                and source.startswith("analysis:")
+                and target.startswith("file:")
+            ):
+                target_path = file_path_by_id.get(target)
+                if target_path is not None:
+                    generated_paths.add(target_path)
+
+        all_input_paths.update(input_paths)
+        all_generated_paths.update(generated_paths)
+
+    return sorted(all_input_paths.difference(all_generated_paths))
+
+
+def build_unique_input_relative_paths(paths: list[Path]) -> dict[Path, str]:
+    unique_paths = sorted(set(paths))
+    if not unique_paths:
+        return {}
+
+    suffix_lengths = {path: 1 for path in unique_paths}
+    while True:
+        by_suffix: dict[str, list[Path]] = {}
+        for path in unique_paths:
+            path_parts = [part for part in path.parts if part != "/"]
+            suffix_length = min(suffix_lengths[path], len(path_parts))
+            suffix = "/".join(path_parts[-suffix_length:])
+            by_suffix.setdefault(suffix, []).append(path)
+
+        collisions = [group for group in by_suffix.values() if len(group) > 1]
+        if not collisions:
+            resolved: dict[Path, str] = {}
+            for suffix, group in by_suffix.items():
+                if len(group) == 1:
+                    resolved[group[0]] = suffix
+            return resolved
+
+        progressed = False
+        for group in collisions:
+            for path in group:
+                path_parts = [part for part in path.parts if part != "/"]
+                if suffix_lengths[path] < len(path_parts):
+                    suffix_lengths[path] += 1
+                    progressed = True
+        if not progressed:
+            return {path: path.as_posix().lstrip("/") for path in unique_paths}
+
+
+def rewrite_json_value(value: object, replacements: dict[str, str]) -> object:
+    if isinstance(value, dict):
+        return {key: rewrite_json_value(inner, replacements) for key, inner in value.items()}
+    if isinstance(value, list):
+        return [rewrite_json_value(inner, replacements) for inner in value]
+    if isinstance(value, str):
+        updated = value
+        for local_path, remote_uri in replacements.items():
+            updated = updated.replace(local_path, remote_uri)
+        return updated
+    return value
+
+
+def build_input_replacements(
+    *,
+    metadata_paths: list[Path],
+    local_output_root: Path,
+    s3_input_root: str,
+) -> dict[str, str]:
+    input_paths: set[Path] = set()
+    for metadata_path in metadata_paths:
+        provenance_path = metadata_path.with_name("geneset.provenance.json")
+        if not provenance_path.exists():
+            continue
+        for source_path in extract_existing_file_paths_from_provenance(provenance_path):
+            if is_within_directory(source_path, local_output_root):
+                continue
+            input_paths.add(source_path.resolve())
+
+    relative_paths = build_unique_input_relative_paths(sorted(input_paths))
+    normalized_s3_root = s3_input_root.rstrip("/")
+    replacements: dict[str, str] = {}
+    for source_path, relative_path in relative_paths.items():
+        remote_uri = f"{normalized_s3_root}/{relative_path}"
+        replacements[str(source_path)] = remote_uri
+        replacements[source_path.as_uri()] = remote_uri
+    return dict(sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True))
+
+
+def rewrite_metadata_and_provenance(
+    *,
+    metadata_paths: list[Path],
+    replacements: dict[str, str],
+) -> None:
+    if not replacements:
+        return
+    for metadata_path in metadata_paths:
+        for path in (metadata_path, metadata_path.with_name("geneset.provenance.json")):
+            if not path.exists():
+                continue
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            rewritten = rewrite_json_value(payload, replacements)
+            path.write_text(json.dumps(rewritten, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 def main() -> int:
     args = parse_args()
     model_dir = Path(args.model_dir).resolve()
@@ -116,6 +281,8 @@ def main() -> int:
         if not template:
             raise SystemExit(f"No description_template found for model_id={args.model_id}")
     metadata_paths = discover_metadata_paths(model_dir)
+    if args.s3_input_root:
+        parse_s3_uri(args.s3_input_root)
 
     env = dict(os.environ)
     existing_pythonpath = env.get("PYTHONPATH", "").strip()
@@ -141,6 +308,22 @@ def main() -> int:
         if args.provenance_mirror_remote_prefix:
             cmd.extend(["--provenance_mirror_remote_prefix", args.provenance_mirror_remote_prefix])
         run_command(cmd, cwd=dig_dir, env=env)
+
+    if args.s3_input_root:
+        local_output_root = (
+            Path(args.provenance_mirror_local_prefix).resolve()
+            if args.provenance_mirror_local_prefix
+            else model_dir
+        )
+        replacements = build_input_replacements(
+            metadata_paths=metadata_paths,
+            local_output_root=local_output_root,
+            s3_input_root=args.s3_input_root,
+        )
+        rewrite_metadata_and_provenance(
+            metadata_paths=metadata_paths,
+            replacements=replacements,
+        )
     return 0
 
 
