@@ -184,13 +184,13 @@ prepare_common() {
   mkdir -p "${WORK_ROOT}" "${QSUB_LOG_ROOT}"
   require_dir "${DIG_DIR}"
 
-  require_var HUBMAP_HUMAN_GENE_INFO
-
   require_file "${HUBMAP_MODEL_LIST}"
   require_file "${HUBMAP_MODEL_MANIFEST}"
-  require_file "${HUBMAP_HUMAN_GENE_INFO}"
   if [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
     require_file "${DESCRIPTION_TEMPLATE_TSV}"
+  else
+    require_var HUBMAP_HUMAN_GENE_INFO
+    require_file "${HUBMAP_HUMAN_GENE_INFO}"
   fi
   if [[ ${WRITE_MODEL_ONLY} -ne 1 && ${REFRESH_METADATA_AND_PROVENANCE} -ne 1 ]]; then
     require_var HUBMAP_RAW_ASCTB_DIR
