@@ -114,6 +114,14 @@ def snapshot_originals(metadata_paths: list[Path]) -> None:
         write_orig_once(metadata_path.with_name("geneset.provenance.json"))
 
 
+def restore_from_originals(metadata_paths: list[Path]) -> None:
+    for metadata_path in metadata_paths:
+        for path in (metadata_path, metadata_path.with_name("geneset.provenance.json")):
+            orig_path = Path(f"{path}.orig")
+            if orig_path.exists():
+                shutil.copy2(orig_path, path)
+
+
 def run_command(cmd: list[str], *, cwd: Path, env: dict[str, str]) -> None:
     print("$ " + shell_join(cmd), flush=True)
     subprocess.run(cmd, cwd=str(cwd), env=env, check=True)
@@ -240,6 +248,44 @@ def rewrite_json_value(value: object, replacements: dict[str, str]) -> object:
     return value
 
 
+def metadata_snapshot_path(metadata_path: Path) -> Path:
+    orig_path = Path(f"{metadata_path}.orig")
+    return orig_path if orig_path.exists() else metadata_path
+
+
+def provenance_snapshot_path(metadata_path: Path) -> Path:
+    provenance_path = metadata_path.with_name("geneset.provenance.json")
+    orig_path = Path(f"{provenance_path}.orig")
+    return orig_path if orig_path.exists() else provenance_path
+
+
+def build_output_replacements(
+    *,
+    local_output_root: Path,
+    provenance_mirror_remote_prefix: str,
+) -> dict[str, str]:
+    resolved_local_root = local_output_root.resolve()
+    normalized_remote_root = provenance_mirror_remote_prefix.rstrip("/")
+    replacements = {
+        str(resolved_local_root): normalized_remote_root,
+        resolved_local_root.as_uri(): normalized_remote_root,
+    }
+    return dict(sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True))
+
+
+def build_execution_replacements(dig_dir: Path) -> dict[str, str]:
+    resolved_dig_dir = dig_dir.resolve()
+    cli_py = resolved_dig_dir / "src" / "geneset_extractors" / "cli.py"
+    replacements: dict[str, str] = {
+        str(resolved_dig_dir): "dig-gene-set-extractors",
+        resolved_dig_dir.as_uri(): "dig-gene-set-extractors",
+    }
+    if cli_py.exists():
+        replacements[str(cli_py.resolve())] = "geneset_extractors.cli"
+        replacements[cli_py.resolve().as_uri()] = "geneset_extractors.cli"
+    return dict(sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True))
+
+
 def build_input_replacements(
     *,
     metadata_paths: list[Path],
@@ -248,7 +294,7 @@ def build_input_replacements(
 ) -> dict[str, str]:
     input_paths: set[Path] = set()
     for metadata_path in metadata_paths:
-        provenance_path = metadata_path.with_name("geneset.provenance.json")
+        provenance_path = provenance_snapshot_path(metadata_path)
         if not provenance_path.exists():
             continue
         for source_path in extract_existing_file_paths_from_provenance(provenance_path):
@@ -256,10 +302,29 @@ def build_input_replacements(
                 continue
             input_paths.add(source_path.resolve())
 
-    relative_paths = build_unique_input_relative_paths(sorted(input_paths))
     normalized_s3_root = s3_input_root.rstrip("/")
     replacements: dict[str, str] = {}
-    for source_path, relative_path in relative_paths.items():
+    grouped_parent_dirs = {
+        parent
+        for parent in {path.parent for path in input_paths}
+        if len([path for path in input_paths if path.parent == parent]) > 1
+    }
+
+    directory_relative_paths = build_unique_input_relative_paths(sorted(grouped_parent_dirs))
+    handled_paths: set[Path] = set()
+
+    for directory_path, relative_dir in directory_relative_paths.items():
+        remote_dir_uri = f"{normalized_s3_root}/{relative_dir}"
+        replacements[str(directory_path)] = remote_dir_uri
+        replacements[directory_path.as_uri()] = remote_dir_uri
+        for source_path in sorted(path for path in input_paths if path.parent == directory_path):
+            remote_uri = f"{remote_dir_uri}/{source_path.name}"
+            replacements[str(source_path)] = remote_uri
+            replacements[source_path.as_uri()] = remote_uri
+            handled_paths.add(source_path)
+
+    standalone_relative_paths = build_unique_input_relative_paths(sorted(input_paths.difference(handled_paths)))
+    for source_path, relative_path in standalone_relative_paths.items():
         remote_uri = f"{normalized_s3_root}/{relative_path}"
         replacements[str(source_path)] = remote_uri
         replacements[source_path.as_uri()] = remote_uri
@@ -300,6 +365,7 @@ def main() -> int:
     if args.s3_input_root:
         parse_s3_uri(args.s3_input_root)
     snapshot_originals(metadata_paths)
+    restore_from_originals(metadata_paths)
 
     env = dict(os.environ)
     existing_pythonpath = env.get("PYTHONPATH", "").strip()
@@ -326,20 +392,32 @@ def main() -> int:
             cmd.extend(["--provenance_mirror_remote_prefix", args.provenance_mirror_remote_prefix])
         run_command(cmd, cwd=dig_dir, env=env)
 
+    local_output_root = (
+        Path(args.provenance_mirror_local_prefix).resolve()
+        if args.provenance_mirror_local_prefix
+        else model_dir
+    )
+    replacements: dict[str, str] = {}
+    if args.provenance_mirror_remote_prefix:
+        replacements.update(
+            build_output_replacements(
+                local_output_root=local_output_root,
+                provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
+            )
+        )
     if args.s3_input_root:
-        local_output_root = (
-            Path(args.provenance_mirror_local_prefix).resolve()
-            if args.provenance_mirror_local_prefix
-            else model_dir
+        replacements.update(
+            build_input_replacements(
+                metadata_paths=metadata_paths,
+                local_output_root=local_output_root,
+                s3_input_root=args.s3_input_root,
+            )
         )
-        replacements = build_input_replacements(
-            metadata_paths=metadata_paths,
-            local_output_root=local_output_root,
-            s3_input_root=args.s3_input_root,
-        )
+    replacements.update(build_execution_replacements(dig_dir))
+    if replacements:
         rewrite_metadata_and_provenance(
             metadata_paths=metadata_paths,
-            replacements=replacements,
+            replacements=dict(sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)),
         )
     return 0
 
