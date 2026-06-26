@@ -271,6 +271,30 @@ write_worklist() {
   } > "${HUBMAP_WORKLIST}"
 }
 
+filter_refresh_existing_worklist() {
+  [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]] || return
+  local filtered_worklist kept
+  filtered_worklist="$(mktemp)"
+  head -n 1 "${HUBMAP_WORKLIST}" > "${filtered_worklist}"
+  kept=0
+  while IFS= read -r row; do
+    [[ -n "${row}" ]] || continue
+    local model_id suffix model_dir
+    IFS=$'\t' read -r _task_id _model_group model_id <<< "${row}"
+    suffix="${row#*$'\t'}"
+    model_dir="${HUBMAP_OUT_ROOT}/genesets/all_signatures/models/${model_id}"
+    if [[ -d "${model_dir}/extractor" ]]; then
+      kept=$((kept + 1))
+      printf "%d\t%s\n" "${kept}" "${suffix}" >> "${filtered_worklist}"
+    fi
+  done < <(tail -n +2 "${HUBMAP_WORKLIST}")
+  mv "${filtered_worklist}" "${HUBMAP_WORKLIST}"
+  if [[ ${kept} -le 0 ]]; then
+    echo "No HuBMAP refresh tasks selected after excluding missing outputs." >&2
+    exit 1
+  fi
+}
+
 worklist_task_count() {
   awk 'NR > 1 { n += 1 } END { print n + 0 }' "${HUBMAP_WORKLIST}"
 }
@@ -469,6 +493,7 @@ submit_one_array() {
 
 submit_array() {
   write_worklist
+  filter_refresh_existing_worklist
   local task_count
   task_count="$(worklist_task_count)"
   if [[ "${task_count}" -le 0 ]]; then

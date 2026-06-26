@@ -372,9 +372,34 @@ write_worklist() {
   fi
 }
 
+filter_refresh_existing_worklist() {
+  [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]] || return
+  local filtered_worklist kept
+  filtered_worklist="$(mktemp)"
+  head -n 1 "${MOTRPAC_WORKLIST}" > "${filtered_worklist}"
+  kept=0
+  while IFS= read -r row; do
+    [[ -n "${row}" ]] || continue
+    local tissue_id model_id suffix model_dir
+    IFS=$'\t' read -r _task_id tissue_id _model_group model_id <<< "${row}"
+    suffix="${row#*$'\t'}"
+    model_dir="${MOTRPAC_OUT_ROOT}/genesets/${tissue_id}/models/${model_id}"
+    if [[ -d "${model_dir}/extractor" ]]; then
+      kept=$((kept + 1))
+      printf "%d\t%s\n" "${kept}" "${suffix}" >> "${filtered_worklist}"
+    fi
+  done < <(tail -n +2 "${MOTRPAC_WORKLIST}")
+  mv "${filtered_worklist}" "${MOTRPAC_WORKLIST}"
+  if [[ ${kept} -le 0 ]]; then
+    echo "MoTrPAC refresh filters produced an empty worklist after excluding missing outputs" >&2
+    exit 1
+  fi
+}
+
 submit_array() {
   prepare_common
   write_worklist
+  filter_refresh_existing_worklist
 
   local tasks job_name
   tasks="$(awk 'END { print NR - 1 }' "${MOTRPAC_WORKLIST}")"
