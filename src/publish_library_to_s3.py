@@ -322,8 +322,12 @@ def resolve_input_candidates_from_provenance(
     return sorted(by_path.values(), key=lambda candidate: candidate.relative_path)
 
 
-def is_provenance_artifact(path):  # type: (Path) -> bool
-    return path.name.endswith(".provenance.json") or path.name.endswith(".provenance_graph.json")
+def is_rewritten_json_artifact(path):  # type: (Path) -> bool
+    return (
+        path.name == "geneset.meta.json"
+        or path.name.endswith(".provenance.json")
+        or path.name.endswith(".provenance_graph.json")
+    )
 
 
 def build_path_rewrite_map(
@@ -505,7 +509,7 @@ def rewrite_json_value(value, replacements):  # type: (Any, Dict[str, str]) -> A
     return value
 
 
-def stage_rewritten_provenance_files(
+def stage_rewritten_json_files(
     *,
     output_candidates,  # type: List[CandidateFile]
     replacements,  # type: Dict[str, str]
@@ -513,7 +517,7 @@ def stage_rewritten_provenance_files(
     staged_root = Path(tempfile.mkdtemp(prefix="publish_library_to_s3_", dir="/tmp"))
     rewritten = []  # type: List[CandidateFile]
     for candidate in output_candidates:
-        if not is_provenance_artifact(candidate.local_path):
+        if not is_rewritten_json_artifact(candidate.local_path):
             rewritten.append(candidate)
             continue
         staged_path = staged_root / candidate.relative_path
@@ -739,7 +743,7 @@ def main():  # type: () -> int
             s3_output_root=args.s3_output_root,
             s3_input_root=args.s3_input_root,
         )
-        output_candidates = stage_rewritten_provenance_files(
+        output_candidates = stage_rewritten_json_files(
             output_candidates=output_candidates,
             replacements=replacements,
         )
