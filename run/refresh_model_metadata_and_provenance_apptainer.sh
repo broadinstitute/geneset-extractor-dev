@@ -33,7 +33,7 @@ Notes:
   - Arguments are forwarded to:
       geneset-extractor-dev/run/refresh_model_metadata_and_provenance.sh
   - Common path-bearing arguments like --model_dir, --description_template_tsv,
-    --provenance_mirror_local_prefix, and --provenance_mirror_remote_prefix are
+    and --provenance_mirror_local_prefix are
     bind-mounted automatically.
 EOF
 }
@@ -87,7 +87,7 @@ BIND_DIRS+=("${WORK_ROOT}")
 FORWARDED_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --model_dir|--description_template_tsv|--provenance_mirror_local_prefix|--provenance_mirror_remote_prefix)
+    --model_dir|--description_template_tsv|--provenance_mirror_local_prefix)
       [[ $# -ge 2 ]] || { echo "Missing value for $1" >&2; exit 1; }
       BIND_DIRS+=("$(append_bind_path "$2")")
       FORWARDED_ARGS+=("$1" "$2")
