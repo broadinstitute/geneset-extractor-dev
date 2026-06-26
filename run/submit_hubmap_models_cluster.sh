@@ -81,6 +81,15 @@ require_dir() {
   fi
 }
 
+absolute_path() {
+  local path="$1"
+  if [[ "${path}" == /* ]]; then
+    printf '%s\n' "${path}"
+  else
+    printf '%s/%s\n' "$(pwd)" "${path}"
+  fi
+}
+
 canonicalize_model_group() {
   case "$1" in
     HZ|hz_released_asctb) printf '%s\n' "HZ" ;;
@@ -181,6 +190,10 @@ parse_cli() {
 }
 
 prepare_common() {
+  WORK_ROOT="$(absolute_path "${WORK_ROOT}")"
+  HUBMAP_OUT_ROOT="$(absolute_path "${HUBMAP_OUT_ROOT}")"
+  QSUB_LOG_ROOT="$(absolute_path "${QSUB_LOG_ROOT}")"
+  HUBMAP_WORKLIST="$(absolute_path "${HUBMAP_WORKLIST}")"
   mkdir -p "${WORK_ROOT}" "${QSUB_LOG_ROOT}"
   require_dir "${DIG_DIR}"
 
