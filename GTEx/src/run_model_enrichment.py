@@ -92,7 +92,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--comparisons",
         default=None,
-        help="optional comma-separated query labels such as age60_20,age70_20 or adipose_subcutaneous",
+        help="optional comma-separated query labels such as 20-29_60-69,20-29_70-79 or adipose_subcutaneous",
     )
     parser.add_argument(
         "--query_limit",

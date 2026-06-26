@@ -66,13 +66,7 @@ def derive_subject_id(sample_id: str) -> str:
 
 
 def compact_age_comparison_label(age_bin: str, reference_age_bin: str) -> str:
-    left = str(age_bin or "").strip()
-    right = str(reference_age_bin or "").strip()
-    if not left or not right:
-        raise ValueError("age_bin and reference_age_bin must be non-empty")
-    left_decade = left.split("-", 1)[0]
-    right_decade = right.split("-", 1)[0]
-    return f"age{left_decade}_{right_decade}"
+    return expanded_age_comparison_label(age_bin, reference_age_bin)
 
 
 def expanded_age_comparison_label(age_bin: str, reference_age_bin: str) -> str:
@@ -86,20 +80,10 @@ def expanded_age_comparison_label(age_bin: str, reference_age_bin: str) -> str:
 def write_naming_reference(path: Path) -> None:
     text = """# Naming Reference
 
-This prepared GTEx bundle uses compact workflow comparison IDs plus expanded GMT labels.
+This prepared GTEx bundle uses readable age-pair comparison IDs for both
+workflow and GMT naming.
 
 ## Comparison Labels
-
-- `age30_20` means `30-39` vs `20-29`
-- `age40_20` means `40-49` vs `20-29`
-- `age50_20` means `50-59` vs `20-29`
-- `age60_20` means `60-69` vs `20-29`
-- `age70_20` means `70-79` vs `20-29`
-
-The suffix `_20` always refers to the reference age bin `20-29`.
-
-Expanded GMT comparison labels are also written in `comparisons.tsv` using
-`<reference_age>_<comparison_age>`:
 
 - `20-29_30-39`
 - `20-29_40-49`

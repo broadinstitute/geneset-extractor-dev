@@ -91,8 +91,20 @@ def age_group_label(age_group: str) -> str:
     return f"{match.group(1)}-{match.group(2)} year olds"
 
 
-def parse_age_pair(comparison_label: str | None) -> dict[str, str]:
+def normalize_comparison_age_pair_label(comparison_label: str | None) -> str:
     label = str(comparison_label or "").strip()
+    if not label:
+        return ""
+    pipe_parts = [part.strip() for part in label.split("|") if part.strip()]
+    candidate = pipe_parts[-1] if pipe_parts else label
+    pair_parts = [part.strip() for part in candidate.split("_") if part.strip()]
+    if len(pair_parts) == 2 and AGE_BIN_PATTERN.match(pair_parts[0]) and AGE_BIN_PATTERN.match(pair_parts[1]):
+        return f"{pair_parts[0]}_{pair_parts[1]}"
+    return label
+
+
+def parse_age_pair(comparison_label: str | None) -> dict[str, str]:
+    label = normalize_comparison_age_pair_label(comparison_label)
     parts = [part.strip() for part in label.split("_") if part.strip()]
     if len(parts) != 2:
         return {
