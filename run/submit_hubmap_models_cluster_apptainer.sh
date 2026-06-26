@@ -36,12 +36,12 @@ WRITE_MODEL_ONLY=0
 REFRESH_METADATA_AND_PROVENANCE=0
 DESCRIPTION_TEMPLATE_TSV="${DESCRIPTION_TEMPLATE_TSV:-}"
 FILTER_MODEL_GROUP=""
-FILTER_MODEL_ID=""
+FILTER_MODEL_IDS=""
 
 usage() {
   cat <<'EOF'
 Usage:
-  ./geneset-extractor-dev/run/submit_hubmap_models_cluster_apptainer.sh --submit [--write_model_only|--refresh_metadata_and_provenance] [--model_group HZ] [--model_id MODEL]
+  ./geneset-extractor-dev/run/submit_hubmap_models_cluster_apptainer.sh --submit [--write_model_only|--refresh_metadata_and_provenance] [--model_group HZ] [--model_id MODEL[,MODEL...]]
   ./geneset-extractor-dev/run/submit_hubmap_models_cluster_apptainer.sh --help
 
 Required environment variables:
@@ -119,6 +119,26 @@ resolve_model_group_for_id() {
   ' "${HUBMAP_MODEL_LIST}"
 }
 
+validate_model_ids() {
+  local model_csv="$1"
+  local requested_model_id
+  IFS=',' read -r -a requested_model_ids <<< "${model_csv}"
+  for requested_model_id in "${requested_model_ids[@]}"; do
+    requested_model_id="${requested_model_id//[[:space:]]/}"
+    [[ -n "${requested_model_id}" ]] || continue
+    local derived_group
+    derived_group="$(resolve_model_group_for_id "${requested_model_id}")"
+    if [[ -z "${derived_group}" ]]; then
+      echo "Model not found in HuBMAP model list: ${requested_model_id}" >&2
+      exit 1
+    fi
+    if [[ -n "${FILTER_MODEL_GROUP}" && "${FILTER_MODEL_GROUP}" != "${derived_group}" ]]; then
+      echo "--model_id ${requested_model_id} conflicts with --model_group ${FILTER_MODEL_GROUP}" >&2
+      exit 1
+    fi
+  done
+}
+
 parse_cli() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -144,7 +164,7 @@ parse_cli() {
         ;;
       --model_id)
         [[ $# -ge 2 ]] || { echo "Missing value for --model_id" >&2; exit 1; }
-        FILTER_MODEL_ID="$2"
+        FILTER_MODEL_IDS="$2"
         shift 2
         ;;
       -h|--help|help)
@@ -164,18 +184,8 @@ parse_cli() {
     exit 1
   fi
 
-  if [[ -n "${FILTER_MODEL_ID}" ]]; then
-    local derived_group
-    derived_group="$(resolve_model_group_for_id "${FILTER_MODEL_ID}")"
-    if [[ -z "${derived_group}" ]]; then
-      echo "Model not found in HuBMAP model list: ${FILTER_MODEL_ID}" >&2
-      exit 1
-    fi
-    if [[ -n "${FILTER_MODEL_GROUP}" && "${FILTER_MODEL_GROUP}" != "${derived_group}" ]]; then
-      echo "--model_id ${FILTER_MODEL_ID} conflicts with --model_group ${FILTER_MODEL_GROUP}" >&2
-      exit 1
-    fi
-    FILTER_MODEL_GROUP="${derived_group}"
+  if [[ -n "${FILTER_MODEL_IDS}" ]]; then
+    validate_model_ids "${FILTER_MODEL_IDS}"
   fi
 
   if [[ ${SUBMIT_MODE} -ne 1 ]]; then
@@ -229,7 +239,7 @@ write_worklist() {
     printf "task_id\tmodel_group\tmodel_id\n"
     awk -F $'\t' \
       -v filter_group="${FILTER_MODEL_GROUP}" \
-      -v filter_model="${FILTER_MODEL_ID}" '
+      -v filter_models="${FILTER_MODEL_IDS}" '
       NR == 1 {
         for (i = 1; i <= NF; i++) {
           if ($i == "model_id") model_id_col = i
@@ -238,12 +248,22 @@ write_worklist() {
         }
         next
       }
+      BEGIN {
+        split(filter_models, requested_models, ",")
+        for (requested_index in requested_models) {
+          requested_model = requested_models[requested_index]
+          gsub(/^[[:space:]]+|[[:space:]]+$/, "", requested_model)
+          if (requested_model != "") {
+            requested_model_lookup[requested_model] = 1
+          }
+        }
+      }
       $enabled_col == "true" {
         group = ""
         if ($family_col == "hz_released_asctb") group = "HZ"
         if (group == "") next
         if (filter_group != "" && group != filter_group) next
-        if (filter_model != "" && $model_id_col != filter_model) next
+        if (filter_models != "" && !($model_id_col in requested_model_lookup)) next
         task_id += 1
         printf "%d\t%s\t%s\n", task_id, group, $model_id_col
       }
