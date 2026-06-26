@@ -242,7 +242,7 @@ write_worklist() {
 }
 
 filter_refresh_existing_worklist() {
-  [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]] || return
+  [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]] || return 0
   local filtered_worklist kept
   filtered_worklist="$(mktemp)"
   head -n 1 "${HUBMAP_WORKLIST}" > "${filtered_worklist}"
