@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import shlex
 import subprocess
@@ -19,11 +20,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--model_id", required=True)
     parser.add_argument("--model_dir", required=True)
-    parser.add_argument("--description_template_tsv", required=True)
+    parser.add_argument("--description_template_tsv")
     parser.add_argument("--python_bin", default=sys.executable or "python3")
     parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--provenance_mirror_local_prefix")
     parser.add_argument("--provenance_mirror_remote_prefix")
+    parser.add_argument("--show_template_vars", action="store_true")
     return parser.parse_args()
 
 
@@ -84,6 +86,16 @@ def discover_metadata_paths(model_dir: Path) -> list[Path]:
     return deduped
 
 
+def ensure_model_sidecar(metadata_path: Path, model_id: str) -> None:
+    sidecar_path = metadata_path.with_name("geneset.model.json")
+    if sidecar_path.exists():
+        return
+    sidecar_path.write_text(
+        json.dumps({"model_id": model_id}, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
 def run_command(cmd: list[str], *, cwd: Path, env: dict[str, str]) -> None:
     print("$ " + shell_join(cmd), flush=True)
     subprocess.run(cmd, cwd=str(cwd), env=env, check=True)
@@ -95,10 +107,14 @@ def main() -> int:
     dig_dir = Path(args.dig_dir).resolve()
     if not dig_dir.exists() or not dig_dir.is_dir():
         raise SystemExit(f"Missing dig-gene-set-extractors directory: {dig_dir}")
-    template_map = read_template_map(Path(args.description_template_tsv).resolve())
-    template = template_map.get(args.model_id, "")
-    if not template:
-        raise SystemExit(f"No description_template found for model_id={args.model_id}")
+    template = ""
+    if not args.show_template_vars:
+        if not args.description_template_tsv:
+            raise SystemExit("--description_template_tsv is required unless --show_template_vars is used")
+        template_map = read_template_map(Path(args.description_template_tsv).resolve())
+        template = template_map.get(args.model_id, "")
+        if not template:
+            raise SystemExit(f"No description_template found for model_id={args.model_id}")
     metadata_paths = discover_metadata_paths(model_dir)
 
     env = dict(os.environ)
@@ -107,6 +123,7 @@ def main() -> int:
     env["PYTHONPATH"] = dig_pythonpath if not existing_pythonpath else f"{dig_pythonpath}{os.pathsep}{existing_pythonpath}"
 
     for metadata_path in metadata_paths:
+        ensure_model_sidecar(metadata_path, args.model_id)
         cmd = [
             str(Path(args.python_bin).resolve()),
             "-m",
@@ -114,9 +131,11 @@ def main() -> int:
             "metadata",
             "patch",
             str(metadata_path),
-            "--description_template",
-            template,
         ]
+        if args.show_template_vars:
+            cmd.append("--show_template_vars")
+        else:
+            cmd.extend(["--description_template", template])
         if args.provenance_mirror_local_prefix:
             cmd.extend(["--provenance_mirror_local_prefix", args.provenance_mirror_local_prefix])
         if args.provenance_mirror_remote_prefix:
