@@ -481,7 +481,7 @@ submit_array() {
 }
 
 main() {
-  if task_id_from_env >/dev/null 2>&1; then
+  if [[ $# -eq 0 ]] && task_id_from_env >/dev/null 2>&1; then
     prepare_common
     run_worker
   else

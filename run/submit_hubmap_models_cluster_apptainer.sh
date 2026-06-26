@@ -560,7 +560,7 @@ main() {
   if [[ -n "${GENESET_EXTRACTORS_IN_APPTAINER:-}" ]]; then
     prepare_common
     run_inner_worker
-  elif task_id_from_env >/dev/null 2>&1; then
+  elif [[ $# -eq 0 ]] && task_id_from_env >/dev/null 2>&1; then
     prepare_common
     run_outer_worker
   else
