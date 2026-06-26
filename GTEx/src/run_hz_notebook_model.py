@@ -34,6 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--organism", default="human", choices=["human"])
     parser.add_argument("--genome_build", default="hg38")
     parser.add_argument("--write_commands_only", action="store_true")
+    parser.add_argument("--write_model_only", action="store_true")
     parser.add_argument("--reference_age_group", default="20-29")
     parser.add_argument("--comparison_age_groups", default="30-39,40-49,50-59,60-69,70-79")
     parser.add_argument("--random_state", type=int, default=1)
@@ -64,6 +65,50 @@ def log_line(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(text.rstrip("\n") + "\n")
+
+
+def write_json(path: Path, payload: dict[str, object]) -> None:
+    write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def compact_name_token(value: str) -> str:
+    return "".join(ch for ch in value.strip().title() if ch.isalnum())
+
+
+def gtex_aging_signature_name(tissue_label: str) -> str:
+    return f"GTEx_aging_{compact_name_token(tissue_label)}"
+
+
+def build_model_sidecar_payload(*, model_id: str, tissue_id: str, tissue_label: str, args: argparse.Namespace) -> dict[str, object]:
+    return {
+        "schema_version": "1",
+        "library": "GTEx",
+        "model_id": model_id,
+        "model_group": "HZ",
+        "model_label": "age_reference_matched",
+        "workflow_name": "gtex_aging_signatures",
+        "extractor_name": "rna_deg_multi",
+        "parameters": {
+            "reference_age_group": args.reference_age_group,
+            "comparison_age_groups": args.comparison_age_groups,
+            "random_state": args.random_state,
+            "min_samples_per_group": args.min_samples_per_group,
+            "filter_mode": args.filter_mode,
+            "chunksize": args.chunksize,
+        },
+        "inputs": {
+            "tissue_id": tissue_id,
+            "tissue_label": tissue_label,
+            "organism": args.organism,
+            "genome_build": args.genome_build,
+        },
+        "naming": {
+            "signature_name": gtex_aging_signature_name(tissue_label),
+            "comparison_label": "",
+            "comparison_style": "age_pair",
+            "gene_set_pattern": "GTEx_aging_<tissue>_<ageGroup1>_<ageGroup2>_up|dn",
+        },
+    }
 
 
 def run_command(cmd: list[str], *, cwd: Path, env: dict[str, str], log_path: Path) -> None:
@@ -153,12 +198,24 @@ def main() -> int:
     if not dig_dir.exists() or not dig_dir.is_dir():
         raise SystemExit(f"Missing dig-gene-set-extractors directory: {dig_dir}")
 
+    model_out.mkdir(parents=True, exist_ok=True)
+    if args.write_model_only:
+        write_json(
+            extractor_dir / "geneset.model.json",
+            build_model_sidecar_payload(
+                model_id=args.model_id,
+                tissue_id=args.tissue_id,
+                tissue_label=args.tissue_label,
+                args=args,
+            ),
+        )
+        return 0
+
     expression_gct = require_existing_file(args.expression_gct, "expression GCT")
     sample_attributes_tsv = require_existing_file(args.sample_attributes_tsv, "sample attributes TSV")
     subject_phenotypes_tsv = require_existing_file(args.subject_phenotypes_tsv, "subject phenotypes TSV")
     human_gene_info = require_existing_file(args.human_gene_info, "human_gene_info")
 
-    model_out.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     existing_pythonpath = env.get("PYTHONPATH", "").strip()
     dig_pythonpath = str(dig_dir / "src")
@@ -297,6 +354,15 @@ def main() -> int:
         return 0
 
     run_command(extractor_cmd, cwd=dig_dir, env=env, log_path=model_log)
+    write_json(
+        extractor_dir / "geneset.model.json",
+        build_model_sidecar_payload(
+            model_id=args.model_id,
+            tissue_id=args.tissue_id,
+            tissue_label=args.tissue_label,
+            args=args,
+        ),
+    )
     return 0
 
 

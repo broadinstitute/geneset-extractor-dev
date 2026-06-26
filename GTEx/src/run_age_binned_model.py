@@ -21,9 +21,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model_id", required=True)
     parser.add_argument("--tissue_id")
     parser.add_argument("--tissue_label", required=True)
-    parser.add_argument("--expression_gct", required=True)
-    parser.add_argument("--sample_attributes_tsv", required=True)
-    parser.add_argument("--subject_phenotypes_tsv", required=True)
+    parser.add_argument("--expression_gct")
+    parser.add_argument("--sample_attributes_tsv")
+    parser.add_argument("--subject_phenotypes_tsv")
     parser.add_argument("--tissue_column")
     parser.add_argument("--tissue_value")
     parser.add_argument("--prepared_dir")
@@ -456,18 +456,36 @@ def main() -> int:
     settings = model_settings[args.model_id]
     tissue_id = str(args.tissue_id).strip()
     tissue_label = str(args.tissue_label).strip()
-    expression_gct = Path(args.expression_gct).resolve()
-    sample_attributes_tsv = Path(args.sample_attributes_tsv).resolve()
-    subject_phenotypes_tsv = Path(args.subject_phenotypes_tsv).resolve()
-
-    if settings["annotation_mode"] == "gtf_annotated" and not resolved_gtf:
-        raise SystemExit(f"Model {args.model_id} requires --gtf")
 
     model_out = run_root / args.model_id
     workflow_out = model_out / "workflow"
     extractor_out = model_out / "extractor"
     model_out.mkdir(parents=True, exist_ok=True)
     model_log = model_out / "run.log"
+
+    if args.write_model_only:
+        write_json(
+            extractor_out / "geneset.model.json",
+            build_model_sidecar_payload(
+                model_id=args.model_id,
+                tissue_id=tissue_id,
+                tissue_label=tissue_label,
+                settings=settings,
+            ),
+        )
+        return 0
+
+    if not args.expression_gct or not args.sample_attributes_tsv or not args.subject_phenotypes_tsv:
+        raise SystemExit(
+            "--expression_gct, --sample_attributes_tsv, and --subject_phenotypes_tsv are required unless --write_model_only is used"
+        )
+
+    expression_gct = Path(args.expression_gct).resolve()
+    sample_attributes_tsv = Path(args.sample_attributes_tsv).resolve()
+    subject_phenotypes_tsv = Path(args.subject_phenotypes_tsv).resolve()
+
+    if settings["annotation_mode"] == "gtf_annotated" and not resolved_gtf:
+        raise SystemExit(f"Model {args.model_id} requires --gtf")
 
     workflow_cmd = build_workflow_cmd(
         python_bin=args.python_bin,
@@ -508,18 +526,6 @@ def main() -> int:
         extractor_cmd=extractor_cmd,
         dig_dir=dig_dir,
     )
-    if args.write_model_only:
-        write_json(
-            extractor_out / "geneset.model.json",
-            build_model_sidecar_payload(
-                model_id=args.model_id,
-                tissue_id=tissue_id,
-                tissue_label=tissue_label,
-                settings=settings,
-            ),
-        )
-        return 0
-
     if args.write_commands_only:
         return 0
 

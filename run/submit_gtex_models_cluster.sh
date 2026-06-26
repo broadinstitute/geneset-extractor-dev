@@ -23,7 +23,16 @@ QSUB_BIN="${QSUB_BIN:-qsub}"
 
 GTEX_ARRAY_MEMORY="${GTEX_ARRAY_MEMORY:-16G}"
 GTEX_ARRAY_WALLTIME="${GTEX_ARRAY_WALLTIME:-24:00:00}"
+GTEX_V10_COUNTS_GCT="${GTEX_V10_COUNTS_GCT:-}"
+GTEX_V10_SAMPLE_ATTRIBUTES_TSV="${GTEX_V10_SAMPLE_ATTRIBUTES_TSV:-}"
+GTEX_V10_SUBJECT_PHENOTYPES_TSV="${GTEX_V10_SUBJECT_PHENOTYPES_TSV:-}"
+GTEX_V8_COUNTS_GCT="${GTEX_V8_COUNTS_GCT:-}"
+GTEX_V8_SAMPLE_ATTRIBUTES_TSV="${GTEX_V8_SAMPLE_ATTRIBUTES_TSV:-}"
+GTEX_V8_SUBJECT_PHENOTYPES_TSV="${GTEX_V8_SUBJECT_PHENOTYPES_TSV:-}"
+GTEX_V8_HUMAN_GENE_INFO="${GTEX_V8_HUMAN_GENE_INFO:-}"
+GTEX_GTF="${GTEX_GTF:-}"
 SUBMIT_MODE=0
+WRITE_MODEL_ONLY=0
 FILTER_MODEL_GROUP=""
 FILTER_TISSUE_ID=""
 FILTER_MODEL_ID=""
@@ -31,18 +40,10 @@ FILTER_MODEL_ID=""
 usage() {
   cat <<'EOF'
 Usage:
-  ./geneset-extractor-dev/run/submit_gtex_models_cluster.sh --submit [--model_group AB|AC|HZ] [--tissue_id TISSUE] [--model_id MODEL]
+  ./geneset-extractor-dev/run/submit_gtex_models_cluster.sh --submit [--write_model_only] [--model_group AB|AC|HZ] [--tissue_id TISSUE] [--model_id MODEL]
   ./geneset-extractor-dev/run/submit_gtex_models_cluster.sh --help
 
 Required environment variables:
-  GTEX_V10_COUNTS_GCT
-  GTEX_V10_SAMPLE_ATTRIBUTES_TSV
-  GTEX_V10_SUBJECT_PHENOTYPES_TSV
-  GTEX_V8_COUNTS_GCT
-  GTEX_V8_SAMPLE_ATTRIBUTES_TSV
-  GTEX_V8_SUBJECT_PHENOTYPES_TSV
-  GTEX_V8_HUMAN_GENE_INFO
-  GTEX_GTF
 
 Optional environment variables:
   WORK_ROOT
@@ -52,6 +53,9 @@ Optional environment variables:
 
 Notes:
   - Use --submit to submit the qsub array.
+  - Add --write_model_only to write only geneset.model.json sidecars.
+  - Full workflow runs require GTEX_V10_*, GTEX_V8_*, GTEX_V8_HUMAN_GENE_INFO,
+    and GTEX_GTF. Model-only runs do not.
   - When run inside a qsub array task, it auto-detects the task context and
     runs the assigned workload row.
   - No filters: one array covering all tissue+model tasks.
@@ -138,6 +142,10 @@ parse_cli() {
         SUBMIT_MODE=1
         shift
         ;;
+      --write_model_only)
+        WRITE_MODEL_ONLY=1
+        shift
+        ;;
       --model_group)
         [[ $# -ge 2 ]] || { echo "Missing value for --model_group" >&2; exit 1; }
         FILTER_MODEL_GROUP="$(canonicalize_model_group "$2")" || {
@@ -188,31 +196,49 @@ parse_cli() {
   fi
 }
 
+resolve_tissue_label() {
+  local tissue_id="$1"
+  awk -F $'\t' -v tissue_id="${tissue_id}" '
+    NR == 1 {
+      for (i = 1; i <= NF; i++) {
+        if ($i == "tissue_id") tissue_id_col = i
+        if ($i == "tissue_name") tissue_name_col = i
+      }
+      next
+    }
+    $tissue_id_col == tissue_id {
+      print $tissue_name_col
+      exit
+    }
+  ' "${GTEX_BROAD_TISSUE_LIST}"
+}
+
 prepare_common() {
   mkdir -p "${WORK_ROOT}" "${QSUB_LOG_ROOT}"
   require_dir "${DIG_DIR}"
-
-  require_var GTEX_V10_COUNTS_GCT
-  require_var GTEX_V10_SAMPLE_ATTRIBUTES_TSV
-  require_var GTEX_V10_SUBJECT_PHENOTYPES_TSV
-  require_var GTEX_V8_COUNTS_GCT
-  require_var GTEX_V8_SAMPLE_ATTRIBUTES_TSV
-  require_var GTEX_V8_SUBJECT_PHENOTYPES_TSV
-  require_var GTEX_V8_HUMAN_GENE_INFO
-  require_var GTEX_GTF
 
   require_file "${GTEX_MODEL_LIST}"
   require_file "${GTEX_BROAD_TISSUE_LIST}"
   require_file "${GTEX_AGE_BINNED_MODEL_MANIFEST}"
   require_file "${GTEX_CONTINUOUS_AGE_MODEL_MANIFEST}"
-  require_file "${GTEX_V10_COUNTS_GCT}"
-  require_file "${GTEX_V10_SAMPLE_ATTRIBUTES_TSV}"
-  require_file "${GTEX_V10_SUBJECT_PHENOTYPES_TSV}"
-  require_file "${GTEX_V8_COUNTS_GCT}"
-  require_file "${GTEX_V8_SAMPLE_ATTRIBUTES_TSV}"
-  require_file "${GTEX_V8_SUBJECT_PHENOTYPES_TSV}"
-  require_file "${GTEX_V8_HUMAN_GENE_INFO}"
-  require_file "${GTEX_GTF}"
+  if [[ ${WRITE_MODEL_ONLY} -ne 1 ]]; then
+    require_var GTEX_V10_COUNTS_GCT
+    require_var GTEX_V10_SAMPLE_ATTRIBUTES_TSV
+    require_var GTEX_V10_SUBJECT_PHENOTYPES_TSV
+    require_var GTEX_V8_COUNTS_GCT
+    require_var GTEX_V8_SAMPLE_ATTRIBUTES_TSV
+    require_var GTEX_V8_SUBJECT_PHENOTYPES_TSV
+    require_var GTEX_V8_HUMAN_GENE_INFO
+    require_var GTEX_GTF
+    require_file "${GTEX_V10_COUNTS_GCT}"
+    require_file "${GTEX_V10_SAMPLE_ATTRIBUTES_TSV}"
+    require_file "${GTEX_V10_SUBJECT_PHENOTYPES_TSV}"
+    require_file "${GTEX_V8_COUNTS_GCT}"
+    require_file "${GTEX_V8_SAMPLE_ATTRIBUTES_TSV}"
+    require_file "${GTEX_V8_SUBJECT_PHENOTYPES_TSV}"
+    require_file "${GTEX_V8_HUMAN_GENE_INFO}"
+    require_file "${GTEX_GTF}"
+  fi
 }
 
 write_worklist() {
@@ -299,7 +325,7 @@ submit_array() {
     -o "${QSUB_LOG_ROOT}/gtex.\$TASK_ID.out" \
     -e "${QSUB_LOG_ROOT}/gtex.\$TASK_ID.err" \
     -l "h_vmem=${GTEX_ARRAY_MEMORY},h_rt=${GTEX_ARRAY_WALLTIME}" \
-    -v "REPO_ROOT=${REPO_ROOT},WORK_ROOT=${WORK_ROOT},GTEX_WORKLIST=${GTEX_WORKLIST},GTEX_OUT_ROOT=${GTEX_OUT_ROOT},GTEX_MODEL_LIST=${GTEX_MODEL_LIST},GTEX_BROAD_TISSUE_LIST=${GTEX_BROAD_TISSUE_LIST},GTEX_AGE_BINNED_MODEL_MANIFEST=${GTEX_AGE_BINNED_MODEL_MANIFEST},GTEX_CONTINUOUS_AGE_MODEL_MANIFEST=${GTEX_CONTINUOUS_AGE_MODEL_MANIFEST},DIG_DIR=${DIG_DIR},PYTHON_BIN=${PYTHON_BIN},RSCRIPT_BIN=${RSCRIPT_BIN}" \
+    -v "REPO_ROOT=${REPO_ROOT},WORK_ROOT=${WORK_ROOT},GTEX_WORKLIST=${GTEX_WORKLIST},GTEX_OUT_ROOT=${GTEX_OUT_ROOT},GTEX_MODEL_LIST=${GTEX_MODEL_LIST},GTEX_BROAD_TISSUE_LIST=${GTEX_BROAD_TISSUE_LIST},GTEX_AGE_BINNED_MODEL_MANIFEST=${GTEX_AGE_BINNED_MODEL_MANIFEST},GTEX_CONTINUOUS_AGE_MODEL_MANIFEST=${GTEX_CONTINUOUS_AGE_MODEL_MANIFEST},DIG_DIR=${DIG_DIR},PYTHON_BIN=${PYTHON_BIN},RSCRIPT_BIN=${RSCRIPT_BIN},WRITE_MODEL_ONLY=${WRITE_MODEL_ONLY},GTEX_V10_COUNTS_GCT=${GTEX_V10_COUNTS_GCT},GTEX_V10_SAMPLE_ATTRIBUTES_TSV=${GTEX_V10_SAMPLE_ATTRIBUTES_TSV},GTEX_V10_SUBJECT_PHENOTYPES_TSV=${GTEX_V10_SUBJECT_PHENOTYPES_TSV},GTEX_V8_COUNTS_GCT=${GTEX_V8_COUNTS_GCT},GTEX_V8_SAMPLE_ATTRIBUTES_TSV=${GTEX_V8_SAMPLE_ATTRIBUTES_TSV},GTEX_V8_SUBJECT_PHENOTYPES_TSV=${GTEX_V8_SUBJECT_PHENOTYPES_TSV},GTEX_V8_HUMAN_GENE_INFO=${GTEX_V8_HUMAN_GENE_INFO},GTEX_GTF=${GTEX_GTF}" \
     "${BASH_SOURCE[0]}"
 }
 
@@ -318,8 +344,77 @@ run_task() {
   fi
 
   IFS=$'\t' read -r _ tissue_id model_group model_id counts_gct sample_tsv subject_tsv human_gene_info gtf <<< "${row}"
+  local tissue_label
+  tissue_label="$(resolve_tissue_label "${tissue_id}")"
+  if [[ -z "${tissue_label}" ]]; then
+    echo "Missing tissue_name for GTEx tissue_id ${tissue_id}" >&2
+    exit 1
+  fi
 
   echo "GTEx task ${task_id}: tissue=${tissue_id} group=${model_group} model=${model_id}"
+
+  if [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then
+    local cmd models_root runner
+    models_root="${GTEX_OUT_ROOT}/genesets/${tissue_id}/models"
+    case "${model_group}" in
+      AB)
+        runner="${REPO_ROOT}/geneset-extractor-dev/GTEx/src/run_age_binned_model.py"
+        cmd=(
+          "${PYTHON_BIN}" "${runner}"
+          --model_id "${model_id}"
+          --tissue_id "${tissue_id}"
+          --tissue_label "${tissue_label}"
+          --run_root "${models_root}"
+          --python_bin "${PYTHON_BIN}"
+          --dig_dir "${DIG_DIR}"
+          --age_binned_model_manifest "${GTEX_AGE_BINNED_MODEL_MANIFEST}"
+          --tissue_column "SMTS"
+          --tissue_value "${tissue_label}"
+          --write_model_only
+        )
+        ;;
+      AC)
+        runner="${REPO_ROOT}/geneset-extractor-dev/GTEx/src/run_continuous_age_model.py"
+        cmd=(
+          "${PYTHON_BIN}" "${runner}"
+          --tissue_id "${tissue_id}"
+          --tissue_label "${tissue_label}"
+          --model_ids "${model_id}"
+          --run_root "${models_root}"
+          --python_bin "${PYTHON_BIN}"
+          --rscript_bin "${RSCRIPT_BIN}"
+          --dig_dir "${DIG_DIR}"
+          --continuous_age_model_manifest "${GTEX_CONTINUOUS_AGE_MODEL_MANIFEST}"
+          --tissue_column "SMTS"
+          --tissue_value "${tissue_label}"
+          --write_model_only
+        )
+        ;;
+      HZ)
+        runner="${REPO_ROOT}/geneset-extractor-dev/GTEx/src/run_hz_notebook_model.py"
+        cmd=(
+          "${PYTHON_BIN}" "${runner}"
+          --model_id "${model_id}"
+          --tissue_id "${tissue_id}"
+          --tissue_label "${tissue_label}"
+          --run_root "${models_root}"
+          --python_bin "${PYTHON_BIN}"
+          --rscript_bin "${RSCRIPT_BIN}"
+          --dig_dir "${DIG_DIR}"
+          --tissue_column "SMTS"
+          --tissue_value "${tissue_label}"
+          --write_model_only
+        )
+        ;;
+      *)
+        echo "Unsupported GTEx model group in model-only mode: ${model_group}" >&2
+        exit 1
+        ;;
+    esac
+    echo "+ ${cmd[*]}"
+    "${cmd[@]}"
+    return
+  fi
 
   local cmd=(
     bash "${REPO_ROOT}/geneset-extractor-dev/GTEx/run/build_genesets.sh"

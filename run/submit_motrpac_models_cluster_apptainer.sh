@@ -38,6 +38,7 @@ fi
 MOTRPAC_ARRAY_MEMORY="${MOTRPAC_ARRAY_MEMORY:-16G}"
 MOTRPAC_ARRAY_WALLTIME="${MOTRPAC_ARRAY_WALLTIME:-24:00:00}"
 SUBMIT_MODE=0
+WRITE_MODEL_ONLY=0
 FILTER_MODEL_GROUP=""
 FILTER_TISSUE_ID=""
 FILTER_MODEL_ID=""
@@ -45,7 +46,7 @@ FILTER_MODEL_ID=""
 usage() {
   cat <<'EOF'
 Usage:
-  ./geneset-extractor-dev/run/submit_motrpac_models_cluster_apptainer.sh --submit [--model_group TR|TW|HZ] [--tissue_id TISSUE|all_tissues] [--model_id MODEL]
+  ./geneset-extractor-dev/run/submit_motrpac_models_cluster_apptainer.sh --submit [--write_model_only] [--model_group TR|TW|HZ] [--tissue_id TISSUE|all_tissues] [--model_id MODEL]
   ./geneset-extractor-dev/run/submit_motrpac_models_cluster_apptainer.sh --help
 
 Required environment variables:
@@ -69,6 +70,7 @@ Optional environment variables:
 
 Notes:
   - Use --submit to submit the qsub array.
+  - Add --write_model_only to write only geneset.model.json sidecars.
   - Array tasks re-enter this script inside the Apptainer image and run the
     assigned workload row there.
   - No filters: one array covering all tissue+model tasks.
@@ -154,6 +156,10 @@ parse_cli() {
         SUBMIT_MODE=1
         shift
         ;;
+      --write_model_only)
+        WRITE_MODEL_ONLY=1
+        shift
+        ;;
       --model_group)
         [[ $# -ge 2 ]] || { echo "Missing value for --model_group" >&2; exit 1; }
         FILTER_MODEL_GROUP="$(canonicalize_model_group "$2")" || {
@@ -209,6 +215,41 @@ parse_cli() {
     usage
     exit 1
   fi
+}
+
+resolve_model_family_for_id() {
+  local model_id="$1"
+  awk -F $'\t' -v model_id="${model_id}" '
+    NR == 1 {
+      for (i = 1; i <= NF; i++) {
+        if ($i == "model_id") model_id_col = i
+        if ($i == "model_family") family_col = i
+      }
+      next
+    }
+    $model_id_col == model_id {
+      print $family_col
+      exit
+    }
+  ' "${MOTRPAC_MODEL_LIST}"
+}
+
+resolve_tissue_field() {
+  local tissue_id="$1"
+  local field_name="$2"
+  awk -F $'\t' -v tissue_id="${tissue_id}" -v field_name="${field_name}" '
+    NR == 1 {
+      for (i = 1; i <= NF; i++) {
+        if ($i == "tissue_id") tissue_id_col = i
+        if ($i == field_name) field_col = i
+      }
+      next
+    }
+    $tissue_id_col == tissue_id {
+      print $field_col
+      exit
+    }
+  ' "${MOTRPAC_TISSUE_LIST}"
 }
 
 append_bind_path() {
@@ -360,7 +401,7 @@ submit_array() {
     -o "${QSUB_LOG_ROOT}/motrpac.\$TASK_ID.out" \
     -e "${QSUB_LOG_ROOT}/motrpac.\$TASK_ID.err" \
     -l "h_vmem=${MOTRPAC_ARRAY_MEMORY},h_rt=${MOTRPAC_ARRAY_WALLTIME}" \
-    -v "REPO_ROOT=${REPO_ROOT},WORK_ROOT=${WORK_ROOT},MOTRPAC_WORKLIST=${MOTRPAC_WORKLIST},MOTRPAC_OUT_ROOT=${MOTRPAC_OUT_ROOT},MOTRPAC_MODEL_LIST=${MOTRPAC_MODEL_LIST},MOTRPAC_TISSUE_LIST=${MOTRPAC_TISSUE_LIST},MOTRPAC_MODEL_MANIFEST=${MOTRPAC_MODEL_MANIFEST},DIG_DIR=${DIG_DIR},PYTHON_BIN=${PYTHON_BIN},RSCRIPT_BIN=${RSCRIPT_BIN},APPTAINER_BIN=${APPTAINER_BIN},APPTAINER_IMAGE=${APPTAINER_IMAGE},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS},MOTRPAC_RAW_COUNTS_DIR=${MOTRPAC_RAW_COUNTS_DIR},MOTRPAC_TRANSCRIPT_METADATA_TSV=${MOTRPAC_TRANSCRIPT_METADATA_TSV},MOTRPAC_PHENOTYPE_METADATA_TSV=${MOTRPAC_PHENOTYPE_METADATA_TSV},MOTRPAC_FEATURE_TO_GENE_TSV=${MOTRPAC_FEATURE_TO_GENE_TSV},MOTRPAC_RAT_TO_HUMAN_TSV=${MOTRPAC_RAT_TO_HUMAN_TSV},MOTRPAC_FEATURE_ANNOT=${MOTRPAC_FEATURE_ANNOT},MOTRPAC_DEA_DIR=${MOTRPAC_DEA_DIR},MOTRPAC_MAPPING_FILE=${MOTRPAC_MAPPING_FILE}" \
+    -v "REPO_ROOT=${REPO_ROOT},WORK_ROOT=${WORK_ROOT},MOTRPAC_WORKLIST=${MOTRPAC_WORKLIST},MOTRPAC_OUT_ROOT=${MOTRPAC_OUT_ROOT},MOTRPAC_MODEL_LIST=${MOTRPAC_MODEL_LIST},MOTRPAC_TISSUE_LIST=${MOTRPAC_TISSUE_LIST},MOTRPAC_MODEL_MANIFEST=${MOTRPAC_MODEL_MANIFEST},DIG_DIR=${DIG_DIR},PYTHON_BIN=${PYTHON_BIN},RSCRIPT_BIN=${RSCRIPT_BIN},APPTAINER_BIN=${APPTAINER_BIN},APPTAINER_IMAGE=${APPTAINER_IMAGE},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS},WRITE_MODEL_ONLY=${WRITE_MODEL_ONLY},MOTRPAC_RAW_COUNTS_DIR=${MOTRPAC_RAW_COUNTS_DIR},MOTRPAC_TRANSCRIPT_METADATA_TSV=${MOTRPAC_TRANSCRIPT_METADATA_TSV},MOTRPAC_PHENOTYPE_METADATA_TSV=${MOTRPAC_PHENOTYPE_METADATA_TSV},MOTRPAC_FEATURE_TO_GENE_TSV=${MOTRPAC_FEATURE_TO_GENE_TSV},MOTRPAC_RAT_TO_HUMAN_TSV=${MOTRPAC_RAT_TO_HUMAN_TSV},MOTRPAC_FEATURE_ANNOT=${MOTRPAC_FEATURE_ANNOT},MOTRPAC_DEA_DIR=${MOTRPAC_DEA_DIR},MOTRPAC_MAPPING_FILE=${MOTRPAC_MAPPING_FILE}" \
     "${SELF_PATH}"
 }
 
@@ -390,6 +431,7 @@ run_task_in_apptainer() {
   APPTAINERENV_DIG_DIR="${DIG_DIR}" \
   APPTAINERENV_PYTHON_BIN="${APPTAINER_PYTHON_BIN}" \
   APPTAINERENV_RSCRIPT_BIN="${APPTAINER_RSCRIPT_BIN}" \
+  APPTAINERENV_WRITE_MODEL_ONLY="${WRITE_MODEL_ONLY}" \
   APPTAINERENV_MOTRPAC_TRANSCRIPT_METADATA_TSV="${MOTRPAC_TRANSCRIPT_METADATA_TSV}" \
   APPTAINERENV_MOTRPAC_PHENOTYPE_METADATA_TSV="${MOTRPAC_PHENOTYPE_METADATA_TSV}" \
   APPTAINERENV_MOTRPAC_FEATURE_TO_GENE_TSV="${MOTRPAC_FEATURE_TO_GENE_TSV}" \
@@ -422,6 +464,103 @@ run_task() {
   IFS=$'\t' read -r _ tissue_id model_group model_id <<< "${row}"
 
   echo "MoTrPAC task ${task_id}: tissue=${tissue_id} group=${model_group} model=${model_id}"
+
+  if [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then
+    local model_family cmd models_root tissue_label transcript_tissue_label runner
+    model_family="$(resolve_model_family_for_id "${model_id}")"
+    if [[ -z "${model_family}" ]]; then
+      echo "Unable to resolve MoTrPAC model family for ${model_id}" >&2
+      exit 1
+    fi
+    case "${model_family}" in
+      training)
+        tissue_label="$(resolve_tissue_field "${tissue_id}" "tissue_label")"
+        transcript_tissue_label="$(resolve_tissue_field "${tissue_id}" "transcript_tissue_label")"
+        [[ -n "${tissue_label}" ]] || { echo "Missing tissue_label for ${tissue_id}" >&2; exit 1; }
+        [[ -n "${transcript_tissue_label}" ]] || { echo "Missing transcript_tissue_label for ${tissue_id}" >&2; exit 1; }
+        models_root="${MOTRPAC_OUT_ROOT}/genesets/${tissue_id}/models"
+        runner="${REPO_ROOT}/geneset-extractor-dev/MoTrPAC/src/run_motrpac_training_model.py"
+        cmd=(
+          "${PYTHON_BIN}" "${runner}"
+          --model_id "${model_id}"
+          --tissue_id "${tissue_id}"
+          --tissue_label "${tissue_label}"
+          --transcript_tissue_label "${transcript_tissue_label}"
+          --run_root "${models_root}"
+          --python_bin "${PYTHON_BIN}"
+          --rscript_bin "${RSCRIPT_BIN}"
+          --dig_dir "${DIG_DIR}"
+          --model_manifest "${MOTRPAC_MODEL_MANIFEST}"
+          --write_model_only
+        )
+        ;;
+      timewise)
+        tissue_label="$(resolve_tissue_field "${tissue_id}" "tissue_label")"
+        transcript_tissue_label="$(resolve_tissue_field "${tissue_id}" "transcript_tissue_label")"
+        [[ -n "${tissue_label}" ]] || { echo "Missing tissue_label for ${tissue_id}" >&2; exit 1; }
+        [[ -n "${transcript_tissue_label}" ]] || { echo "Missing transcript_tissue_label for ${tissue_id}" >&2; exit 1; }
+        models_root="${MOTRPAC_OUT_ROOT}/genesets/${tissue_id}/models"
+        runner="${REPO_ROOT}/geneset-extractor-dev/MoTrPAC/src/run_motrpac_timewise_model.py"
+        cmd=(
+          "${PYTHON_BIN}" "${runner}"
+          --model_id "${model_id}"
+          --tissue_id "${tissue_id}"
+          --tissue_label "${tissue_label}"
+          --transcript_tissue_label "${transcript_tissue_label}"
+          --run_root "${models_root}"
+          --python_bin "${PYTHON_BIN}"
+          --rscript_bin "${RSCRIPT_BIN}"
+          --dig_dir "${DIG_DIR}"
+          --model_manifest "${MOTRPAC_MODEL_MANIFEST}"
+          --write_model_only
+        )
+        ;;
+      hz_released_dea)
+        models_root="${MOTRPAC_OUT_ROOT}/genesets/all_tissues/models"
+        runner="${REPO_ROOT}/geneset-extractor-dev/MoTrPAC/src/run_motrpac_hz_released_dea_model.py"
+        cmd=(
+          "${PYTHON_BIN}" "${runner}"
+          --model_id "${model_id}"
+          --run_root "${models_root}"
+          --python_bin "${PYTHON_BIN}"
+          --dig_dir "${DIG_DIR}"
+          --feature_annot "${MOTRPAC_FEATURE_ANNOT}"
+          --dea_dir "${MOTRPAC_DEA_DIR}"
+          --mapping_file "${MOTRPAC_MAPPING_FILE}"
+          --model_manifest "${MOTRPAC_MODEL_MANIFEST}"
+          --write_model_only
+        )
+        ;;
+      hz_raw_aggregated)
+        models_root="${MOTRPAC_OUT_ROOT}/genesets/all_tissues/models"
+        runner="${REPO_ROOT}/geneset-extractor-dev/MoTrPAC/src/run_motrpac_hz_raw_aggregated_model.py"
+        cmd=(
+          "${PYTHON_BIN}" "${runner}"
+          --model_id "${model_id}"
+          --run_root "${models_root}"
+          --python_bin "${PYTHON_BIN}"
+          --rscript_bin "${RSCRIPT_BIN}"
+          --dig_dir "${DIG_DIR}"
+          --raw_counts_dir "${MOTRPAC_RAW_COUNTS_DIR}"
+          --transcript_metadata_tsv "${MOTRPAC_TRANSCRIPT_METADATA_TSV}"
+          --phenotype_metadata_tsv "${MOTRPAC_PHENOTYPE_METADATA_TSV}"
+          --feature_to_gene_tsv "${MOTRPAC_FEATURE_TO_GENE_TSV}"
+          --rat_to_human_tsv "${MOTRPAC_RAT_TO_HUMAN_TSV}"
+          --model_list "${MOTRPAC_MODEL_LIST}"
+          --tissue_list "${MOTRPAC_TISSUE_LIST}"
+          --model_manifest "${MOTRPAC_MODEL_MANIFEST}"
+          --write_model_only
+        )
+        ;;
+      *)
+        echo "Unsupported MoTrPAC model family in model-only mode: ${model_family}" >&2
+        exit 1
+        ;;
+    esac
+    echo "+ ${cmd[*]}"
+    "${cmd[@]}"
+    return
+  fi
 
   local cmd=(
     bash "${REPO_ROOT}/geneset-extractor-dev/MoTrPAC/run/build_motrpac_genesets.sh"

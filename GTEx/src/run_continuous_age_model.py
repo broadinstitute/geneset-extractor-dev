@@ -27,15 +27,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tissue_id", required=True)
     parser.add_argument("--tissue_label", required=True)
     parser.add_argument("--model_ids", default="all", help="comma-separated model IDs or 'all'")
-    parser.add_argument("--expression_gct", required=True)
-    parser.add_argument("--sample_attributes_tsv", required=True)
-    parser.add_argument("--subject_phenotypes_tsv", required=True)
+    parser.add_argument("--expression_gct")
+    parser.add_argument("--sample_attributes_tsv")
+    parser.add_argument("--subject_phenotypes_tsv")
     parser.add_argument("--tissue_column")
     parser.add_argument("--tissue_value")
     parser.add_argument("--prepared_dir")
     parser.add_argument("--run_root", required=True)
     parser.add_argument("--python_bin", default=sys.executable or "python3")
-    parser.add_argument("--rscript_bin", required=True)
+    parser.add_argument("--rscript_bin", default="Rscript")
     parser.add_argument("--organism", default="human", choices=["human", "mouse"])
     parser.add_argument("--genome_build", default="hg38")
     parser.add_argument("--gtf")
@@ -641,14 +641,15 @@ def main() -> int:
     resolved_gtf = resolve_input_path(args.gtf, base_dir=repo)
     model_settings = load_tissue_model_settings(manifest_path)
     model_ids = parse_model_ids(args.model_ids, model_settings)
-    expression_gct = Path(args.expression_gct).resolve()
-    sample_attributes_tsv = Path(args.sample_attributes_tsv).resolve()
-    subject_phenotypes_tsv = Path(args.subject_phenotypes_tsv).resolve()
     tissue_label = str(args.tissue_label).strip()
 
     needs_gtf = [model_id for model_id in model_ids if model_settings[model_id]["ANNOTATION_MODE"] == "gtf_annotated"]
-    if needs_gtf and not resolved_gtf:
+    if not args.write_model_only and needs_gtf and not resolved_gtf:
         raise SystemExit(f"Models require --gtf: {', '.join(needs_gtf)}")
+
+    expression_gct = Path(args.expression_gct).resolve() if args.expression_gct else None
+    sample_attributes_tsv = Path(args.sample_attributes_tsv).resolve() if args.sample_attributes_tsv else None
+    subject_phenotypes_tsv = Path(args.subject_phenotypes_tsv).resolve() if args.subject_phenotypes_tsv else None
 
     run_root.mkdir(parents=True, exist_ok=True)
     top_log = run_root / "run.log"
@@ -674,6 +675,38 @@ def main() -> int:
         model_log = model_out / "run.log"
         model_out.mkdir(parents=True, exist_ok=True)
         log_line(top_log, f"[run_gtex_tissue_gmt] start model={model_id}")
+
+        status_row: dict[str, Any] = {
+            "model_id": model_id,
+            "status": "planned" if args.write_commands_only else "running",
+            "workflow_dir": str(workflow_out),
+            "continuous_metadata_tsv": str(workflow_out / "continuous_sample_metadata.tsv"),
+            "tissue_deg_tsv": str(tissue_deg_tsv),
+            "extractor_dir": str(extractor_out),
+            "gmt_path": str(extractor_out / "genesets.gmt"),
+            "n_samples": "",
+            "model_formula": "age_mid + SEX" if settings["WORKFLOW_COVARIATES"] != "none" else "age_mid",
+        }
+
+        if args.write_model_only:
+            write_json(
+                extractor_out / "geneset.model.json",
+                build_model_sidecar_payload(
+                    model_id=model_id,
+                    tissue_id=args.tissue_id,
+                    tissue_label=tissue_label,
+                    settings=settings,
+                ),
+            )
+            status_row["status"] = "model_only"
+            statuses.append(status_row)
+            continue
+
+        if not expression_gct or not sample_attributes_tsv or not subject_phenotypes_tsv:
+            raise SystemExit(
+                "--expression_gct, --sample_attributes_tsv, and --subject_phenotypes_tsv are required unless --write_model_only is used"
+            )
+
         workflow_cmd = build_workflow_cmd(
             python_bin=args.python_bin,
             expression_gct=expression_gct,
@@ -722,33 +755,7 @@ def main() -> int:
             dig_dir=dig_dir,
         )
 
-        status_row: dict[str, Any] = {
-            "model_id": model_id,
-            "status": "planned" if args.write_commands_only else "running",
-            "workflow_dir": str(workflow_out),
-            "continuous_metadata_tsv": str(workflow_out / "continuous_sample_metadata.tsv"),
-            "tissue_deg_tsv": str(tissue_deg_tsv),
-            "extractor_dir": str(extractor_out),
-            "gmt_path": str(extractor_out / "genesets.gmt"),
-            "n_samples": "",
-            "model_formula": "age_mid + SEX" if settings["WORKFLOW_COVARIATES"] != "none" else "age_mid",
-        }
-
         if args.write_commands_only:
-            statuses.append(status_row)
-            continue
-
-        if args.write_model_only:
-            write_json(
-                extractor_out / "geneset.model.json",
-                build_model_sidecar_payload(
-                    model_id=model_id,
-                    tissue_id=args.tissue_id,
-                    tissue_label=tissue_label,
-                    settings=settings,
-                ),
-            )
-            status_row["status"] = "model_only"
             statuses.append(status_row)
             continue
 

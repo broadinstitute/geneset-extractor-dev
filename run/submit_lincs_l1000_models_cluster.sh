@@ -21,13 +21,14 @@ QSUB_BIN="${QSUB_BIN:-qsub}"
 LINCS_ARRAY_MEMORY="${LINCS_ARRAY_MEMORY:-16G}"
 LINCS_ARRAY_WALLTIME="${LINCS_ARRAY_WALLTIME:-24:00:00}"
 SUBMIT_MODE=0
+WRITE_MODEL_ONLY=0
 FILTER_MODEL_GROUP=""
 FILTER_MODEL_ID=""
 
 usage() {
   cat <<'EOF'
 Usage:
-  ./geneset-extractor-dev/run/submit_lincs_l1000_models_cluster.sh --submit [--model_group HZ] [--model_id MODEL]
+  ./geneset-extractor-dev/run/submit_lincs_l1000_models_cluster.sh --submit [--write_model_only] [--model_group HZ] [--model_id MODEL]
   ./geneset-extractor-dev/run/submit_lincs_l1000_models_cluster.sh --help
 
 Required environment variables:
@@ -43,6 +44,7 @@ Optional environment variables:
 
 Notes:
   - Use --submit to submit the qsub array.
+  - Add --write_model_only to write only geneset.model.json sidecars.
   - When run inside a qsub array task, it auto-detects the task context and
     runs the assigned workload row.
   - No filters: one array covering all enabled LINCS_L1000 models.
@@ -106,6 +108,10 @@ parse_cli() {
         SUBMIT_MODE=1
         shift
         ;;
+      --write_model_only)
+        WRITE_MODEL_ONLY=1
+        shift
+        ;;
       --model_group)
         [[ $# -ge 2 ]] || { echo "Missing value for --model_group" >&2; exit 1; }
         FILTER_MODEL_GROUP="$(canonicalize_model_group "$2")" || {
@@ -149,6 +155,15 @@ parse_cli() {
     usage
     exit 1
   fi
+}
+
+expression_tsv_for_model() {
+  local model_id="$1"
+  case "${model_id}" in
+    HZ1) printf '%s\n' "${LINCS_CHEMPERT_EXPRESSION_TSV}" ;;
+    HZ2) printf '%s\n' "${LINCS_CRISPRKO_EXPRESSION_TSV}" ;;
+    *) return 1 ;;
+  esac
 }
 
 prepare_common() {
@@ -226,19 +241,40 @@ run_worker() {
   src_root="${REPO_ROOT}/geneset-extractor-dev/LINCS_L1000/src"
 
   local cmd=(
-    "${PYTHON_BIN}"
-    "${src_root}/build_lincs_l1000_genesets.py"
-    "--models" "${model_id}"
-    "--python_bin" "${PYTHON_BIN}"
-    "--mapping_file" "${LINCS_MAPPING_FILE}"
-    "--dig_dir" "${DIG_DIR}"
-    "--model_list" "${LINCS_MODEL_LIST}"
-    "--model_manifest" "${LINCS_MODEL_MANIFEST}"
-    "--out_root" "${LINCS_OUT_ROOT}"
-    "--overwrite"
-    "--chempert_expression_tsv" "${LINCS_CHEMPERT_EXPRESSION_TSV}"
-    "--crisprko_expression_tsv" "${LINCS_CRISPRKO_EXPRESSION_TSV}"
-  )
+  local cmd expression_tsv
+  if [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then
+    expression_tsv="$(expression_tsv_for_model "${model_id}")" || {
+      echo "Unsupported LINCS_L1000 model for model-only mode: ${model_id}" >&2
+      exit 1
+    }
+    cmd=(
+      "${PYTHON_BIN}"
+      "${src_root}/run_lincs_l1000_hz_model.py"
+      "--model_id" "${model_id}"
+      "--run_root" "${LINCS_OUT_ROOT}/genesets/all_signatures/models"
+      "--python_bin" "${PYTHON_BIN}"
+      "--dig_dir" "${DIG_DIR}"
+      "--expression_tsv" "${expression_tsv}"
+      "--mapping_file" "${LINCS_MAPPING_FILE}"
+      "--model_manifest" "${LINCS_MODEL_MANIFEST}"
+      "--write_model_only"
+    )
+  else
+    cmd=(
+      "${PYTHON_BIN}"
+      "${src_root}/build_lincs_l1000_genesets.py"
+      "--models" "${model_id}"
+      "--python_bin" "${PYTHON_BIN}"
+      "--mapping_file" "${LINCS_MAPPING_FILE}"
+      "--dig_dir" "${DIG_DIR}"
+      "--model_list" "${LINCS_MODEL_LIST}"
+      "--model_manifest" "${LINCS_MODEL_MANIFEST}"
+      "--out_root" "${LINCS_OUT_ROOT}"
+      "--overwrite"
+      "--chempert_expression_tsv" "${LINCS_CHEMPERT_EXPRESSION_TSV}"
+      "--crisprko_expression_tsv" "${LINCS_CRISPRKO_EXPRESSION_TSV}"
+    )
+  fi
   if [[ -n "${PROVENANCE_MIRROR_LOCAL_PREFIX:-}" ]]; then
     cmd+=(--provenance_mirror_local_prefix "${PROVENANCE_MIRROR_LOCAL_PREFIX}")
   fi
@@ -266,7 +302,7 @@ submit_array() {
     -o "${QSUB_LOG_ROOT}/lincs_l1000.\$TASK_ID.out" \
     -e "${QSUB_LOG_ROOT}/lincs_l1000.\$TASK_ID.err" \
     -l "h_vmem=${LINCS_ARRAY_MEMORY},h_rt=${LINCS_ARRAY_WALLTIME}" \
-    -v "REPO_ROOT=${REPO_ROOT},WORK_ROOT=${WORK_ROOT},LINCS_WORKLIST=${LINCS_WORKLIST},LINCS_OUT_ROOT=${LINCS_OUT_ROOT},LINCS_MODEL_LIST=${LINCS_MODEL_LIST},LINCS_MODEL_MANIFEST=${LINCS_MODEL_MANIFEST},DIG_DIR=${DIG_DIR},PYTHON_BIN=${PYTHON_BIN},LINCS_CHEMPERT_EXPRESSION_TSV=${LINCS_CHEMPERT_EXPRESSION_TSV},LINCS_CRISPRKO_EXPRESSION_TSV=${LINCS_CRISPRKO_EXPRESSION_TSV},LINCS_MAPPING_FILE=${LINCS_MAPPING_FILE}" \
+    -v "REPO_ROOT=${REPO_ROOT},WORK_ROOT=${WORK_ROOT},LINCS_WORKLIST=${LINCS_WORKLIST},LINCS_OUT_ROOT=${LINCS_OUT_ROOT},LINCS_MODEL_LIST=${LINCS_MODEL_LIST},LINCS_MODEL_MANIFEST=${LINCS_MODEL_MANIFEST},DIG_DIR=${DIG_DIR},PYTHON_BIN=${PYTHON_BIN},WRITE_MODEL_ONLY=${WRITE_MODEL_ONLY},LINCS_CHEMPERT_EXPRESSION_TSV=${LINCS_CHEMPERT_EXPRESSION_TSV},LINCS_CRISPRKO_EXPRESSION_TSV=${LINCS_CRISPRKO_EXPRESSION_TSV},LINCS_MAPPING_FILE=${LINCS_MAPPING_FILE}" \
     "${REPO_ROOT}/geneset-extractor-dev/run/submit_lincs_l1000_models_cluster.sh"
 }
 
