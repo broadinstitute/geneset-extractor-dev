@@ -95,6 +95,15 @@ require_dir() {
   fi
 }
 
+absolute_path() {
+  local path="$1"
+  if [[ "${path}" == /* ]]; then
+    printf '%s\n' "${path}"
+  else
+    printf '%s/%s\n' "$(pwd)" "${path}"
+  fi
+}
+
 csv_from_tsv_filter() {
   local tsv_path="$1"
   local family_col="$2"
@@ -345,7 +354,7 @@ write_worklist() {
 }
 
 filter_refresh_existing_worklist() {
-  [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]] || return
+  [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]] || return 0
   local filtered_worklist kept
   filtered_worklist="$(mktemp)"
   head -n 1 "${GTEX_WORKLIST}" > "${filtered_worklist}"
@@ -522,12 +531,12 @@ run_task() {
 }
 
 main() {
-  local mode="${1:-}"
-  if [[ -n "${PBS_ARRAYID:-}" || -n "${SGE_TASK_ID:-}" ]]; then
-    if [[ -n "${mode}" ]]; then
-      echo "Unexpected argument in array-task mode: ${mode}" >&2
-      exit 1
-    fi
+  WORK_ROOT="$(absolute_path "${WORK_ROOT}")"
+  GTEX_OUT_ROOT="$(absolute_path "${GTEX_OUT_ROOT}")"
+  QSUB_LOG_ROOT="$(absolute_path "${QSUB_LOG_ROOT}")"
+  GTEX_WORKLIST="$(absolute_path "${GTEX_WORKLIST}")"
+
+  if [[ $# -eq 0 ]] && [[ -n "${PBS_ARRAYID:-}" || -n "${SGE_TASK_ID:-}" ]]; then
     run_task
     return
   fi

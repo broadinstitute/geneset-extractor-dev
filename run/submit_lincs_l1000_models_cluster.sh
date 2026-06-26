@@ -82,6 +82,15 @@ require_dir() {
   fi
 }
 
+absolute_path() {
+  local path="$1"
+  if [[ "${path}" == /* ]]; then
+    printf '%s\n' "${path}"
+  else
+    printf '%s/%s\n' "$(pwd)" "${path}"
+  fi
+}
+
 canonicalize_model_group() {
   case "$1" in
     HZ|hz_released_matrix) printf '%s\n' "HZ" ;;
@@ -246,7 +255,7 @@ write_worklist() {
 }
 
 filter_refresh_existing_worklist() {
-  [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]] || return
+  [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]] || return 0
   local filtered_worklist kept
   filtered_worklist="$(mktemp)"
   head -n 1 "${LINCS_WORKLIST}" > "${filtered_worklist}"
@@ -376,7 +385,12 @@ submit_array() {
 }
 
 main() {
-  if task_id_from_env >/dev/null 2>&1; then
+  WORK_ROOT="$(absolute_path "${WORK_ROOT}")"
+  LINCS_OUT_ROOT="$(absolute_path "${LINCS_OUT_ROOT}")"
+  QSUB_LOG_ROOT="$(absolute_path "${QSUB_LOG_ROOT}")"
+  LINCS_WORKLIST="$(absolute_path "${LINCS_WORKLIST}")"
+
+  if [[ $# -eq 0 ]] && task_id_from_env >/dev/null 2>&1; then
     prepare_common
     run_worker
   else
