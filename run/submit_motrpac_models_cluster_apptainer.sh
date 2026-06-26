@@ -39,6 +39,8 @@ MOTRPAC_ARRAY_MEMORY="${MOTRPAC_ARRAY_MEMORY:-16G}"
 MOTRPAC_ARRAY_WALLTIME="${MOTRPAC_ARRAY_WALLTIME:-24:00:00}"
 SUBMIT_MODE=0
 WRITE_MODEL_ONLY=0
+REFRESH_METADATA_AND_PROVENANCE=0
+DESCRIPTION_TEMPLATE_TSV="${DESCRIPTION_TEMPLATE_TSV:-}"
 FILTER_MODEL_GROUP=""
 FILTER_TISSUE_ID=""
 FILTER_MODEL_ID=""
@@ -46,7 +48,7 @@ FILTER_MODEL_ID=""
 usage() {
   cat <<'EOF'
 Usage:
-  ./geneset-extractor-dev/run/submit_motrpac_models_cluster_apptainer.sh --submit [--write_model_only] [--model_group TR|TW|HZ] [--tissue_id TISSUE|all_tissues] [--model_id MODEL]
+  ./geneset-extractor-dev/run/submit_motrpac_models_cluster_apptainer.sh --submit [--write_model_only|--refresh_metadata_and_provenance] [--model_group TR|TW|HZ] [--tissue_id TISSUE|all_tissues] [--model_id MODEL]
   ./geneset-extractor-dev/run/submit_motrpac_models_cluster_apptainer.sh --help
 
 Required environment variables:
@@ -67,10 +69,13 @@ Optional environment variables:
   APPTAINER_PYTHON_BIN, APPTAINER_RSCRIPT_BIN
   MOTRPAC_OUT_ROOT, QSUB_LOG_ROOT, MOTRPAC_WORKLIST
   MOTRPAC_ARRAY_MEMORY, MOTRPAC_ARRAY_WALLTIME
+  DESCRIPTION_TEMPLATE_TSV
 
 Notes:
   - Use --submit to submit the qsub array.
   - Add --write_model_only to write only geneset.model.json sidecars.
+  - Add --refresh_metadata_and_provenance to patch metadata descriptions and
+    rebuild provenance for each selected model output.
   - Array tasks re-enter this script inside the Apptainer image and run the
     assigned workload row there.
   - No filters: one array covering all tissue+model tasks.
@@ -160,6 +165,10 @@ parse_cli() {
         WRITE_MODEL_ONLY=1
         shift
         ;;
+      --refresh_metadata_and_provenance)
+        REFRESH_METADATA_AND_PROVENANCE=1
+        shift
+        ;;
       --model_group)
         [[ $# -ge 2 ]] || { echo "Missing value for --model_group" >&2; exit 1; }
         FILTER_MODEL_GROUP="$(canonicalize_model_group "$2")" || {
@@ -189,6 +198,11 @@ parse_cli() {
         ;;
     esac
   done
+
+  if [[ ${WRITE_MODEL_ONLY} -eq 1 && ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
+    echo "Use only one of --write_model_only or --refresh_metadata_and_provenance" >&2
+    exit 1
+  fi
 
   if [[ -n "${FILTER_MODEL_ID}" ]]; then
     local derived_group
@@ -268,15 +282,6 @@ prepare_common() {
   mkdir -p "${WORK_ROOT}" "${QSUB_LOG_ROOT}"
   require_dir "${DIG_DIR}"
 
-  require_var MOTRPAC_RAW_COUNTS_DIR
-  require_var MOTRPAC_TRANSCRIPT_METADATA_TSV
-  require_var MOTRPAC_PHENOTYPE_METADATA_TSV
-  require_var MOTRPAC_FEATURE_TO_GENE_TSV
-  require_var MOTRPAC_RAT_TO_HUMAN_TSV
-  require_var MOTRPAC_FEATURE_ANNOT
-  require_var MOTRPAC_DEA_DIR
-  require_var MOTRPAC_MAPPING_FILE
-
   if [[ -z "${GENESET_EXTRACTORS_IN_APPTAINER:-}" ]]; then
     require_var APPTAINER_IMAGE
     require_file "${APPTAINER_IMAGE}"
@@ -284,14 +289,26 @@ prepare_common() {
   require_file "${MOTRPAC_MODEL_LIST}"
   require_file "${MOTRPAC_TISSUE_LIST}"
   require_file "${MOTRPAC_MODEL_MANIFEST}"
-  require_dir "${MOTRPAC_RAW_COUNTS_DIR}"
-  require_file "${MOTRPAC_TRANSCRIPT_METADATA_TSV}"
-  require_file "${MOTRPAC_PHENOTYPE_METADATA_TSV}"
-  require_file "${MOTRPAC_FEATURE_TO_GENE_TSV}"
-  require_file "${MOTRPAC_RAT_TO_HUMAN_TSV}"
-  require_file "${MOTRPAC_FEATURE_ANNOT}"
-  require_dir "${MOTRPAC_DEA_DIR}"
-  require_file "${MOTRPAC_MAPPING_FILE}"
+  if [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
+    require_file "${DESCRIPTION_TEMPLATE_TSV}"
+  else
+    require_var MOTRPAC_RAW_COUNTS_DIR
+    require_var MOTRPAC_TRANSCRIPT_METADATA_TSV
+    require_var MOTRPAC_PHENOTYPE_METADATA_TSV
+    require_var MOTRPAC_FEATURE_TO_GENE_TSV
+    require_var MOTRPAC_RAT_TO_HUMAN_TSV
+    require_var MOTRPAC_FEATURE_ANNOT
+    require_var MOTRPAC_DEA_DIR
+    require_var MOTRPAC_MAPPING_FILE
+    require_dir "${MOTRPAC_RAW_COUNTS_DIR}"
+    require_file "${MOTRPAC_TRANSCRIPT_METADATA_TSV}"
+    require_file "${MOTRPAC_PHENOTYPE_METADATA_TSV}"
+    require_file "${MOTRPAC_FEATURE_TO_GENE_TSV}"
+    require_file "${MOTRPAC_RAT_TO_HUMAN_TSV}"
+    require_file "${MOTRPAC_FEATURE_ANNOT}"
+    require_dir "${MOTRPAC_DEA_DIR}"
+    require_file "${MOTRPAC_MAPPING_FILE}"
+  fi
 }
 
 write_worklist() {
@@ -374,6 +391,7 @@ apptainer_bind_csv() {
     append_bind_path "${MOTRPAC_MODEL_LIST}"
     append_bind_path "${MOTRPAC_TISSUE_LIST}"
     append_bind_path "${MOTRPAC_MODEL_MANIFEST}"
+    append_bind_path "${DESCRIPTION_TEMPLATE_TSV:-}"
     append_bind_path "${MOTRPAC_RAW_COUNTS_DIR}"
     append_bind_path "${MOTRPAC_TRANSCRIPT_METADATA_TSV}"
     append_bind_path "${MOTRPAC_PHENOTYPE_METADATA_TSV}"
@@ -401,7 +419,7 @@ submit_array() {
     -o "${QSUB_LOG_ROOT}/motrpac.\$TASK_ID.out" \
     -e "${QSUB_LOG_ROOT}/motrpac.\$TASK_ID.err" \
     -l "h_vmem=${MOTRPAC_ARRAY_MEMORY},h_rt=${MOTRPAC_ARRAY_WALLTIME}" \
-    -v "REPO_ROOT=${REPO_ROOT},WORK_ROOT=${WORK_ROOT},MOTRPAC_WORKLIST=${MOTRPAC_WORKLIST},MOTRPAC_OUT_ROOT=${MOTRPAC_OUT_ROOT},MOTRPAC_MODEL_LIST=${MOTRPAC_MODEL_LIST},MOTRPAC_TISSUE_LIST=${MOTRPAC_TISSUE_LIST},MOTRPAC_MODEL_MANIFEST=${MOTRPAC_MODEL_MANIFEST},DIG_DIR=${DIG_DIR},PYTHON_BIN=${PYTHON_BIN},RSCRIPT_BIN=${RSCRIPT_BIN},APPTAINER_BIN=${APPTAINER_BIN},APPTAINER_IMAGE=${APPTAINER_IMAGE},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS},WRITE_MODEL_ONLY=${WRITE_MODEL_ONLY},MOTRPAC_RAW_COUNTS_DIR=${MOTRPAC_RAW_COUNTS_DIR},MOTRPAC_TRANSCRIPT_METADATA_TSV=${MOTRPAC_TRANSCRIPT_METADATA_TSV},MOTRPAC_PHENOTYPE_METADATA_TSV=${MOTRPAC_PHENOTYPE_METADATA_TSV},MOTRPAC_FEATURE_TO_GENE_TSV=${MOTRPAC_FEATURE_TO_GENE_TSV},MOTRPAC_RAT_TO_HUMAN_TSV=${MOTRPAC_RAT_TO_HUMAN_TSV},MOTRPAC_FEATURE_ANNOT=${MOTRPAC_FEATURE_ANNOT},MOTRPAC_DEA_DIR=${MOTRPAC_DEA_DIR},MOTRPAC_MAPPING_FILE=${MOTRPAC_MAPPING_FILE}" \
+    -v "REPO_ROOT=${REPO_ROOT},WORK_ROOT=${WORK_ROOT},MOTRPAC_WORKLIST=${MOTRPAC_WORKLIST},MOTRPAC_OUT_ROOT=${MOTRPAC_OUT_ROOT},MOTRPAC_MODEL_LIST=${MOTRPAC_MODEL_LIST},MOTRPAC_TISSUE_LIST=${MOTRPAC_TISSUE_LIST},MOTRPAC_MODEL_MANIFEST=${MOTRPAC_MODEL_MANIFEST},DIG_DIR=${DIG_DIR},PYTHON_BIN=${PYTHON_BIN},RSCRIPT_BIN=${RSCRIPT_BIN},APPTAINER_BIN=${APPTAINER_BIN},APPTAINER_IMAGE=${APPTAINER_IMAGE},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS},WRITE_MODEL_ONLY=${WRITE_MODEL_ONLY},REFRESH_METADATA_AND_PROVENANCE=${REFRESH_METADATA_AND_PROVENANCE},DESCRIPTION_TEMPLATE_TSV=${DESCRIPTION_TEMPLATE_TSV},MOTRPAC_RAW_COUNTS_DIR=${MOTRPAC_RAW_COUNTS_DIR},MOTRPAC_TRANSCRIPT_METADATA_TSV=${MOTRPAC_TRANSCRIPT_METADATA_TSV},MOTRPAC_PHENOTYPE_METADATA_TSV=${MOTRPAC_PHENOTYPE_METADATA_TSV},MOTRPAC_FEATURE_TO_GENE_TSV=${MOTRPAC_FEATURE_TO_GENE_TSV},MOTRPAC_RAT_TO_HUMAN_TSV=${MOTRPAC_RAT_TO_HUMAN_TSV},MOTRPAC_FEATURE_ANNOT=${MOTRPAC_FEATURE_ANNOT},MOTRPAC_DEA_DIR=${MOTRPAC_DEA_DIR},MOTRPAC_MAPPING_FILE=${MOTRPAC_MAPPING_FILE}" \
     "${SELF_PATH}"
 }
 
@@ -432,6 +450,8 @@ run_task_in_apptainer() {
   APPTAINERENV_PYTHON_BIN="${APPTAINER_PYTHON_BIN}" \
   APPTAINERENV_RSCRIPT_BIN="${APPTAINER_RSCRIPT_BIN}" \
   APPTAINERENV_WRITE_MODEL_ONLY="${WRITE_MODEL_ONLY}" \
+  APPTAINERENV_REFRESH_METADATA_AND_PROVENANCE="${REFRESH_METADATA_AND_PROVENANCE}" \
+  APPTAINERENV_DESCRIPTION_TEMPLATE_TSV="${DESCRIPTION_TEMPLATE_TSV}" \
   APPTAINERENV_MOTRPAC_TRANSCRIPT_METADATA_TSV="${MOTRPAC_TRANSCRIPT_METADATA_TSV}" \
   APPTAINERENV_MOTRPAC_PHENOTYPE_METADATA_TSV="${MOTRPAC_PHENOTYPE_METADATA_TSV}" \
   APPTAINERENV_MOTRPAC_FEATURE_TO_GENE_TSV="${MOTRPAC_FEATURE_TO_GENE_TSV}" \
@@ -559,6 +579,25 @@ run_task() {
     esac
     echo "+ ${cmd[*]}"
     "${cmd[@]}"
+    return
+  fi
+
+  if [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
+    local model_dir refresh_cmd
+    if [[ "${model_group}" == "HZ" ]]; then
+      model_dir="${MOTRPAC_OUT_ROOT}/genesets/all_tissues/models/${model_id}"
+    else
+      model_dir="${MOTRPAC_OUT_ROOT}/genesets/${tissue_id}/models/${model_id}"
+    fi
+    refresh_cmd=(
+      bash "${REPO_ROOT}/geneset-extractor-dev/run/refresh_model_metadata_and_provenance.sh"
+      --model_id "${model_id}"
+      --model_dir "${model_dir}"
+      --description_template_tsv "${DESCRIPTION_TEMPLATE_TSV}"
+      --python_bin "${PYTHON_BIN}"
+    )
+    echo "+ ${refresh_cmd[*]}"
+    "${refresh_cmd[@]}"
     return
   fi
 

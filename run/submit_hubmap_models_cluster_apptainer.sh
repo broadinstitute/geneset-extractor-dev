@@ -33,13 +33,15 @@ HUBMAP_ARRAY_MEMORY="${HUBMAP_ARRAY_MEMORY:-16G}"
 HUBMAP_ARRAY_WALLTIME="${HUBMAP_ARRAY_WALLTIME:-24:00:00}"
 SUBMIT_MODE=0
 WRITE_MODEL_ONLY=0
+REFRESH_METADATA_AND_PROVENANCE=0
+DESCRIPTION_TEMPLATE_TSV="${DESCRIPTION_TEMPLATE_TSV:-}"
 FILTER_MODEL_GROUP=""
 FILTER_MODEL_ID=""
 
 usage() {
   cat <<'EOF'
 Usage:
-  ./geneset-extractor-dev/run/submit_hubmap_models_cluster_apptainer.sh --submit [--write_model_only] [--model_group HZ] [--model_id MODEL]
+  ./geneset-extractor-dev/run/submit_hubmap_models_cluster_apptainer.sh --submit [--write_model_only|--refresh_metadata_and_provenance] [--model_group HZ] [--model_id MODEL]
   ./geneset-extractor-dev/run/submit_hubmap_models_cluster_apptainer.sh --help
 
 Required environment variables:
@@ -56,9 +58,12 @@ Optional environment variables:
   APPTAINER_PYTHON_BIN
   HUBMAP_OUT_ROOT, QSUB_LOG_ROOT, HUBMAP_WORKLIST
   HUBMAP_ARRAY_MEMORY, HUBMAP_ARRAY_WALLTIME
+  DESCRIPTION_TEMPLATE_TSV
 
 Notes:
   - Add --write_model_only to write only geneset.model.json sidecars.
+  - Add --refresh_metadata_and_provenance to patch metadata descriptions and
+    rebuild provenance for each selected model output.
   - If HUBMAP_INPUT_MATRIX is omitted and both HZ1 and HZ2 are selected,
     the script submits HZ1 first and HZ2 with a hold dependency on HZ1.
   - If HUBMAP_INPUT_MATRIX is omitted and only HZ2 is selected, an existing
@@ -125,6 +130,10 @@ parse_cli() {
         WRITE_MODEL_ONLY=1
         shift
         ;;
+      --refresh_metadata_and_provenance)
+        REFRESH_METADATA_AND_PROVENANCE=1
+        shift
+        ;;
       --model_group)
         [[ $# -ge 2 ]] || { echo "Missing value for --model_group" >&2; exit 1; }
         FILTER_MODEL_GROUP="$(canonicalize_model_group "$2")" || {
@@ -149,6 +158,11 @@ parse_cli() {
         ;;
     esac
   done
+
+  if [[ ${WRITE_MODEL_ONLY} -eq 1 && ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
+    echo "Use only one of --write_model_only or --refresh_metadata_and_provenance" >&2
+    exit 1
+  fi
 
   if [[ -n "${FILTER_MODEL_ID}" ]]; then
     local derived_group
@@ -195,7 +209,10 @@ prepare_common() {
   require_file "${HUBMAP_MODEL_LIST}"
   require_file "${HUBMAP_MODEL_MANIFEST}"
   require_file "${HUBMAP_HUMAN_GENE_INFO}"
-  if [[ ${WRITE_MODEL_ONLY} -ne 1 ]]; then
+  if [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
+    require_file "${DESCRIPTION_TEMPLATE_TSV}"
+  fi
+  if [[ ${WRITE_MODEL_ONLY} -ne 1 && ${REFRESH_METADATA_AND_PROVENANCE} -ne 1 ]]; then
     require_var HUBMAP_RAW_ASCTB_DIR
     require_dir "${HUBMAP_RAW_ASCTB_DIR}"
   fi
@@ -294,7 +311,15 @@ run_inner_worker() {
   local src_root
   src_root="${REPO_ROOT}/geneset-extractor-dev/HuBMAP/src"
   local cmd
-  if [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then
+  if [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
+    cmd=(
+      bash "${REPO_ROOT}/geneset-extractor-dev/run/refresh_model_metadata_and_provenance.sh"
+      --model_id "${model_id}"
+      --model_dir "${HUBMAP_OUT_ROOT}/genesets/all_signatures/models/${model_id}"
+      --description_template_tsv "${DESCRIPTION_TEMPLATE_TSV}"
+      --python_bin "${PYTHON_BIN}"
+    )
+  elif [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then
     cmd=(
       "${PYTHON_BIN}"
       "${src_root}/run_hubmap_hz_model.py"
@@ -348,6 +373,7 @@ run_outer_worker() {
       append_bind_path "${DIG_DIR}"
       append_bind_path "${HUBMAP_MODEL_LIST}"
       append_bind_path "${HUBMAP_MODEL_MANIFEST}"
+      append_bind_path "${DESCRIPTION_TEMPLATE_TSV:-}"
       append_bind_path "${HUBMAP_HUMAN_GENE_INFO}"
       append_bind_path "${HUBMAP_RAW_ASCTB_DIR}"
       append_bind_path "${HUBMAP_INPUT_MATRIX:-}"
@@ -370,6 +396,8 @@ run_outer_worker() {
     APPTAINERENV_PYTHON_BIN="${PYTHON_BIN}" \
     APPTAINERENV_APPTAINER_PYTHON_BIN="${APPTAINER_PYTHON_BIN}" \
     APPTAINERENV_WRITE_MODEL_ONLY="${WRITE_MODEL_ONLY}" \
+    APPTAINERENV_REFRESH_METADATA_AND_PROVENANCE="${REFRESH_METADATA_AND_PROVENANCE}" \
+    APPTAINERENV_DESCRIPTION_TEMPLATE_TSV="${DESCRIPTION_TEMPLATE_TSV}" \
     APPTAINERENV_HUBMAP_HUMAN_GENE_INFO="${HUBMAP_HUMAN_GENE_INFO}" \
     APPTAINERENV_HUBMAP_RAW_ASCTB_DIR="${HUBMAP_RAW_ASCTB_DIR}" \
     APPTAINERENV_HUBMAP_INPUT_MATRIX="${HUBMAP_INPUT_MATRIX:-}" \
@@ -404,7 +432,7 @@ submit_one_array() {
     qsub_cmd+=(-hold_jid "${hold_jid}")
   fi
   qsub_cmd+=(
-    -v "REPO_ROOT=${REPO_ROOT},WORK_ROOT=${WORK_ROOT},HUBMAP_WORKLIST=${worklist_path},HUBMAP_OUT_ROOT=${HUBMAP_OUT_ROOT},HUBMAP_MODEL_LIST=${HUBMAP_MODEL_LIST},HUBMAP_MODEL_MANIFEST=${HUBMAP_MODEL_MANIFEST},DIG_DIR=${DIG_DIR},PYTHON_BIN=${PYTHON_BIN},APPTAINER_BIN=${APPTAINER_BIN},APPTAINER_IMAGE=${APPTAINER_IMAGE},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS},APPTAINER_PYTHON_BIN=${APPTAINER_PYTHON_BIN},WRITE_MODEL_ONLY=${WRITE_MODEL_ONLY},HUBMAP_HUMAN_GENE_INFO=${HUBMAP_HUMAN_GENE_INFO},HUBMAP_RAW_ASCTB_DIR=${HUBMAP_RAW_ASCTB_DIR:-},HUBMAP_INPUT_MATRIX=${HUBMAP_INPUT_MATRIX:-},HUBMAP_ASCTB_DIR=${HUBMAP_ASCTB_DIR:-}"
+    -v "REPO_ROOT=${REPO_ROOT},WORK_ROOT=${WORK_ROOT},HUBMAP_WORKLIST=${worklist_path},HUBMAP_OUT_ROOT=${HUBMAP_OUT_ROOT},HUBMAP_MODEL_LIST=${HUBMAP_MODEL_LIST},HUBMAP_MODEL_MANIFEST=${HUBMAP_MODEL_MANIFEST},DIG_DIR=${DIG_DIR},PYTHON_BIN=${PYTHON_BIN},APPTAINER_BIN=${APPTAINER_BIN},APPTAINER_IMAGE=${APPTAINER_IMAGE},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS},APPTAINER_PYTHON_BIN=${APPTAINER_PYTHON_BIN},WRITE_MODEL_ONLY=${WRITE_MODEL_ONLY},REFRESH_METADATA_AND_PROVENANCE=${REFRESH_METADATA_AND_PROVENANCE},DESCRIPTION_TEMPLATE_TSV=${DESCRIPTION_TEMPLATE_TSV},HUBMAP_HUMAN_GENE_INFO=${HUBMAP_HUMAN_GENE_INFO},HUBMAP_RAW_ASCTB_DIR=${HUBMAP_RAW_ASCTB_DIR:-},HUBMAP_INPUT_MATRIX=${HUBMAP_INPUT_MATRIX:-},HUBMAP_ASCTB_DIR=${HUBMAP_ASCTB_DIR:-}"
     "${SELF_PATH}"
   )
 
@@ -426,6 +454,11 @@ submit_array() {
   if [[ "${task_count}" -le 0 ]]; then
     echo "No HuBMAP tasks selected." >&2
     exit 1
+  fi
+
+  if [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
+    submit_one_array "${HUBMAP_WORKLIST}" "hubmap_all_models_apptainer" >/dev/null
+    return
   fi
 
   if [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then

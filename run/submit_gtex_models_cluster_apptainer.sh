@@ -47,6 +47,8 @@ GTEX_V8_HUMAN_GENE_INFO="${GTEX_V8_HUMAN_GENE_INFO:-}"
 GTEX_GTF="${GTEX_GTF:-}"
 SUBMIT_MODE=0
 WRITE_MODEL_ONLY=0
+REFRESH_METADATA_AND_PROVENANCE=0
+DESCRIPTION_TEMPLATE_TSV="${DESCRIPTION_TEMPLATE_TSV:-}"
 FILTER_MODEL_GROUP=""
 FILTER_TISSUE_ID=""
 FILTER_MODEL_ID=""
@@ -54,7 +56,7 @@ FILTER_MODEL_ID=""
 usage() {
   cat <<'EOF'
 Usage:
-  ./geneset-extractor-dev/run/submit_gtex_models_cluster_apptainer.sh --submit [--write_model_only] [--model_group AB|AC|HZ] [--tissue_id TISSUE] [--model_id MODEL]
+  ./geneset-extractor-dev/run/submit_gtex_models_cluster_apptainer.sh --submit [--write_model_only|--refresh_metadata_and_provenance] [--model_group AB|AC|HZ] [--tissue_id TISSUE] [--model_id MODEL]
   ./geneset-extractor-dev/run/submit_gtex_models_cluster_apptainer.sh --help
 
 Required environment variables:
@@ -67,10 +69,13 @@ Optional environment variables:
   APPTAINER_PYTHON_BIN, APPTAINER_RSCRIPT_BIN
   GTEX_OUT_ROOT, QSUB_LOG_ROOT, GTEX_WORKLIST
   GTEX_ARRAY_MEMORY, GTEX_ARRAY_WALLTIME
+  DESCRIPTION_TEMPLATE_TSV
 
 Notes:
   - Use --submit to submit the qsub array.
   - Add --write_model_only to write only geneset.model.json sidecars.
+  - Add --refresh_metadata_and_provenance to patch metadata descriptions and
+    rebuild provenance for each selected model output.
   - Full workflow runs require GTEX_V10_*, GTEX_V8_*, GTEX_V8_HUMAN_GENE_INFO,
     and GTEX_GTF. Model-only runs do not.
   - Array tasks re-enter this script inside the Apptainer image and run the
@@ -163,6 +168,10 @@ parse_cli() {
         WRITE_MODEL_ONLY=1
         shift
         ;;
+      --refresh_metadata_and_provenance)
+        REFRESH_METADATA_AND_PROVENANCE=1
+        shift
+        ;;
       --model_group)
         [[ $# -ge 2 ]] || { echo "Missing value for --model_group" >&2; exit 1; }
         FILTER_MODEL_GROUP="$(canonicalize_model_group "$2")" || {
@@ -192,6 +201,11 @@ parse_cli() {
         ;;
     esac
   done
+
+  if [[ ${WRITE_MODEL_ONLY} -eq 1 && ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
+    echo "Use only one of --write_model_only or --refresh_metadata_and_provenance" >&2
+    exit 1
+  fi
 
   if [[ -n "${FILTER_MODEL_ID}" ]]; then
     local derived_group
@@ -254,7 +268,10 @@ prepare_common() {
   require_file "${GTEX_BROAD_TISSUE_LIST}"
   require_file "${GTEX_AGE_BINNED_MODEL_MANIFEST}"
   require_file "${GTEX_CONTINUOUS_AGE_MODEL_MANIFEST}"
-  if [[ ${WRITE_MODEL_ONLY} -ne 1 ]]; then
+  if [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
+    require_file "${DESCRIPTION_TEMPLATE_TSV}"
+  fi
+  if [[ ${WRITE_MODEL_ONLY} -ne 1 && ${REFRESH_METADATA_AND_PROVENANCE} -ne 1 ]]; then
     require_var GTEX_V10_COUNTS_GCT
     require_var GTEX_V10_SAMPLE_ATTRIBUTES_TSV
     require_var GTEX_V10_SUBJECT_PHENOTYPES_TSV
@@ -351,6 +368,7 @@ apptainer_bind_csv() {
     append_bind_path "${GTEX_BROAD_TISSUE_LIST}"
     append_bind_path "${GTEX_AGE_BINNED_MODEL_MANIFEST}"
     append_bind_path "${GTEX_CONTINUOUS_AGE_MODEL_MANIFEST}"
+    append_bind_path "${DESCRIPTION_TEMPLATE_TSV:-}"
     append_bind_path "${GTEX_V10_COUNTS_GCT:-}"
     append_bind_path "${GTEX_V10_SAMPLE_ATTRIBUTES_TSV:-}"
     append_bind_path "${GTEX_V10_SUBJECT_PHENOTYPES_TSV:-}"
@@ -378,7 +396,7 @@ submit_array() {
     -o "${QSUB_LOG_ROOT}/gtex.\$TASK_ID.out" \
     -e "${QSUB_LOG_ROOT}/gtex.\$TASK_ID.err" \
     -l "h_vmem=${GTEX_ARRAY_MEMORY},h_rt=${GTEX_ARRAY_WALLTIME}" \
-    -v "REPO_ROOT=${REPO_ROOT},WORK_ROOT=${WORK_ROOT},GTEX_WORKLIST=${GTEX_WORKLIST},GTEX_OUT_ROOT=${GTEX_OUT_ROOT},GTEX_MODEL_LIST=${GTEX_MODEL_LIST},GTEX_BROAD_TISSUE_LIST=${GTEX_BROAD_TISSUE_LIST},GTEX_AGE_BINNED_MODEL_MANIFEST=${GTEX_AGE_BINNED_MODEL_MANIFEST},GTEX_CONTINUOUS_AGE_MODEL_MANIFEST=${GTEX_CONTINUOUS_AGE_MODEL_MANIFEST},DIG_DIR=${DIG_DIR},PYTHON_BIN=${PYTHON_BIN},RSCRIPT_BIN=${RSCRIPT_BIN},APPTAINER_BIN=${APPTAINER_BIN},APPTAINER_IMAGE=${APPTAINER_IMAGE},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS},WRITE_MODEL_ONLY=${WRITE_MODEL_ONLY},GTEX_V10_COUNTS_GCT=${GTEX_V10_COUNTS_GCT},GTEX_V10_SAMPLE_ATTRIBUTES_TSV=${GTEX_V10_SAMPLE_ATTRIBUTES_TSV},GTEX_V10_SUBJECT_PHENOTYPES_TSV=${GTEX_V10_SUBJECT_PHENOTYPES_TSV},GTEX_V8_COUNTS_GCT=${GTEX_V8_COUNTS_GCT},GTEX_V8_SAMPLE_ATTRIBUTES_TSV=${GTEX_V8_SAMPLE_ATTRIBUTES_TSV},GTEX_V8_SUBJECT_PHENOTYPES_TSV=${GTEX_V8_SUBJECT_PHENOTYPES_TSV},GTEX_V8_HUMAN_GENE_INFO=${GTEX_V8_HUMAN_GENE_INFO},GTEX_GTF=${GTEX_GTF}" \
+    -v "REPO_ROOT=${REPO_ROOT},WORK_ROOT=${WORK_ROOT},GTEX_WORKLIST=${GTEX_WORKLIST},GTEX_OUT_ROOT=${GTEX_OUT_ROOT},GTEX_MODEL_LIST=${GTEX_MODEL_LIST},GTEX_BROAD_TISSUE_LIST=${GTEX_BROAD_TISSUE_LIST},GTEX_AGE_BINNED_MODEL_MANIFEST=${GTEX_AGE_BINNED_MODEL_MANIFEST},GTEX_CONTINUOUS_AGE_MODEL_MANIFEST=${GTEX_CONTINUOUS_AGE_MODEL_MANIFEST},DIG_DIR=${DIG_DIR},PYTHON_BIN=${PYTHON_BIN},RSCRIPT_BIN=${RSCRIPT_BIN},APPTAINER_BIN=${APPTAINER_BIN},APPTAINER_IMAGE=${APPTAINER_IMAGE},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS},WRITE_MODEL_ONLY=${WRITE_MODEL_ONLY},REFRESH_METADATA_AND_PROVENANCE=${REFRESH_METADATA_AND_PROVENANCE},DESCRIPTION_TEMPLATE_TSV=${DESCRIPTION_TEMPLATE_TSV},GTEX_V10_COUNTS_GCT=${GTEX_V10_COUNTS_GCT},GTEX_V10_SAMPLE_ATTRIBUTES_TSV=${GTEX_V10_SAMPLE_ATTRIBUTES_TSV},GTEX_V10_SUBJECT_PHENOTYPES_TSV=${GTEX_V10_SUBJECT_PHENOTYPES_TSV},GTEX_V8_COUNTS_GCT=${GTEX_V8_COUNTS_GCT},GTEX_V8_SAMPLE_ATTRIBUTES_TSV=${GTEX_V8_SAMPLE_ATTRIBUTES_TSV},GTEX_V8_SUBJECT_PHENOTYPES_TSV=${GTEX_V8_SUBJECT_PHENOTYPES_TSV},GTEX_V8_HUMAN_GENE_INFO=${GTEX_V8_HUMAN_GENE_INFO},GTEX_GTF=${GTEX_GTF}" \
     "${SELF_PATH}"
 }
 
@@ -409,6 +427,8 @@ run_task_in_apptainer() {
   APPTAINERENV_PYTHON_BIN="${APPTAINER_PYTHON_BIN}" \
   APPTAINERENV_RSCRIPT_BIN="${APPTAINER_RSCRIPT_BIN}" \
   APPTAINERENV_WRITE_MODEL_ONLY="${WRITE_MODEL_ONLY}" \
+  APPTAINERENV_REFRESH_METADATA_AND_PROVENANCE="${REFRESH_METADATA_AND_PROVENANCE}" \
+  APPTAINERENV_DESCRIPTION_TEMPLATE_TSV="${DESCRIPTION_TEMPLATE_TSV}" \
   APPTAINERENV_GTEX_V10_COUNTS_GCT="${GTEX_V10_COUNTS_GCT}" \
   APPTAINERENV_GTEX_V10_SAMPLE_ATTRIBUTES_TSV="${GTEX_V10_SAMPLE_ATTRIBUTES_TSV}" \
   APPTAINERENV_GTEX_V10_SUBJECT_PHENOTYPES_TSV="${GTEX_V10_SUBJECT_PHENOTYPES_TSV}" \
@@ -509,6 +529,21 @@ run_task() {
     esac
     echo "+ ${cmd[*]}"
     "${cmd[@]}"
+    return
+  fi
+
+  if [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
+    local model_dir refresh_cmd
+    model_dir="${GTEX_OUT_ROOT}/genesets/${tissue_id}/models/${model_id}"
+    refresh_cmd=(
+      bash "${REPO_ROOT}/geneset-extractor-dev/run/refresh_model_metadata_and_provenance.sh"
+      --model_id "${model_id}"
+      --model_dir "${model_dir}"
+      --description_template_tsv "${DESCRIPTION_TEMPLATE_TSV}"
+      --python_bin "${PYTHON_BIN}"
+    )
+    echo "+ ${refresh_cmd[*]}"
+    "${refresh_cmd[@]}"
     return
   fi
 

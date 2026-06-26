@@ -33,13 +33,15 @@ LINCS_ARRAY_MEMORY="${LINCS_ARRAY_MEMORY:-16G}"
 LINCS_ARRAY_WALLTIME="${LINCS_ARRAY_WALLTIME:-24:00:00}"
 SUBMIT_MODE=0
 WRITE_MODEL_ONLY=0
+REFRESH_METADATA_AND_PROVENANCE=0
+DESCRIPTION_TEMPLATE_TSV="${DESCRIPTION_TEMPLATE_TSV:-}"
 FILTER_MODEL_GROUP=""
 FILTER_MODEL_ID=""
 
 usage() {
   cat <<'EOF'
 Usage:
-  ./geneset-extractor-dev/run/submit_lincs_l1000_models_cluster_apptainer.sh --submit [--write_model_only] [--model_group HZ] [--model_id MODEL]
+  ./geneset-extractor-dev/run/submit_lincs_l1000_models_cluster_apptainer.sh --submit [--write_model_only|--refresh_metadata_and_provenance] [--model_group HZ] [--model_id MODEL]
   ./geneset-extractor-dev/run/submit_lincs_l1000_models_cluster_apptainer.sh --help
 
 Required environment variables:
@@ -55,6 +57,7 @@ Optional environment variables:
   APPTAINER_PYTHON_BIN
   LINCS_OUT_ROOT, QSUB_LOG_ROOT, LINCS_WORKLIST
   LINCS_ARRAY_MEMORY, LINCS_ARRAY_WALLTIME
+  DESCRIPTION_TEMPLATE_TSV
 EOF
 }
 
@@ -117,6 +120,10 @@ parse_cli() {
         WRITE_MODEL_ONLY=1
         shift
         ;;
+      --refresh_metadata_and_provenance)
+        REFRESH_METADATA_AND_PROVENANCE=1
+        shift
+        ;;
       --model_group)
         [[ $# -ge 2 ]] || { echo "Missing value for --model_group" >&2; exit 1; }
         FILTER_MODEL_GROUP="$(canonicalize_model_group "$2")" || {
@@ -141,6 +148,11 @@ parse_cli() {
         ;;
     esac
   done
+
+  if [[ ${WRITE_MODEL_ONLY} -eq 1 && ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
+    echo "Use only one of --write_model_only or --refresh_metadata_and_provenance" >&2
+    exit 1
+  fi
 
   if [[ -n "${FILTER_MODEL_ID}" ]]; then
     local derived_group
@@ -187,19 +199,22 @@ prepare_common() {
   mkdir -p "${WORK_ROOT}" "${QSUB_LOG_ROOT}"
   require_dir "${DIG_DIR}"
 
-  require_var LINCS_CHEMPERT_EXPRESSION_TSV
-  require_var LINCS_CRISPRKO_EXPRESSION_TSV
-  require_var LINCS_MAPPING_FILE
-
   if [[ -z "${GENESET_EXTRACTORS_IN_APPTAINER:-}" ]]; then
     require_var APPTAINER_IMAGE
     require_file "${APPTAINER_IMAGE}"
   fi
   require_file "${LINCS_MODEL_LIST}"
   require_file "${LINCS_MODEL_MANIFEST}"
-  require_file "${LINCS_CHEMPERT_EXPRESSION_TSV}"
-  require_file "${LINCS_CRISPRKO_EXPRESSION_TSV}"
-  require_file "${LINCS_MAPPING_FILE}"
+  if [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
+    require_file "${DESCRIPTION_TEMPLATE_TSV}"
+  else
+    require_var LINCS_CHEMPERT_EXPRESSION_TSV
+    require_var LINCS_CRISPRKO_EXPRESSION_TSV
+    require_var LINCS_MAPPING_FILE
+    require_file "${LINCS_CHEMPERT_EXPRESSION_TSV}"
+    require_file "${LINCS_CRISPRKO_EXPRESSION_TSV}"
+    require_file "${LINCS_MAPPING_FILE}"
+  fi
 }
 
 write_worklist() {
@@ -260,7 +275,15 @@ run_inner_worker() {
   local src_root
   src_root="${REPO_ROOT}/geneset-extractor-dev/LINCS_L1000/src"
   local cmd expression_tsv
-  if [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then
+  if [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
+    cmd=(
+      bash "${REPO_ROOT}/geneset-extractor-dev/run/refresh_model_metadata_and_provenance.sh"
+      --model_id "${model_id}"
+      --model_dir "${LINCS_OUT_ROOT}/genesets/all_signatures/models/${model_id}"
+      --description_template_tsv "${DESCRIPTION_TEMPLATE_TSV}"
+      --python_bin "${PYTHON_BIN}"
+    )
+  elif [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then
     expression_tsv="$(expression_tsv_for_model "${model_id}")" || {
       echo "Unsupported LINCS_L1000 model for model-only mode: ${model_id}" >&2
       exit 1
@@ -314,6 +337,7 @@ run_outer_worker() {
       append_bind_path "${DIG_DIR}"
       append_bind_path "${LINCS_MODEL_LIST}"
       append_bind_path "${LINCS_MODEL_MANIFEST}"
+      append_bind_path "${DESCRIPTION_TEMPLATE_TSV:-}"
       append_bind_path "${LINCS_CHEMPERT_EXPRESSION_TSV}"
       append_bind_path "${LINCS_CRISPRKO_EXPRESSION_TSV}"
       append_bind_path "${LINCS_MAPPING_FILE}"
@@ -335,6 +359,8 @@ run_outer_worker() {
     APPTAINERENV_PYTHON_BIN="${PYTHON_BIN}" \
     APPTAINERENV_APPTAINER_PYTHON_BIN="${APPTAINER_PYTHON_BIN}" \
     APPTAINERENV_WRITE_MODEL_ONLY="${WRITE_MODEL_ONLY}" \
+    APPTAINERENV_REFRESH_METADATA_AND_PROVENANCE="${REFRESH_METADATA_AND_PROVENANCE}" \
+    APPTAINERENV_DESCRIPTION_TEMPLATE_TSV="${DESCRIPTION_TEMPLATE_TSV}" \
     APPTAINERENV_LINCS_CHEMPERT_EXPRESSION_TSV="${LINCS_CHEMPERT_EXPRESSION_TSV}" \
     APPTAINERENV_LINCS_CRISPRKO_EXPRESSION_TSV="${LINCS_CRISPRKO_EXPRESSION_TSV}" \
     APPTAINERENV_LINCS_MAPPING_FILE="${LINCS_MAPPING_FILE}" \
@@ -360,7 +386,7 @@ submit_array() {
     -o "${QSUB_LOG_ROOT}/lincs_l1000.\$TASK_ID.out" \
     -e "${QSUB_LOG_ROOT}/lincs_l1000.\$TASK_ID.err" \
     -l "h_vmem=${LINCS_ARRAY_MEMORY},h_rt=${LINCS_ARRAY_WALLTIME}" \
-    -v "REPO_ROOT=${REPO_ROOT},WORK_ROOT=${WORK_ROOT},LINCS_WORKLIST=${LINCS_WORKLIST},LINCS_OUT_ROOT=${LINCS_OUT_ROOT},LINCS_MODEL_LIST=${LINCS_MODEL_LIST},LINCS_MODEL_MANIFEST=${LINCS_MODEL_MANIFEST},DIG_DIR=${DIG_DIR},PYTHON_BIN=${PYTHON_BIN},APPTAINER_BIN=${APPTAINER_BIN},APPTAINER_IMAGE=${APPTAINER_IMAGE},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS},APPTAINER_PYTHON_BIN=${APPTAINER_PYTHON_BIN},WRITE_MODEL_ONLY=${WRITE_MODEL_ONLY},LINCS_CHEMPERT_EXPRESSION_TSV=${LINCS_CHEMPERT_EXPRESSION_TSV},LINCS_CRISPRKO_EXPRESSION_TSV=${LINCS_CRISPRKO_EXPRESSION_TSV},LINCS_MAPPING_FILE=${LINCS_MAPPING_FILE}" \
+    -v "REPO_ROOT=${REPO_ROOT},WORK_ROOT=${WORK_ROOT},LINCS_WORKLIST=${LINCS_WORKLIST},LINCS_OUT_ROOT=${LINCS_OUT_ROOT},LINCS_MODEL_LIST=${LINCS_MODEL_LIST},LINCS_MODEL_MANIFEST=${LINCS_MODEL_MANIFEST},DIG_DIR=${DIG_DIR},PYTHON_BIN=${PYTHON_BIN},APPTAINER_BIN=${APPTAINER_BIN},APPTAINER_IMAGE=${APPTAINER_IMAGE},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS},APPTAINER_PYTHON_BIN=${APPTAINER_PYTHON_BIN},WRITE_MODEL_ONLY=${WRITE_MODEL_ONLY},REFRESH_METADATA_AND_PROVENANCE=${REFRESH_METADATA_AND_PROVENANCE},DESCRIPTION_TEMPLATE_TSV=${DESCRIPTION_TEMPLATE_TSV},LINCS_CHEMPERT_EXPRESSION_TSV=${LINCS_CHEMPERT_EXPRESSION_TSV},LINCS_CRISPRKO_EXPRESSION_TSV=${LINCS_CRISPRKO_EXPRESSION_TSV},LINCS_MAPPING_FILE=${LINCS_MAPPING_FILE}" \
     "${SELF_PATH}"
 }
 
