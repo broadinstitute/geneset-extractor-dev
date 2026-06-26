@@ -557,7 +557,7 @@ submit_array() {
 }
 
 main() {
-  if [[ -n "${GENESET_EXTRACTORS_IN_APPTAINER:-}" ]]; then
+  if [[ $# -eq 0 ]] && [[ -n "${GENESET_EXTRACTORS_IN_APPTAINER:-}" ]]; then
     prepare_common
     run_inner_worker
   elif [[ $# -eq 0 ]] && task_id_from_env >/dev/null 2>&1; then
