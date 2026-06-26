@@ -50,7 +50,10 @@ class CandidateFile(object):
 
 def parse_args():  # type: () -> argparse.Namespace
     parser = argparse.ArgumentParser(
-        description="Publish one library run output tree plus provenance-resolved rerun inputs to S3."
+        description=(
+            "Publish one library run output tree plus provenance-resolved rerun inputs to S3 "
+            "without modifying local metadata or provenance files."
+        )
     )
     parser.add_argument(
         "--local_output_root",
@@ -727,27 +730,6 @@ def main():  # type: () -> int
         provenance_paths=provenance_paths,
         s3_input_root=args.s3_input_root,
     )
-    if not args.dry_run:
-        replacements = build_path_rewrite_map(
-            local_output_root=local_output_root,
-            output_candidates=output_candidates,
-            input_candidates=input_candidates,
-            s3_output_root=args.s3_output_root,
-        )
-        replacements = augment_rewrite_map_from_provenance(
-            provenance_paths=provenance_paths,
-            replacements=replacements,
-            output_candidates=output_candidates,
-            input_candidates=input_candidates,
-            local_output_root=local_output_root,
-            s3_output_root=args.s3_output_root,
-            s3_input_root=args.s3_input_root,
-        )
-        output_candidates = stage_rewritten_json_files(
-            output_candidates=output_candidates,
-            replacements=replacements,
-        )
-
     log_line(log_path, f"discovered_output_files={len(output_candidates)}")
     log_line(log_path, f"scanned_provenance_files={len(provenance_paths)}")
     log_line(log_path, f"discovered_input_files={len(input_candidates)}")
