@@ -384,10 +384,6 @@ def main() -> int:
             cmd.append("--show_template_vars")
         else:
             cmd.extend(["--description_template", template])
-        if args.provenance_mirror_local_prefix:
-            cmd.extend(["--provenance_mirror_local_prefix", args.provenance_mirror_local_prefix])
-        if args.provenance_mirror_remote_prefix:
-            cmd.extend(["--provenance_mirror_remote_prefix", args.provenance_mirror_remote_prefix])
         run_command(cmd, cwd=dig_dir, env=env)
 
     local_output_root = (
