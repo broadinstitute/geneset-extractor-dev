@@ -14,13 +14,17 @@
 !GTEx/config/model_list.tsv
 !GTEx/config/tissue_list.tsv
 !GTEx/config/broad_tissue_list.tsv
+!GTEx/config/model_description_templates.tsv
 !MoTrPAC/config/model_list.tsv
 !MoTrPAC/config/tissue_list.tsv
 !MoTrPAC/config/model_manifest.tsv
+!MoTrPAC/config/model_description_templates.tsv
 !LINCS_L1000/config/model_list.tsv
 !LINCS_L1000/config/model_manifest.tsv
+!LINCS_L1000/config/model_description_templates.tsv
 !HuBMAP/config/model_list.tsv
 !HuBMAP/config/model_manifest.tsv
+!HuBMAP/config/model_description_templates.tsv
 
 # Allow traversing these subdirectories
 !LINCS_L1000/

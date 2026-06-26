@@ -1,0 +1,3 @@
+model_id	description_template
+HZ1	HuBMAP ASCT+B marker gene-set library using model {model.model_id}: library built directly from released ASCT+B anatomical structure, cell type, and biomarker marker tables.
+HZ2	HuBMAP ASCT+B augmented marker gene-set library using model {model.model_id}: library built from released ASCT+B marker tables and expanded with GeneShot-based augmentation under the configured enrichment threshold and cap.

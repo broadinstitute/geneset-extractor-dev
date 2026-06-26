@@ -1,0 +1,3 @@
+model_id	description_template
+HZ1	LINCS L1000 chemical perturbation gene-set library using model {model.model_id}: library built from the released chemical-perturbation mean coefficient matrix with z-score thresholding and approved-gene mapping.
+HZ2	LINCS L1000 CRISPR knockout gene-set library using model {model.model_id}: library built from the released CRISPR knockout coefficient matrix using top-ranked targets and approved-gene mapping.

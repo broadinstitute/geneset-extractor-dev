@@ -63,6 +63,39 @@ def gtex_aging_signature_name(tissue_label: str) -> str:
     return f"GTEx_aging_{compact_name_token(tissue_label)}"
 
 
+AGE_BIN_PATTERN = re.compile(r"^\s*(\d+)\s*-\s*(\d+)\s*$")
+
+
+def age_group_label(age_group: str) -> str:
+    match = AGE_BIN_PATTERN.match(str(age_group).strip())
+    if not match:
+        return str(age_group).strip()
+    return f"{match.group(1)}-{match.group(2)} year olds"
+
+
+def parse_age_pair(comparison_label: str | None) -> dict[str, str]:
+    label = str(comparison_label or "").strip()
+    parts = [part.strip() for part in label.split("_") if part.strip()]
+    if len(parts) != 2:
+        return {
+            "reference_age_group": "",
+            "comparison_age_group": "",
+            "reference_age_label": "",
+            "comparison_age_label": "",
+            "comparison_description": "",
+        }
+    reference_age_group, comparison_age_group = parts
+    reference_age_label = age_group_label(reference_age_group)
+    comparison_age_label = age_group_label(comparison_age_group)
+    return {
+        "reference_age_group": reference_age_group,
+        "comparison_age_group": comparison_age_group,
+        "reference_age_label": reference_age_label,
+        "comparison_age_label": comparison_age_label,
+        "comparison_description": f"{comparison_age_label} relative to {reference_age_label}",
+    }
+
+
 def load_model_settings(manifest_path: Path) -> dict[str, dict[str, str]]:
     with manifest_path.open("r", encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle, delimiter="\t"))
@@ -130,6 +163,7 @@ def build_model_sidecar_payload(
     settings: dict[str, str],
     comparison_label: str | None = None,
 ) -> dict[str, object]:
+    age_pair = parse_age_pair(comparison_label)
     return {
         "schema_version": "1",
         "library": "GTEx",
@@ -158,6 +192,7 @@ def build_model_sidecar_payload(
         "naming": {
             "signature_name": gtex_aging_signature_name(tissue_label),
             "comparison_label": comparison_label or "",
+            **age_pair,
             "comparison_style": "age_pair",
             "gene_set_pattern": "GTEx_aging_<tissue>_<ageGroup1>_<ageGroup2>_up|dn",
         },

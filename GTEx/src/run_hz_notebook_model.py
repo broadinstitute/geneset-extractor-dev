@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -79,7 +81,53 @@ def gtex_aging_signature_name(tissue_label: str) -> str:
     return f"GTEx_aging_{compact_name_token(tissue_label)}"
 
 
-def build_model_sidecar_payload(*, model_id: str, tissue_id: str, tissue_label: str, args: argparse.Namespace) -> dict[str, object]:
+AGE_BIN_PATTERN = re.compile(r"^\s*(\d+)\s*-\s*(\d+)\s*$")
+
+
+def age_group_label(age_group: str) -> str:
+    match = AGE_BIN_PATTERN.match(str(age_group).strip())
+    if not match:
+        return str(age_group).strip()
+    return f"{match.group(1)}-{match.group(2)} year olds"
+
+
+def parse_age_pair(comparison_label: str | None) -> dict[str, str]:
+    label = str(comparison_label or "").strip()
+    parts = [part.strip() for part in label.split("_") if part.strip()]
+    if len(parts) != 2:
+        return {
+            "reference_age_group": "",
+            "comparison_age_group": "",
+            "reference_age_label": "",
+            "comparison_age_label": "",
+            "comparison_description": "",
+        }
+    reference_age_group, comparison_age_group = parts
+    reference_age_label = age_group_label(reference_age_group)
+    comparison_age_label = age_group_label(comparison_age_group)
+    return {
+        "reference_age_group": reference_age_group,
+        "comparison_age_group": comparison_age_group,
+        "reference_age_label": reference_age_label,
+        "comparison_age_label": comparison_age_label,
+        "comparison_description": f"{comparison_age_label} relative to {reference_age_label}",
+    }
+
+
+def read_tsv_rows(path: Path) -> list[dict[str, str]]:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))
+
+
+def build_model_sidecar_payload(
+    *,
+    model_id: str,
+    tissue_id: str,
+    tissue_label: str,
+    args: argparse.Namespace,
+    comparison_label: str | None = None,
+) -> dict[str, object]:
+    age_pair = parse_age_pair(comparison_label)
     return {
         "schema_version": "1",
         "library": "GTEx",
@@ -104,11 +152,40 @@ def build_model_sidecar_payload(*, model_id: str, tissue_id: str, tissue_label: 
         },
         "naming": {
             "signature_name": gtex_aging_signature_name(tissue_label),
-            "comparison_label": "",
+            "comparison_label": comparison_label or "",
+            **age_pair,
             "comparison_style": "age_pair",
             "gene_set_pattern": "GTEx_aging_<tissue>_<ageGroup1>_<ageGroup2>_up|dn",
         },
     }
+
+
+def write_grouped_model_sidecars(
+    *,
+    extractor_dir: Path,
+    model_id: str,
+    tissue_id: str,
+    tissue_label: str,
+    args: argparse.Namespace,
+) -> None:
+    manifest_path = extractor_dir / "manifest.tsv"
+    if not manifest_path.exists():
+        return
+    for row in read_tsv_rows(manifest_path):
+        meta_rel = str(row.get("meta_path", "")).strip()
+        if not meta_rel:
+            continue
+        sidecar_path = (extractor_dir / meta_rel).with_name("geneset.model.json")
+        write_json(
+            sidecar_path,
+            build_model_sidecar_payload(
+                model_id=model_id,
+                tissue_id=tissue_id,
+                tissue_label=tissue_label,
+                args=args,
+                comparison_label=str(row.get("label", "")).strip(),
+            ),
+        )
 
 
 def run_command(cmd: list[str], *, cwd: Path, env: dict[str, str], log_path: Path) -> None:
@@ -362,6 +439,13 @@ def main() -> int:
             tissue_label=args.tissue_label,
             args=args,
         ),
+    )
+    write_grouped_model_sidecars(
+        extractor_dir=extractor_dir,
+        model_id=args.model_id,
+        tissue_id=args.tissue_id,
+        tissue_label=args.tissue_label,
+        args=args,
     )
     return 0
 

@@ -1,0 +1,8 @@
+model_id	description_template
+TR1	MoTrPAC rat endurance-training raw transcriptomics gene set for {comparison_label} using model {model.model_id}: pooled training-versus-control analysis with sex covariate adjustment and harmonizome-style ranked extraction.
+TR2	MoTrPAC rat endurance-training raw transcriptomics gene set for {comparison_label} using model {model.model_id}: pooled training-versus-control analysis without sex covariate adjustment and harmonizome-style ranked extraction.
+TW1	MoTrPAC rat endurance-training raw transcriptomics gene set for {comparison_label} using model {model.model_id}: stratified training-versus-control analysis by sex and timepoint without additional covariates and harmonizome-style ranked extraction.
+TW2	MoTrPAC rat endurance-training raw transcriptomics gene set for {comparison_label} using model {model.model_id}: stratified training-versus-control analysis by timepoint with sex covariate adjustment and harmonizome-style ranked extraction.
+HZ1	MoTrPAC rat endurance-training aggregated gene-set library using model {model.model_id}: library built directly from released differential expression tables distributed by MoTrPAC.
+HZ2	MoTrPAC rat endurance-training aggregated gene-set library using model {model.model_id}: library built from pooled raw-count-derived training-versus-control contrasts with sex covariate adjustment.
+HZ3	MoTrPAC rat endurance-training aggregated gene-set library using model {model.model_id}: library built from stratified raw-count-derived training-versus-control contrasts by sex and timepoint.
