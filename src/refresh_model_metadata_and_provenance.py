@@ -142,7 +142,7 @@ def is_within_directory(path: Path, root: Path) -> bool:
         return False
 
 
-def extract_existing_file_paths_from_provenance(provenance_path: Path) -> list[Path]:
+def extract_file_paths_from_provenance(provenance_path: Path) -> list[Path]:
     try:
         payload = json.loads(provenance_path.read_text(encoding="utf-8"))
     except Exception as exc:
@@ -164,9 +164,7 @@ def extract_existing_file_paths_from_provenance(provenance_path: Path) -> list[P
             candidate = c2m2_properties.get("local_id") or node.get("dcc_url") or node.get("drc_url")
             if not isinstance(candidate, str) or not candidate.startswith("/"):
                 continue
-            path = Path(candidate)
-            if path.exists() and path.is_file():
-                file_path_by_id[node_id] = path.resolve()
+            file_path_by_id[node_id] = Path(candidate)
 
         input_paths: set[Path] = set()
         generated_paths: set[Path] = set()
@@ -297,10 +295,10 @@ def build_input_replacements(
         provenance_path = provenance_snapshot_path(metadata_path)
         if not provenance_path.exists():
             continue
-        for source_path in extract_existing_file_paths_from_provenance(provenance_path):
+        for source_path in extract_file_paths_from_provenance(provenance_path):
             if is_within_directory(source_path, local_output_root):
                 continue
-            input_paths.add(source_path.resolve())
+            input_paths.add(source_path)
 
     normalized_s3_root = s3_input_root.rstrip("/")
     replacements: dict[str, str] = {}
