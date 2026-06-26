@@ -8,6 +8,7 @@ import os
 import shlex
 import subprocess
 import sys
+import shutil
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -96,6 +97,21 @@ def ensure_model_sidecar(metadata_path: Path, model_id: str) -> None:
         json.dumps({"model_id": model_id}, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+
+
+def write_orig_once(path: Path) -> None:
+    if not path.exists() or not path.is_file():
+        return
+    orig_path = Path(f"{path}.orig")
+    if orig_path.exists():
+        return
+    shutil.copy2(path, orig_path)
+
+
+def snapshot_originals(metadata_paths: list[Path]) -> None:
+    for metadata_path in metadata_paths:
+        write_orig_once(metadata_path)
+        write_orig_once(metadata_path.with_name("geneset.provenance.json"))
 
 
 def run_command(cmd: list[str], *, cwd: Path, env: dict[str, str]) -> None:
@@ -283,6 +299,7 @@ def main() -> int:
     metadata_paths = discover_metadata_paths(model_dir)
     if args.s3_input_root:
         parse_s3_uri(args.s3_input_root)
+    snapshot_originals(metadata_paths)
 
     env = dict(os.environ)
     existing_pythonpath = env.get("PYTHONPATH", "").strip()
