@@ -7,6 +7,7 @@
 !requirements.txt
 !geneset-extractor.Dockerfile
 !geneset-extractor.apptainer.def
+!geneset-extractor-liger.apptainer.def
 
 # or these needed files
 !GTEx/config/age_binned_model_manifest.tsv
@@ -40,6 +41,7 @@
 !src/
 !run/
 !proposals/
+!docs/
 
 !LINCS_L1000/**/
 !RummaGEO/**/
@@ -54,6 +56,7 @@
 !src/**/
 !run/**/
 !proposals/**/
+!docs/**/
 
 # Allow certain filetypes
 !src/**/*.py
@@ -73,6 +76,8 @@
 !proposals/**/*.R
 !proposals/**/*.sh
 !proposals/**/*.md
+
+!docs/**/*.md
 
 !LINCS_L1000/**/*.py
 !LINCS_L1000/**/*.r
