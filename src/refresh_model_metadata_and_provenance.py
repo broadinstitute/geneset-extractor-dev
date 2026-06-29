@@ -28,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--provenance_mirror_local_prefix")
     parser.add_argument("--provenance_mirror_remote_prefix")
     parser.add_argument("--s3_input_root")
+    parser.add_argument("--s3_input_source_map_tsv")
     parser.add_argument("--show_template_vars", action="store_true")
     return parser.parse_args()
 
@@ -53,6 +54,29 @@ def read_template_map(path: Path) -> dict[str, str]:
     if not mapping:
         raise SystemExit(f"No model templates found in {path}")
     return mapping
+
+
+def read_s3_input_source_map(path: Path) -> dict[str, str]:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        fieldnames = set(reader.fieldnames or [])
+        if "s3_uri" not in fieldnames or "source_uri" not in fieldnames:
+            raise SystemExit("source map TSV must include columns: s3_uri, source_uri")
+        mapping: dict[str, str] = {}
+        for row in reader:
+            s3_uri = str(row.get("s3_uri", "")).strip()
+            source_uri = str(row.get("source_uri", "")).strip()
+            if not s3_uri and not source_uri:
+                continue
+            if not s3_uri or not source_uri:
+                raise SystemExit("source map TSV rows must provide both s3_uri and source_uri")
+            parse_s3_uri(s3_uri)
+            if s3_uri in mapping:
+                raise SystemExit(f"Duplicate s3_uri in source map TSV: {s3_uri}")
+            mapping[s3_uri] = source_uri
+    if not mapping:
+        raise SystemExit(f"No source map rows found in {path}")
+    return dict(sorted(mapping.items(), key=lambda item: len(item[0]), reverse=True))
 
 
 def read_manifest_meta_paths(manifest_path: Path, extractor_dir: Path) -> list[Path]:
@@ -332,16 +356,20 @@ def build_input_replacements(
 def rewrite_metadata_and_provenance(
     *,
     metadata_paths: list[Path],
-    replacements: dict[str, str],
+    rewrite_passes: list[dict[str, str]],
 ) -> None:
-    if not replacements:
+    if not any(rewrite_passes):
         return
     for metadata_path in metadata_paths:
         for path in (metadata_path, metadata_path.with_name("geneset.provenance.json")):
             if not path.exists():
                 continue
             payload = json.loads(path.read_text(encoding="utf-8"))
-            rewritten = rewrite_json_value(payload, replacements)
+            rewritten = payload
+            for replacements in rewrite_passes:
+                if not replacements:
+                    continue
+                rewritten = rewrite_json_value(rewritten, replacements)
             path.write_text(json.dumps(rewritten, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
@@ -362,6 +390,12 @@ def main() -> int:
     metadata_paths = discover_metadata_paths(model_dir)
     if args.s3_input_root:
         parse_s3_uri(args.s3_input_root)
+    source_map: dict[str, str] = {}
+    if args.s3_input_source_map_tsv:
+        source_map_path = Path(args.s3_input_source_map_tsv).resolve()
+        if not source_map_path.exists():
+            raise SystemExit(f"Missing source map TSV: {source_map_path}")
+        source_map = read_s3_input_source_map(source_map_path)
     snapshot_originals(metadata_paths)
     restore_from_originals(metadata_paths)
 
@@ -408,10 +442,15 @@ def main() -> int:
             )
         )
     replacements.update(build_execution_replacements(dig_dir))
+    rewrite_passes: list[dict[str, str]] = []
     if replacements:
+        rewrite_passes.append(dict(sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)))
+    if source_map:
+        rewrite_passes.append(source_map)
+    if rewrite_passes:
         rewrite_metadata_and_provenance(
             metadata_paths=metadata_paths,
-            replacements=dict(sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)),
+            rewrite_passes=rewrite_passes,
         )
     return 0
 
