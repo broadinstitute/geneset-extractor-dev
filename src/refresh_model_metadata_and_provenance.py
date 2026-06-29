@@ -28,7 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--provenance_mirror_local_prefix")
     parser.add_argument("--provenance_mirror_remote_prefix")
     parser.add_argument("--s3_input_root")
-    parser.add_argument("--s3_input_source_map_tsv")
+    parser.add_argument("--local_input_source_map_tsv")
     parser.add_argument("--show_template_vars", action="store_true")
     return parser.parse_args()
 
@@ -424,8 +424,8 @@ def main() -> int:
     if args.s3_input_root:
         parse_s3_uri(args.s3_input_root)
     source_map: dict[str, str] = {}
-    if args.s3_input_source_map_tsv:
-        source_map_path = Path(args.s3_input_source_map_tsv).resolve()
+    if args.local_input_source_map_tsv:
+        source_map_path = Path(args.local_input_source_map_tsv).resolve()
         if not source_map_path.exists():
             raise SystemExit(f"Missing source map TSV: {source_map_path}")
         source_map = read_input_source_map(source_map_path)
