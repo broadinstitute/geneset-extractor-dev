@@ -1,0 +1,413 @@
+Bootstrap: docker
+From: ubuntu:22.04
+
+%labels
+    Author Ryan Koesterer
+    Description "Python/R container for DIG LIGER single-cell workflows"
+    Base ubuntu:22.04
+
+%help
+    Container for running DIG LIGER single-cell RNA-seq workflows from a
+    bind-mounted checkout of `dig-gene-set-extractors` and
+    `geneset-extractor-dev`.
+
+    This image does not bake either repository into the container. It only
+    provides the runtime environment needed by the LIGER workflow.
+
+    Build:
+        apptainer build geneset-extractor-liger.sif geneset-extractor-liger.apptainer.def
+
+    Shell:
+        apptainer shell geneset-extractor-liger.sif
+
+    Example:
+        apptainer exec geneset-extractor-liger.sif python --version
+        apptainer exec geneset-extractor-liger.sif R --version
+        apptainer exec geneset-extractor-liger.sif bash
+
+%environment
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+    export PATH=/opt/conda/envs/harmonizome/bin:/opt/conda/bin:$PATH
+    export CONDA_DEFAULT_ENV=harmonizome
+    export PYTHONNOUSERSITE=1
+    export RETICULATE_PYTHON=/opt/conda/envs/harmonizome/bin/python
+
+%post
+    set -eux
+
+    export DEBIAN_FRONTEND=noninteractive
+
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        bash \
+        ca-certificates \
+        curl \
+        wget \
+        git \
+        bzip2 \
+        xz-utils \
+        unzip \
+        zip \
+        tar \
+        gzip \
+        build-essential \
+        gfortran \
+        make \
+        cmake \
+        pkg-config \
+        autoconf \
+        automake \
+        libtool \
+        locales \
+        less \
+        vim \
+        nano \
+        file \
+        procps \
+        time \
+        parallel \
+        jq \
+        rsync \
+        libcurl4-openssl-dev \
+        libssl-dev \
+        libxml2-dev \
+        libfontconfig1-dev \
+        libharfbuzz-dev \
+        libfribidi-dev \
+        libfreetype6-dev \
+        libpng-dev \
+        libtiff5-dev \
+        libjpeg-dev \
+        zlib1g-dev \
+        libbz2-dev \
+        liblzma-dev \
+        libreadline-dev \
+        libsqlite3-dev \
+        libhdf5-dev \
+        libglpk-dev \
+        libgsl-dev \
+        libudunits2-dev \
+        libgeos-dev \
+        libproj-dev \
+        libgdal-dev \
+        pandoc \
+        default-jre \
+        && rm -rf /var/lib/apt/lists/*
+
+    locale-gen C.UTF-8 || true
+
+    curl -L -o /tmp/Miniforge3.sh \
+        https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
+    bash /tmp/Miniforge3.sh -b -p /opt/conda
+    rm -f /tmp/Miniforge3.sh
+
+    export PATH=/opt/conda/bin:$PATH
+
+    conda config --system --set channel_priority strict
+    conda config --system --add channels conda-forge
+    conda config --system --add channels bioconda
+
+    mamba create -y -n harmonizome \
+        python=3.10 \
+        pip \
+        c-compiler \
+        cxx-compiler \
+        fortran-compiler \
+        cmake>=3.24 \
+        ninja \
+        make \
+        pkg-config \
+        numpy \
+        pandas \
+        scipy \
+        scikit-learn \
+        statsmodels \
+        matplotlib \
+        seaborn \
+        h5py \
+        pytables \
+        hdf5 \
+        requests \
+        urllib3 \
+        beautifulsoup4 \
+        lxml \
+        html5lib \
+        openpyxl \
+        xlrd \
+        xlsxwriter \
+        pyarrow \
+        fastparquet \
+        tqdm \
+        pyyaml \
+        click \
+        jupyter \
+        jupyterlab \
+        notebook \
+        ipykernel \
+        nbconvert \
+        papermill \
+        cmapPy \
+        anndata \
+        scanpy \
+        mygene \
+        gseapy \
+        goatools \
+        bioservices \
+        biopython \
+        python-igraph \
+        leidenalg \
+        r-base=4.3 \
+        r-essentials \
+        r-optparse \
+        r-argparse \
+        r-data.table \
+        r-tidyverse \
+        r-readxl \
+        r-openxlsx \
+        r-janitor \
+        r-stringi \
+        r-stringr \
+        r-dplyr \
+        r-tidyr \
+        r-purrr \
+        r-readr \
+        r-tibble \
+        r-ggplot2 \
+        r-reshape2 \
+        r-matrix \
+        r-matrixstats \
+        r-devtools \
+        r-remotes \
+        r-biocmanager \
+        r-irkernel \
+        r-seurat \
+        r-seuratobject \
+        r-reticulate \
+        r-hdf5r \
+        r-checkmate \
+        r-clue \
+        r-mnormt \
+        r-pbmcapply \
+        r-psych \
+        r-proxy \
+        r-pkgbuild \
+        bioconductor-limma \
+        bioconductor-edger \
+        bioconductor-deseq2 \
+        bioconductor-biobase \
+        bioconductor-summarizedexperiment \
+        bioconductor-genomicranges \
+        bioconductor-iranges \
+        bioconductor-s4vectors \
+        bioconductor-annotationdbi \
+        bioconductor-org.hs.eg.db \
+        bioconductor-org.rn.eg.db \
+        bioconductor-org.mm.eg.db \
+        bioconductor-biomart \
+        bioconductor-gseabase \
+        bioconductor-clusterprofiler \
+        bioconductor-enrichplot \
+        bioconductor-fgsea \
+        bioconductor-rhdf5 \
+        bioconductor-hdf5array \
+        bioconductor-delayedarray \
+        bioconductor-sparsearray \
+        bioconductor-xvector \
+        bioconductor-singlecellexperiment \
+        bioconductor-scran \
+        bioconductor-scater \
+        bioconductor-celldex
+
+    export PATH=/opt/conda/envs/harmonizome/bin:/opt/conda/bin:$PATH
+
+    if [[ ! -x /opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-cc ]]; then
+        cc_path="$(find /opt/conda/envs/harmonizome/bin -maxdepth 1 -type f \( -name '*conda*cc' -o -name '*linux*cc' \) | head -n 1 || true)"
+        if [[ -n "${cc_path}" ]]; then
+            ln -sf "${cc_path}" /opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-cc
+        fi
+    fi
+    if [[ ! -x /opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-c++ ]]; then
+        cxx_path="$(find /opt/conda/envs/harmonizome/bin -maxdepth 1 -type f \( -name '*conda*c++' -o -name '*linux*c++' -o -name '*conda*g++' -o -name '*linux*g++' \) | head -n 1 || true)"
+        if [[ -n "${cxx_path}" ]]; then
+            ln -sf "${cxx_path}" /opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-c++
+        fi
+    fi
+    if [[ ! -x /opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-gfortran ]]; then
+        fc_path="$(find /opt/conda/envs/harmonizome/bin -maxdepth 1 -type f \( -name '*conda*gfortran' -o -name '*linux*gfortran' \) | head -n 1 || true)"
+        if [[ -n "${fc_path}" ]]; then
+            ln -sf "${fc_path}" /opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-gfortran
+        fi
+    fi
+
+    export CC=/opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-cc
+    export CXX=/opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-c++
+    export FC=/opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-gfortran
+    export F77=/opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-gfortran
+
+    conda clean -afy
+
+    /opt/conda/envs/harmonizome/bin/pip install --no-cache-dir \
+        GEOparse \
+        pyreadr \
+        gprofiler-official
+
+    /opt/conda/envs/harmonizome/bin/Rscript - <<'RS'
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
+install_if_missing <- function(pkg) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    install.packages(pkg, dependencies = FALSE)
+  }
+}
+
+install_bioc_if_missing <- function(pkg) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    BiocManager::install(pkg, ask = FALSE, update = FALSE)
+  }
+}
+
+install_from_source_with_executable_config <- function(pkg) {
+  build_root <- "/opt/r-source-installs"
+  dir.create(build_root, recursive = TRUE, showWarnings = FALSE)
+  tmpdir <- tempfile(paste0("install_", pkg, "_"), tmpdir = build_root)
+  dir.create(tmpdir, recursive = TRUE, showWarnings = FALSE)
+  oldwd <- getwd()
+  on.exit({
+    setwd(oldwd)
+    unlink(tmpdir, recursive = TRUE, force = TRUE)
+  }, add = TRUE)
+  setwd(tmpdir)
+
+  download.packages(pkg, destdir = tmpdir, repos = getOption("repos"), type = "source")
+  candidates <- list.files(tmpdir, pattern = paste0("^", pkg, "_.*[.]tar[.]gz$"), full.names = TRUE)
+  if (!length(candidates)) {
+    stop(paste("Unable to locate downloaded source tarball for", pkg))
+  }
+  tar_path <- candidates[[1]]
+
+  utils::untar(tar_path, exdir = tmpdir)
+  src_dirs <- list.dirs(tmpdir, full.names = TRUE, recursive = FALSE)
+  src_dir <- src_dirs[basename(src_dirs) == pkg]
+  if (!length(src_dir)) {
+    src_dir <- src_dirs[grepl(paste0("^", pkg), basename(src_dirs))]
+  }
+  if (!length(src_dir)) {
+    stop(paste("Unable to locate unpacked source directory for", pkg))
+  }
+  all_pkg_dirs <- list.dirs(src_dir[[1]], full.names = TRUE, recursive = TRUE)
+  all_pkg_dirs <- c(src_dir[[1]], all_pkg_dirs)
+  for (pkg_dir in all_pkg_dirs) {
+    configure_path <- file.path(pkg_dir, "configure")
+    if (file.exists(configure_path)) {
+      Sys.chmod(configure_path, mode = "0755", use_umask = FALSE)
+      system2("chmod", c("755", configure_path))
+      if (file.access(configure_path, mode = 1) != 0) {
+        stop(paste("configure is still not executable for", pkg, "at", configure_path), call. = FALSE)
+      }
+    }
+    configure_win_path <- file.path(pkg_dir, "configure.win")
+    if (file.exists(configure_win_path)) {
+      Sys.chmod(configure_win_path, mode = "0755", use_umask = FALSE)
+      system2("chmod", c("755", configure_win_path))
+    }
+  }
+  cmd <- file.path(R.home("bin"), "R")
+  status <- system2(cmd, c("CMD", "INSTALL", "--no-multiarch", src_dir[[1]]))
+  if (!identical(status, 0L)) {
+    stop(paste("R CMD INSTALL failed for", pkg), call. = FALSE)
+  }
+}
+
+require_installed <- function(pkg) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    stop(paste("Required R package failed to install:", pkg), call. = FALSE)
+  }
+}
+
+cran_pkgs <- c(
+  "anndata",
+  "easy.utils",
+  "HighFive"
+)
+for (pkg in cran_pkgs) {
+  install_if_missing(pkg)
+  require_installed(pkg)
+}
+
+bioc_pkgs <- c("rhdf5", "HDF5Array", "DelayedArray", "SparseArray", "XVector")
+for (pkg in bioc_pkgs) {
+  install_bioc_if_missing(pkg)
+  require_installed(pkg)
+}
+
+if (!requireNamespace("hdf5r.Extra", quietly = TRUE)) {
+  install_from_source_with_executable_config("hdf5r.Extra")
+}
+require_installed("hdf5r.Extra")
+
+if (!requireNamespace("sccore", quietly = TRUE)) {
+  install_from_source_with_executable_config("sccore")
+}
+require_installed("sccore")
+
+if (!requireNamespace("leidenAlg", quietly = TRUE)) {
+  install_from_source_with_executable_config("leidenAlg")
+}
+require_installed("leidenAlg")
+
+if (!requireNamespace("RcppPlanc", quietly = TRUE)) {
+  install_from_source_with_executable_config("RcppPlanc")
+}
+require_installed("RcppPlanc")
+
+if (!requireNamespace("rliger", quietly = TRUE)) {
+  install.packages("rliger", dependencies = FALSE)
+}
+require_installed("rliger")
+
+if (!requireNamespace("rliger", quietly = TRUE)) {
+  remotes::install_github("welch-lab/liger", dependencies = FALSE, upgrade = "never", INSTALL_opts = "--no-multiarch")
+}
+require_installed("rliger")
+RS
+
+    /opt/conda/envs/harmonizome/bin/Rscript -e "IRkernel::installspec(name='harmonizome-r', displayname='R harmonizome', user=FALSE)" || true
+
+    /opt/conda/envs/harmonizome/bin/python - <<'PY'
+import sys
+import anndata
+import scanpy
+import h5py
+print("Python OK:", sys.version)
+print("anndata OK:", anndata.__version__)
+print("scanpy OK:", scanpy.__version__)
+print("h5py OK:", h5py.__version__)
+PY
+
+    /opt/conda/envs/harmonizome/bin/Rscript - <<'RS'
+cat("R OK:", R.version.string, "\n")
+suppressPackageStartupMessages({
+  library(rliger)
+  library(Matrix)
+  library(Seurat)
+  library(dplyr)
+  library(purrr)
+  library(clue)
+  library(proxy)
+  library(reticulate)
+  library(anndata)
+  library(HDF5Array)
+  library(rhdf5)
+  library(DelayedArray)
+  library(SparseArray)
+  library(XVector)
+})
+cat("LIGER R stack OK\n")
+RS
+
+%runscript
+    exec /bin/bash "$@"
+
+%startscript
+    exec /bin/bash

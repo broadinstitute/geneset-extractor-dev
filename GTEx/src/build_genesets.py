@@ -1,0 +1,335 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+from selection_io import (
+    default_age_binned_model_manifest_path,
+    default_broad_tissue_list_path,
+    default_continuous_age_model_manifest_path,
+    default_out_root,
+    default_model_list_path,
+    default_tissue_list_path,
+    load_model_rows,
+    load_tissue_rows,
+    model_group_for,
+    relative_or_absolute_path,
+    repo_root,
+    resolve_requested_ids,
+    row_map,
+)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--models", default="all")
+    parser.add_argument("--models_file")
+    parser.add_argument("--tissues", default="all")
+    parser.add_argument("--tissues_file")
+    parser.add_argument("--tissue_granularity", choices=["detailed", "broad"], default="detailed")
+    parser.add_argument("--model_list", default=str(default_model_list_path()))
+    parser.add_argument("--tissue_list", default=str(default_tissue_list_path()))
+    parser.add_argument("--broad_tissue_list", default=str(default_broad_tissue_list_path()))
+    parser.add_argument("--python_bin", default=sys.executable or "python3")
+    parser.add_argument("--rscript_bin", default="Rscript")
+    parser.add_argument("--counts_gct", required=True)
+    parser.add_argument("--sample_metadata_tsv", required=True)
+    parser.add_argument("--subject_metadata_tsv", required=True)
+    parser.add_argument("--human_gene_info")
+    parser.add_argument("--gtf")
+    parser.add_argument("--provenance_mirror_local_prefix")
+    parser.add_argument("--provenance_mirror_remote_prefix")
+    parser.add_argument("--age_binned_model_manifest", default=str(default_age_binned_model_manifest_path()))
+    parser.add_argument("--continuous_age_model_manifest", default=str(default_continuous_age_model_manifest_path()))
+    parser.add_argument("--dig_dir", required=True)
+    parser.add_argument("--out_root", default=str(default_out_root()))
+    parser.add_argument("--overwrite", action="store_true")
+    return parser
+
+
+def run_command(command: list[str]) -> None:
+    print("$ " + " ".join(command), flush=True)
+    subprocess.run(command, check=True)
+
+
+def dir_nonempty(path: Path) -> bool:
+    return path.exists() and path.is_dir() and any(path.iterdir())
+
+
+def overwrite_dir(path: Path) -> None:
+    if path.exists():
+        shutil.rmtree(path)
+
+
+def existing_output_message(*, tissue_id: str, model_id: str | None, path: Path) -> str:
+    header = f"Output already exists for tissue={tissue_id}"
+    if model_id is not None:
+        header += f" model={model_id}"
+    return (
+        f"{header}:\n{path}\n\n"
+        "Refusing to continue because --overwrite was not provided.\n"
+        "Re-run with --overwrite to replace this output."
+    )
+
+
+def model_requires_gtf(row: dict[str, str]) -> bool:
+    value = str(row.get("require_gtf", "")).strip().lower()
+    return value in {"true", "1", "yes"}
+
+
+def require_existing_file(path_text: str, label: str) -> Path:
+    path = relative_or_absolute_path(path_text)
+    if not path.exists():
+        raise SystemExit(f"Missing {label}: {path}")
+    if not path.is_file():
+        raise SystemExit(f"Expected {label} to be a file: {path}")
+    return path
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+    model_rows = load_model_rows(Path(args.model_list))
+    tissue_list_path_text = args.tissue_list if args.tissue_granularity == "detailed" else args.broad_tissue_list
+    tissue_rows = load_tissue_rows(Path(tissue_list_path_text))
+    selected_models = resolve_requested_ids(
+        csv_text=args.models,
+        file_path=args.models_file,
+        rows=model_rows,
+        key_field="model_id",
+    )
+    selected_tissues = resolve_requested_ids(
+        csv_text=args.tissues,
+        file_path=args.tissues_file,
+        rows=tissue_rows,
+        key_field="tissue_id",
+    )
+    tissue_by_id = row_map(tissue_rows, "tissue_id")
+    model_by_id = row_map(model_rows, "model_id")
+    out_root = Path(args.out_root).resolve()
+    outputs_root = out_root / "genesets"
+    src_root = repo_root() / "geneset-extractor-dev" / "GTEx" / "src"
+    sample_metadata_tsv = require_existing_file(args.sample_metadata_tsv, "sample metadata TSV")
+    subject_metadata_tsv = require_existing_file(args.subject_metadata_tsv, "subject metadata TSV")
+    counts_gct = require_existing_file(args.counts_gct, "counts GCT")
+    human_gene_info: Path | None = None
+    if args.human_gene_info:
+        human_gene_info = require_existing_file(args.human_gene_info, "human_gene_info")
+    selected_tissue_list_path = require_existing_file(
+        tissue_list_path_text,
+        "broad tissue list" if args.tissue_granularity == "broad" else "tissue list",
+    )
+    dig_dir = Path(relative_or_absolute_path(args.dig_dir)).resolve()
+    if not dig_dir.exists():
+        raise SystemExit(f"Missing dig-gene-set-extractors directory: {dig_dir}")
+    if not dig_dir.is_dir():
+        raise SystemExit(f"Expected dig-gene-set-extractors path to be a directory: {dig_dir}")
+
+    age_binned_models = [model_id for model_id in selected_models if model_group_for(model_id) == "age_binned"]
+    continuous_age_models = [model_id for model_id in selected_models if model_group_for(model_id) == "continuous_age"]
+    hz_notebook_models = [model_id for model_id in selected_models if model_group_for(model_id) == "hz_notebook"]
+    unsupported_models = [model_id for model_id in selected_models if model_group_for(model_id) == "tissue_versus"]
+    age_binned_model_manifest: Path | None = None
+    continuous_age_model_manifest: Path | None = None
+    if age_binned_models:
+        age_binned_model_manifest = require_existing_file(
+            args.age_binned_model_manifest,
+            "age-binned model manifest",
+        )
+    if continuous_age_models:
+        continuous_age_model_manifest = require_existing_file(
+            args.continuous_age_model_manifest,
+            "continuous-age model manifest",
+        )
+    if unsupported_models:
+        raise SystemExit("TV* geneset building is not implemented yet")
+    if hz_notebook_models and args.tissue_granularity != "broad":
+        raise SystemExit("HZ* notebook-style models require --tissue_granularity broad")
+    if hz_notebook_models and human_gene_info is None:
+        raise SystemExit("HZ* notebook-style models require --human_gene_info")
+    gtf_required_models = [model_id for model_id in selected_models if model_requires_gtf(model_by_id[model_id])]
+    model_list_gtf_required_models = [
+        str(row["model_id"]).strip()
+        for row in model_rows
+        if model_requires_gtf(row)
+    ]
+    resolved_gtf: Path | None = None
+    if args.gtf:
+        resolved_gtf = require_existing_file(args.gtf, "GTF")
+    if model_list_gtf_required_models and resolved_gtf is None:
+        raise SystemExit(
+            "The active model_list contains models that require --gtf but none was provided: "
+            + ", ".join(model_list_gtf_required_models)
+        )
+
+    conflicts: list[str] = []
+    for tissue_id in selected_tissues:
+        tissue_root = outputs_root / tissue_id
+        for model_id in [*age_binned_models, *continuous_age_models, *hz_notebook_models]:
+            model_out = tissue_root / "models" / model_id
+            if dir_nonempty(model_out):
+                conflicts.append(existing_output_message(tissue_id=tissue_id, model_id=model_id, path=model_out))
+    if conflicts and not args.overwrite:
+        raise SystemExit("\n\n".join(conflicts))
+
+    for tissue_id in selected_tissues:
+        tissue_row = tissue_by_id[tissue_id]
+        tissue_name = str(tissue_row.get("tissue_name", "")).strip()
+        if not tissue_name:
+            raise SystemExit(f"Missing tissue_name for {tissue_id} in tissue list")
+        if args.tissue_granularity == "broad":
+            metadata_group_column = "SMTS"
+            metadata_group_value = tissue_name
+        else:
+            metadata_group_column = "SMTSD"
+            metadata_group_value = tissue_name
+        tissue_root = outputs_root / tissue_id
+        prepared_dir = tissue_root / "prepared"
+        models_root = tissue_root / "models"
+        if args.overwrite:
+            for model_id in [*age_binned_models, *continuous_age_models, *hz_notebook_models]:
+                overwrite_dir(models_root / model_id)
+        for model_id in age_binned_models:
+            needs_gtf = model_requires_gtf(model_by_id[model_id])
+            run_command(
+                [
+                    str(Path(args.python_bin).resolve()),
+                    str(src_root / "run_age_binned_model.py"),
+                    "--model_id",
+                    model_id,
+                    "--tissue_id",
+                    tissue_id,
+                    "--tissue_label",
+                    tissue_name,
+                    "--expression_gct",
+                    str(counts_gct),
+                    "--sample_attributes_tsv",
+                    str(sample_metadata_tsv),
+                    "--subject_phenotypes_tsv",
+                    str(subject_metadata_tsv),
+                    "--run_root",
+                    str(models_root),
+                    "--python_bin",
+                    str(Path(args.python_bin).resolve()),
+                    "--dig_dir",
+                    str(dig_dir),
+                    "--age_binned_model_manifest",
+                    str(age_binned_model_manifest),
+                ]
+                + ["--tissue_column", metadata_group_column, "--tissue_value", metadata_group_value]
+                + (
+                    ["--provenance_mirror_local_prefix", args.provenance_mirror_local_prefix]
+                    if args.provenance_mirror_local_prefix
+                    else []
+                )
+                + (
+                    ["--provenance_mirror_remote_prefix", args.provenance_mirror_remote_prefix]
+                    if args.provenance_mirror_remote_prefix
+                    else []
+                )
+                + (
+                    ["--gtf", str(resolved_gtf)]
+                    if resolved_gtf is not None and needs_gtf
+                    else []
+                )
+            )
+
+        if continuous_age_models:
+            any_continuous_age_needs_gtf = any(
+                model_requires_gtf(model_by_id[model_id]) for model_id in continuous_age_models
+            )
+            run_command(
+                [
+                    str(Path(args.python_bin).resolve()),
+                    str(src_root / "run_continuous_age_model.py"),
+                    "--python_bin",
+                    str(Path(args.python_bin).resolve()),
+                    "--rscript_bin",
+                    args.rscript_bin,
+                    "--tissue_id",
+                    tissue_id,
+                    "--tissue_label",
+                    tissue_name,
+                    "--expression_gct",
+                    str(counts_gct),
+                    "--sample_attributes_tsv",
+                    str(sample_metadata_tsv),
+                    "--subject_phenotypes_tsv",
+                    str(subject_metadata_tsv),
+                    "--run_root",
+                    str(models_root),
+                    "--dig_dir",
+                    str(dig_dir),
+                    "--continuous_age_model_manifest",
+                    str(continuous_age_model_manifest),
+                    "--model_ids",
+                    ",".join(continuous_age_models),
+                ]
+                + ["--tissue_column", metadata_group_column, "--tissue_value", metadata_group_value]
+                + (
+                    ["--provenance_mirror_local_prefix", args.provenance_mirror_local_prefix]
+                    if args.provenance_mirror_local_prefix
+                    else []
+                )
+                + (
+                    ["--provenance_mirror_remote_prefix", args.provenance_mirror_remote_prefix]
+                    if args.provenance_mirror_remote_prefix
+                    else []
+                )
+                + (
+                    ["--gtf", str(resolved_gtf)]
+                    if resolved_gtf is not None and any_continuous_age_needs_gtf
+                    else []
+                )
+            )
+
+        for model_id in hz_notebook_models:
+            run_command(
+                [
+                    str(Path(args.python_bin).resolve()),
+                    str(src_root / "run_hz_notebook_model.py"),
+                    "--model_id",
+                    model_id,
+                    "--tissue_id",
+                    tissue_id,
+                    "--tissue_label",
+                    tissue_name,
+                    "--expression_gct",
+                    str(counts_gct),
+                    "--sample_attributes_tsv",
+                    str(sample_metadata_tsv),
+                    "--subject_phenotypes_tsv",
+                    str(subject_metadata_tsv),
+                    "--human_gene_info",
+                    str(human_gene_info),
+                    "--prepared_dir",
+                    str(prepared_dir),
+                    "--run_root",
+                    str(models_root),
+                    "--python_bin",
+                    str(Path(args.python_bin).resolve()),
+                    "--rscript_bin",
+                    args.rscript_bin,
+                    "--dig_dir",
+                    str(dig_dir),
+                ]
+                + ["--tissue_column", metadata_group_column, "--tissue_value", metadata_group_value]
+                + (
+                    ["--provenance_mirror_local_prefix", args.provenance_mirror_local_prefix]
+                    if args.provenance_mirror_local_prefix
+                    else []
+                )
+                + (
+                    ["--provenance_mirror_remote_prefix", args.provenance_mirror_remote_prefix]
+                    if args.provenance_mirror_remote_prefix
+                    else []
+                )
+            )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

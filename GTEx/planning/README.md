@@ -1,0 +1,78 @@
+# GTEx Planning
+
+This directory is organized around the current GTEx workflow rather than the historical step-by-step buildout.
+
+## Current Flow
+
+1. Build tissue-by-model gene sets and GMT files directly from raw GTEx inputs
+2. Optionally inspect intermediate workflow artifacts written by `dig`
+3. Optionally evaluate those gene sets with PIGEAN and EAGGL
+4. Summarize model behavior and choose representative models
+
+## Current Entry Points
+
+- `geneset-extractor-dev/GTEx/run/build_genesets.sh`
+- `geneset-extractor-dev/GTEx/run/run_pigean.sh`
+- `geneset-extractor-dev/GTEx/run/run_eaggl.sh`
+- `geneset-extractor-dev/GTEx/run/summarize_model_enrichment.sh`
+- `geneset-extractor-dev/GTEx/run/summarize_top_models.sh`
+
+## Planning Layout
+
+- `geneset_build/`
+  - planning for generating GTEx gene sets and GMT outputs
+- `model_evaluation/`
+  - planning for optional downstream model evaluation
+- `proposals/`
+  - focused change proposals and integration proposals
+- `shared/`
+  - naming and cross-cutting conventions
+
+## Build First
+
+The primary analysis products are the gene-set outputs under:
+
+- `geneset-extractor-dev/GTEx/outputs/genesets/<tissue>/models/`
+
+This is the first phase the user runs:
+
+- `geneset-extractor-dev/GTEx/run/build_genesets.sh`
+
+Runtime config inputs for models and tissues are maintained under:
+
+- `geneset-extractor-dev/GTEx/config/model_list.tsv`
+- `geneset-extractor-dev/GTEx/config/tissue_list.tsv`
+- `geneset-extractor-dev/GTEx/config/broad_tissue_list.tsv`
+- `geneset-extractor-dev/GTEx/config/age_binned_model_manifest.tsv`
+- `geneset-extractor-dev/GTEx/config/continuous_age_model_manifest.tsv`
+
+Runtime-interface notes remain under planning:
+
+- `geneset-extractor-dev/GTEx/planning/selection_inputs.md`
+- `geneset-extractor-dev/GTEx/planning/pipeline_inputs.md`
+
+Age-binned wrapper notes and per-model provenance are folded into:
+
+- `geneset-extractor-dev/GTEx/planning/geneset_build/age_binned_models/`
+
+There is intentionally no separate runtime-interface planning bundle for continuous-age models.
+
+## Optional Evaluation
+
+PIGEAN and EAGGL are downstream and optional. They consume previously generated GMT outputs and write evaluation outputs under:
+
+- `geneset-extractor-dev/GTEx/outputs/pigean_eaggl/`
+
+Relevant wrappers:
+
+- `geneset-extractor-dev/GTEx/run/run_pigean.sh`
+- `geneset-extractor-dev/GTEx/run/run_eaggl.sh`
+- `geneset-extractor-dev/GTEx/run/summarize_model_enrichment.sh`
+- `geneset-extractor-dev/GTEx/run/summarize_top_models.sh`
+
+## Model Families
+
+- `AB*`: age-binned contrast models
+- `AC*`: continuous-age models
+- `HZ*`: notebook-style/Harmonizome-style aging-signature models
+- `TV*`: reserved for future tissue-versus-reference models
