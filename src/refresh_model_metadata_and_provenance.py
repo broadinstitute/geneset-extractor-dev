@@ -83,7 +83,11 @@ def read_input_source_map(path: Path) -> dict[str, str]:
             if not local_path or not source_uri:
                 raise SystemExit("source map TSV rows must provide both local_path and source_uri")
             if local_path in mapping:
-                raise SystemExit(f"Duplicate local_path in source map TSV: {local_path}")
+                if mapping[local_path] != source_uri:
+                    raise SystemExit(
+                        f"Conflicting source_uri values for duplicate local_path in source map TSV: {local_path}"
+                    )
+                continue
             mapping[local_path] = source_uri
     if not mapping:
         raise SystemExit(f"No source map rows found in {path}")
@@ -323,37 +327,72 @@ def regenerate_motrpac_model_sidecars(args: argparse.Namespace, model_dir: Path,
         raise SystemExit(f"Unable to resolve MoTrPAC model family for model_id={args.model_id}")
     if model_family in {"training", "timewise"}:
         tissue_id = model_dir.parent.parent.name
-        models_root = model_dir.parent
         tissue_list_tsv = DEV_REPO_ROOT / "MoTrPAC" / "config" / "tissue_list.tsv"
         tissue_label = resolve_tsv_value(tissue_list_tsv, key_field="tissue_id", key_value=tissue_id, value_field="tissue_label")
         transcript_tissue_label = resolve_tsv_value(tissue_list_tsv, key_field="tissue_id", key_value=tissue_id, value_field="transcript_tissue_label")
         if not tissue_label or not transcript_tissue_label:
             raise SystemExit(f"Unable to resolve MoTrPAC tissue labels for tissue_id={tissue_id}")
-        runner = "run_motrpac_training_model.py" if model_family == "training" else "run_motrpac_timewise_model.py"
-        cmd = [
-            str(Path(args.python_bin).resolve()),
-            str(DEV_REPO_ROOT / "MoTrPAC" / "src" / runner),
-            "--model_id",
-            args.model_id,
-            "--tissue_id",
-            tissue_id,
-            "--tissue_label",
-            tissue_label,
-            "--transcript_tissue_label",
-            transcript_tissue_label,
-            "--run_root",
-            str(models_root),
-            "--python_bin",
-            str(Path(args.python_bin).resolve()),
-            "--rscript_bin",
-            os.environ.get("RSCRIPT_BIN", "Rscript"),
-            "--dig_dir",
-            str(Path(args.dig_dir).resolve()),
-            "--model_manifest",
-            str(DEV_REPO_ROOT / "MoTrPAC" / "config" / "model_manifest.tsv"),
-            "--write_model_only",
-        ]
-        run_command(cmd, cwd=WORKSPACE_ROOT, env=env)
+        model_manifest_tsv = DEV_REPO_ROOT / "MoTrPAC" / "config" / "model_manifest.tsv"
+        extractor_dir = model_dir / "extractor"
+        with prepend_sys_path(DEV_REPO_ROOT / "MoTrPAC" / "src"):
+            if model_family == "training":
+                module = importlib.import_module("run_motrpac_training_model")
+                settings_by_model = module.load_model_settings(model_manifest_tsv)
+                module.write_model_sidecar(
+                    path=extractor_dir / "geneset.model.json",
+                    model_id=args.model_id,
+                    tissue_id=tissue_id,
+                    tissue_label=tissue_label,
+                    settings=settings_by_model[args.model_id],
+                )
+                return
+            module = importlib.import_module("run_motrpac_timewise_model")
+            settings_by_model = module.load_model_settings(model_manifest_tsv)
+            settings = settings_by_model[args.model_id]
+            if (extractor_dir / "manifest.tsv").exists():
+                module.write_grouped_model_sidecars(
+                    extractor_out=extractor_dir,
+                    model_id=args.model_id,
+                    tissue_id=tissue_id,
+                    tissue_label=tissue_label,
+                    settings=settings,
+                )
+            else:
+                payload = {
+                    "schema_version": "1",
+                    "library": "MoTrPAC",
+                    "model_id": args.model_id,
+                    "model_group": "TW",
+                    "model_label": "timewise",
+                    "workflow_name": (
+                        "motrpac_timepoint"
+                        if module.manifest_value(settings, "workflow_stratify_scheme", "sex_timepoint") == "timepoint"
+                        else "motrpac_timewise"
+                    ),
+                    "extractor_name": "rna_deg_multi",
+                    "parameters": {
+                        "stratify_scheme": module.manifest_value(settings, "workflow_stratify_scheme", "sex_timepoint"),
+                        "covariates": module.manifest_value(settings, "workflow_covariates", "none"),
+                        "min_samples_per_group": module.manifest_value(settings, "workflow_min_samples_per_group", "5"),
+                        "postprocess_mode": settings["extractor_postprocess_mode"],
+                        "score_mode": settings["extractor_score_mode"],
+                        "select": settings["extractor_select"],
+                    },
+                    "inputs": {
+                        "tissue_id": tissue_id,
+                        "tissue_label": tissue_label or tissue_id,
+                        "organism": "human",
+                        "genome_build": "hg38",
+                    },
+                    "naming": {
+                        "comparison_style": module.manifest_value(settings, "workflow_stratify_scheme", "sex_timepoint"),
+                        "gene_set_pattern": "MoTrPAC_<tissue>_<sex_or_timepoint>_up|dn",
+                    },
+                }
+                module.write_text(
+                    extractor_dir / "geneset.model.json",
+                    json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                )
         return
 
     with prepend_sys_path(DEV_REPO_ROOT / "MoTrPAC" / "src"):
