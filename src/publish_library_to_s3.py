@@ -71,6 +71,14 @@ def parse_args():  # type: () -> argparse.Namespace
         help="Destination S3 URI where provenance-resolved rerun inputs should be published.",
     )
     parser.add_argument(
+        "--s3_input_source_map_tsv",
+        help=(
+            "Optional TSV with columns s3_uri and source_uri. After staged JSON artifacts are "
+            "rewritten from local paths to S3 URIs, matching input S3 URIs are rewritten again "
+            "to their authoritative source URI for upload."
+        ),
+    )
+    parser.add_argument(
         "--manifest_out",
         help="Optional TSV manifest path. Defaults to <local_output_root>/publish_library_manifest.tsv.",
     )
@@ -113,6 +121,29 @@ def parse_s3_uri(s3_uri):  # type: (str) -> Tuple[str, str]
     bucket = parsed.netloc
     prefix = parsed.path.lstrip("/")
     return bucket, prefix
+
+
+def read_s3_input_source_map(path):  # type: (Path) -> Dict[str, str]
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        fieldnames = set(reader.fieldnames or [])
+        if "s3_uri" not in fieldnames or "source_uri" not in fieldnames:
+            raise SystemExit("source map TSV must include columns: s3_uri, source_uri")
+        mapping = {}  # type: Dict[str, str]
+        for row in reader:
+            s3_uri = str(row.get("s3_uri", "")).strip()
+            source_uri = str(row.get("source_uri", "")).strip()
+            if not s3_uri and not source_uri:
+                continue
+            if not s3_uri or not source_uri:
+                raise SystemExit("source map TSV rows must provide both s3_uri and source_uri")
+            parse_s3_uri(s3_uri)
+            if s3_uri in mapping:
+                raise SystemExit("Duplicate s3_uri in source map TSV: {0}".format(s3_uri))
+            mapping[s3_uri] = source_uri
+    if not mapping:
+        raise SystemExit("No source map rows found in {0}".format(path))
+    return dict(sorted(mapping.items(), key=lambda item: len(item[0]), reverse=True))
 
 
 def shell_join(parts):  # type: (List[str]) -> str
@@ -515,10 +546,11 @@ def rewrite_json_value(value, replacements):  # type: (Any, Dict[str, str]) -> A
 def stage_rewritten_json_files(
     *,
     output_candidates,  # type: List[CandidateFile]
-    replacements,  # type: Dict[str, str]
-):  # type: (**Any) -> List[CandidateFile]
+    rewrite_passes,  # type: List[Dict[str, str]]
+):  # type: (**Any) -> Tuple[List[CandidateFile], Set[str]]
     staged_root = Path(tempfile.mkdtemp(prefix="publish_library_to_s3_", dir="/tmp"))
     rewritten = []  # type: List[CandidateFile]
+    used_second_pass_keys = set()  # type: Set[str]
     for candidate in output_candidates:
         if not is_rewritten_json_artifact(candidate.local_path):
             rewritten.append(candidate)
@@ -526,7 +558,16 @@ def stage_rewritten_json_files(
         staged_path = staged_root / candidate.relative_path
         staged_path.parent.mkdir(parents=True, exist_ok=True)
         payload = json.loads(candidate.local_path.read_text(encoding="utf-8"))
-        staged_payload = rewrite_json_value(payload, replacements)
+        staged_payload = payload
+        for index, replacements in enumerate(rewrite_passes):
+            if not replacements:
+                continue
+            if index == 1:
+                serialized_before = json.dumps(staged_payload, sort_keys=True)
+                for key in replacements:
+                    if key in serialized_before:
+                        used_second_pass_keys.add(key)
+            staged_payload = rewrite_json_value(staged_payload, replacements)
         staged_path.write_text(json.dumps(staged_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         rewritten.append(
             CandidateFile(
@@ -539,7 +580,7 @@ def stage_rewritten_json_files(
                 upload_path=staged_path,
             )
         )
-    return rewritten
+    return rewritten, used_second_pass_keys
 
 
 def run_aws_command(
@@ -659,6 +700,7 @@ def write_path_map(path, rows):  # type: (Path, Iterable[Dict[str, Any]]) -> Non
         "category",
         "local_path",
         "remote_uri",
+        "source_uri",
         "relative_path",
         "requirement",
     ]
@@ -693,6 +735,13 @@ def main():  # type: () -> int
     local_output_root = ensure_directory(Path(args.local_output_root), "local output root")
     _bucket, _prefix = parse_s3_uri(args.s3_output_root)
     _input_bucket, _input_prefix = parse_s3_uri(args.s3_input_root)
+    source_map = {}  # type: Dict[str, str]
+    source_map_path = None  # type: Optional[Path]
+    if args.s3_input_source_map_tsv:
+        source_map_path = Path(args.s3_input_source_map_tsv).expanduser().resolve()
+        if not source_map_path.exists():
+            raise SystemExit("Missing source map TSV: {0}".format(source_map_path))
+        source_map = read_s3_input_source_map(source_map_path)
 
     manifest_path = (
         Path(args.manifest_out).expanduser().resolve()
@@ -730,6 +779,32 @@ def main():  # type: () -> int
         provenance_paths=provenance_paths,
         s3_input_root=args.s3_input_root,
     )
+    source_map_unmatched = set()  # type: Set[str]
+    if source_map:
+        rewrite_map = build_path_rewrite_map(
+            local_output_root=local_output_root,
+            output_candidates=output_candidates,
+            input_candidates=input_candidates,
+            s3_output_root=args.s3_output_root,
+        )
+        rewrite_map = augment_rewrite_map_from_provenance(
+            provenance_paths=provenance_paths,
+            replacements=rewrite_map,
+            output_candidates=output_candidates,
+            input_candidates=input_candidates,
+            local_output_root=local_output_root,
+            s3_output_root=args.s3_output_root,
+            s3_input_root=args.s3_input_root,
+        )
+        output_candidates, used_source_map_keys = stage_rewritten_json_files(
+            output_candidates=output_candidates,
+            rewrite_passes=[rewrite_map, source_map],
+        )
+        source_map_unmatched = set(source_map.keys()).difference(used_source_map_keys)
+        for s3_uri in sorted(source_map_unmatched):
+            warning = "warning: source map s3_uri not found in staged JSON artifacts: {0}".format(s3_uri)
+            print(warning, flush=True)
+            log_line(log_path, warning)
     log_line(log_path, f"discovered_output_files={len(output_candidates)}")
     log_line(log_path, f"scanned_provenance_files={len(provenance_paths)}")
     log_line(log_path, f"discovered_input_files={len(input_candidates)}")
@@ -843,6 +918,7 @@ def main():  # type: () -> int
                     "category": candidate.category,
                     "local_path": str(candidate.local_path),
                     "remote_uri": candidate.s3_uri,
+                    "source_uri": source_map.get(candidate.s3_uri, "") if candidate.category == "input" else "",
                     "relative_path": candidate.relative_path,
                     "requirement": candidate.requirement,
                 }
@@ -852,12 +928,15 @@ def main():  # type: () -> int
         "local_output_root": str(local_output_root),
         "s3_output_root": args.s3_output_root,
         "s3_input_root": args.s3_input_root,
+        "s3_input_source_map_tsv": str(source_map_path) if source_map_path is not None else None,
         "dry_run": bool(args.dry_run),
         "overwrite": bool(args.overwrite),
         "force_publish": bool(args.force_publish),
         "n_output_candidates": len(output_candidates),
         "n_provenance_files": len(provenance_paths),
         "n_input_candidates": len(input_candidates),
+        "n_source_map_rows": len(source_map),
+        "n_source_map_unmatched": len(source_map_unmatched),
         "n_uploaded": uploaded_count,
         "n_skipped_existing": skipped_existing_count,
         "n_failed": failed_count,
