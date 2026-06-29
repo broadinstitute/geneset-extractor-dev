@@ -12,6 +12,13 @@ import shutil
 from pathlib import Path
 from urllib.parse import urlparse
 
+DIRECTORY_ARG_PLACEHOLDERS = {
+    "--raw_asctb_dir": "/path/to/raw_asctb_dir",
+    "--asctb_dir": "/path/to/asctb_dir",
+    "--raw_counts_dir": "/path/to/raw_counts_dir",
+    "--dea_dir": "/path/to/dea_dir",
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -268,6 +275,44 @@ def rewrite_json_value(value: object, replacements: dict[str, str]) -> object:
     return value
 
 
+def sanitize_command_directory_args(command: object) -> object:
+    if isinstance(command, str):
+        try:
+            tokens = shlex.split(command)
+        except ValueError:
+            return command
+        sanitized = sanitize_command_directory_args(tokens)
+        if isinstance(sanitized, list):
+            return shlex.join(str(token) for token in sanitized)
+        return command
+    if isinstance(command, list):
+        sanitized = [str(token) for token in command]
+        index = 0
+        while index < len(sanitized):
+            placeholder = DIRECTORY_ARG_PLACEHOLDERS.get(sanitized[index])
+            if placeholder and index + 1 < len(sanitized):
+                sanitized[index + 1] = placeholder
+                index += 2
+                continue
+            index += 1
+        return sanitized
+    return command
+
+
+def sanitize_directory_args_in_json(value: object) -> object:
+    if isinstance(value, dict):
+        rewritten: dict[str, object] = {}
+        for key, inner in value.items():
+            if key in {"command", "observed_command"}:
+                rewritten[key] = sanitize_command_directory_args(inner)
+            else:
+                rewritten[key] = sanitize_directory_args_in_json(inner)
+        return rewritten
+    if isinstance(value, list):
+        return [sanitize_directory_args_in_json(inner) for inner in value]
+    return value
+
+
 def metadata_snapshot_path(metadata_path: Path) -> Path:
     orig_path = Path(f"{metadata_path}.orig")
     return orig_path if orig_path.exists() else metadata_path
@@ -345,7 +390,7 @@ def rewrite_metadata_and_provenance(
             if not path.exists():
                 continue
             payload = json.loads(path.read_text(encoding="utf-8"))
-            rewritten = payload
+            rewritten = sanitize_directory_args_in_json(payload)
             for replacements in rewrite_passes:
                 if not replacements:
                     continue
