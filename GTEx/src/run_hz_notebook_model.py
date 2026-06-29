@@ -289,15 +289,24 @@ def main() -> int:
 
     model_out.mkdir(parents=True, exist_ok=True)
     if args.write_model_only:
-        write_json(
-            extractor_dir / "geneset.model.json",
-            build_model_sidecar_payload(
+        if (extractor_dir / "manifest.tsv").exists():
+            write_grouped_model_sidecars(
+                extractor_dir=extractor_dir,
                 model_id=args.model_id,
                 tissue_id=args.tissue_id,
                 tissue_label=args.tissue_label,
                 args=args,
-            ),
-        )
+            )
+        else:
+            write_json(
+                extractor_dir / "geneset.model.json",
+                build_model_sidecar_payload(
+                    model_id=args.model_id,
+                    tissue_id=args.tissue_id,
+                    tissue_label=args.tissue_label,
+                    args=args,
+                ),
+            )
         return 0
 
     expression_gct = require_existing_file(args.expression_gct, "expression GCT")
