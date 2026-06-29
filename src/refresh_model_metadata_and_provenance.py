@@ -27,7 +27,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--provenance_mirror_local_prefix")
     parser.add_argument("--provenance_mirror_remote_prefix")
-    parser.add_argument("--s3_input_root")
     parser.add_argument("--local_input_source_map_tsv")
     parser.add_argument("--show_template_vars", action="store_true")
     return parser.parse_args()
@@ -60,18 +59,11 @@ def read_input_source_map(path: Path) -> dict[str, str]:
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         fieldnames = set(reader.fieldnames or [])
-        if "source_uri" not in fieldnames:
-            raise SystemExit("source map TSV must include columns: local_path, source_uri")
-        path_column = ""
-        if "local_path" in fieldnames:
-            path_column = "local_path"
-        elif "s3_uri" in fieldnames:
-            path_column = "s3_uri"
-        else:
+        if "local_path" not in fieldnames or "source_uri" not in fieldnames:
             raise SystemExit("source map TSV must include columns: local_path, source_uri")
         mapping: dict[str, str] = {}
         for row in reader:
-            local_path = str(row.get(path_column, "")).strip()
+            local_path = str(row.get("local_path", "")).strip()
             source_uri = str(row.get("source_uri", "")).strip()
             if not local_path and not source_uri:
                 continue
@@ -314,51 +306,6 @@ def build_execution_replacements(dig_dir: Path) -> dict[str, str]:
     return dict(sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True))
 
 
-def build_input_replacements(
-    *,
-    metadata_paths: list[Path],
-    local_output_root: Path,
-    s3_input_root: str,
-) -> dict[str, str]:
-    input_paths: set[Path] = set()
-    for metadata_path in metadata_paths:
-        provenance_path = provenance_snapshot_path(metadata_path)
-        if not provenance_path.exists():
-            continue
-        for source_path in extract_file_paths_from_provenance(provenance_path):
-            if is_within_directory(source_path, local_output_root):
-                continue
-            input_paths.add(source_path)
-
-    normalized_s3_root = s3_input_root.rstrip("/")
-    replacements: dict[str, str] = {}
-    grouped_parent_dirs = {
-        parent
-        for parent in {path.parent for path in input_paths}
-        if len([path for path in input_paths if path.parent == parent]) > 1
-    }
-
-    directory_relative_paths = build_unique_input_relative_paths(sorted(grouped_parent_dirs))
-    handled_paths: set[Path] = set()
-
-    for directory_path, relative_dir in directory_relative_paths.items():
-        remote_dir_uri = f"{normalized_s3_root}/{relative_dir}"
-        replacements[str(directory_path)] = remote_dir_uri
-        replacements[directory_path.as_uri()] = remote_dir_uri
-        for source_path in sorted(path for path in input_paths if path.parent == directory_path):
-            remote_uri = f"{remote_dir_uri}/{source_path.name}"
-            replacements[str(source_path)] = remote_uri
-            replacements[source_path.as_uri()] = remote_uri
-            handled_paths.add(source_path)
-
-    standalone_relative_paths = build_unique_input_relative_paths(sorted(input_paths.difference(handled_paths)))
-    for source_path, relative_path in standalone_relative_paths.items():
-        remote_uri = f"{normalized_s3_root}/{relative_path}"
-        replacements[str(source_path)] = remote_uri
-        replacements[source_path.as_uri()] = remote_uri
-    return dict(sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True))
-
-
 def build_source_input_replacements(
     *,
     metadata_paths: list[Path],
@@ -421,8 +368,6 @@ def main() -> int:
         if not template:
             raise SystemExit(f"No description_template found for model_id={args.model_id}")
     metadata_paths = discover_metadata_paths(model_dir)
-    if args.s3_input_root:
-        parse_s3_uri(args.s3_input_root)
     source_map: dict[str, str] = {}
     if args.local_input_source_map_tsv:
         source_map_path = Path(args.local_input_source_map_tsv).resolve()
@@ -464,14 +409,6 @@ def main() -> int:
             build_output_replacements(
                 local_output_root=local_output_root,
                 provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
-            )
-        )
-    if args.s3_input_root:
-        replacements.update(
-            build_input_replacements(
-                metadata_paths=metadata_paths,
-                local_output_root=local_output_root,
-                s3_input_root=args.s3_input_root,
             )
         )
     if source_map:
