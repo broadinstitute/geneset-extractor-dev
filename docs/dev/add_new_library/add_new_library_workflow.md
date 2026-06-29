@@ -31,7 +31,7 @@ At a high level, the work should proceed like this:
 Clone both repositories side by side:
 
 ```bash
-git clone git@github.com:flannick/geneset-extractor-dev.git
+git clone git@github.com:broadinstitute/geneset-extractor-dev.git
 git clone git@github.com:flannick/dig-gene-set-extractors.git
 ```
 
@@ -49,7 +49,7 @@ Start from `main` in each repo and create a unique branch name in both repositor
 
 Example branch names:
 
-- `rk-add-liger-wrapper`
+- `yourinitials-add-libraryname`
 - `yourname-add-libraryx-20260627`
 
 Commands:
