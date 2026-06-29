@@ -154,3 +154,37 @@ When starting a new library task, do something like:
 ```text
 Inspect the existing GTEx, MoTrPAC, HuBMAP, and LINCS_L1000 libraries and add LIBRARY_X by following those patterns as closely as possible. Keep geneset-extractor-dev as a wrapper to dig-gene-set-extractors. The final output must strictly follow existing metadata, provenance, model.json, extractor directory, and publish/refresh standards. Do not invent a new structure if an existing one can be reused.
 ```
+
+## Expanded Prompt To The Agent
+
+```text
+You are helping me add a new library called LIBRARY_X across two repositories that work together:
+
+- geneset-extractor-dev
+  This is the wrapper/orchestration repository. It should contain config TSVs, thin wrapper scripts, model orchestration, cluster submit scripts, Apptainer wrappers, and refresh/publish integration.
+
+- dig-gene-set-extractors
+  This is the primary workflow-logic repository. It should contain the workflow implementations, converters, provenance graph generation, and reusable assay logic.
+
+You must keep geneset-extractor-dev as a wrapper around DIG. Do not place core workflow logic in geneset-extractor-dev unless it is truly wrapper-only behavior.
+
+The new library must match the standards already established by the existing libraries:
+
+- GTEx: tissue-partitioned bulk RNA-seq workflows with multiple model families over shared inputs
+- MoTrPAC: tissue-partitioned transcriptomics workflows with direct DE models and aggregated library models
+- HuBMAP: released-resource workflows that build libraries from ASCT+B-derived inputs
+- LINCS_L1000: multiple signature-source models that converge on the same shared output contract
+
+Your task is to:
+- inspect both repos for the closest existing pattern
+- decide which existing library structure LIBRARY_X should follow
+- define the model families and partition lists in config
+- implement workflow logic in DIG
+- implement wrapper/config/run scripts in geneset-extractor-dev
+- ensure outputs follow the current metadata, provenance, model-sidecar, extractor, refresh, and publish standards exactly
+
+Avoid inventing a new structure if GTEx, MoTrPAC, HuBMAP, or LINCS_L1000 already provide a suitable pattern.
+
+At the end, make sure the run scripts and output directories are easy to package and zip for submission to:
+/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/submissions
+```

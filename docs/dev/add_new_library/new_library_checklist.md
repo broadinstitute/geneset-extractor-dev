@@ -60,3 +60,10 @@ Use this checklist before opening a PR.
 - output names and directory structure were reviewed manually
 - metadata/provenance graph connectivity was checked
 - shared code changes were checked against existing libraries
+
+## Submission Packaging
+
+- run scripts were collected for handoff
+- output directories to be reviewed were identified
+- submission archives were zipped
+- archives were uploaded to `/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/submissions`

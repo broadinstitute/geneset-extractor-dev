@@ -14,6 +14,18 @@ The most important requirements are:
 - outputs must support model sidecars, metadata refresh, provenance refresh, and S3 publishing without special-case logic
 - new code should reuse existing conventions instead of inventing new ones
 
+## Roadmap
+
+At a high level, the work should proceed like this:
+
+1. clone both repositories and branch from `main`
+2. inspect the new library data and determine its natural model and partition structure
+3. study GTEx, MoTrPAC, HuBMAP, and LINCS_L1000 to identify the closest existing pattern
+4. implement primary workflow logic in `dig-gene-set-extractors`
+5. implement wrapper/config/run orchestration in `geneset-extractor-dev`
+6. verify that metadata, provenance, model sidecars, refresh, and publish flows all work without special cases
+7. package the run scripts and outputs and upload them to the submissions directory
+
 ## 1. Clone Repositories
 
 Clone both repositories side by side:
@@ -91,6 +103,56 @@ Provide the agent with:
 - `geneset-extractor-dev/docs/dev/add_new_library/AGENTS.md`
 - this document
 - examples from GTEx, MoTrPAC, HuBMAP, and LINCS_L1000
+
+### Full repo-context prompt
+
+Use a prompt like this early in the project so the agent understands how the two repos work together and what methods already exist:
+
+```text
+I am adding a new library called LIBRARY_X across two repositories:
+
+1. geneset-extractor-dev
+This repo is the wrapper/orchestration layer. It should contain:
+- library-specific config TSVs such as model_list.tsv, model_manifest.tsv, model_description_templates.tsv, and partition lists
+- thin Python wrapper scripts under LIBRARY_X/src
+- cluster and Apptainer run scripts under geneset-extractor-dev/run
+- worklist generation, model selection, and refresh/publish integration
+
+2. dig-gene-set-extractors
+This repo is the primary workflow-logic layer. It should contain:
+- workflow implementations
+- converter logic
+- provenance graph generation
+- reusable assay logic that should not be duplicated in geneset-extractor-dev
+
+The new library must follow the same standards already established by four existing libraries:
+
+- GTEx
+  Uses multiple model families over tissue-partitioned bulk RNA-seq inputs. The wrapper builds tissue/model worklists and DIG owns the workflows for age-binned, continuous-age, and related gene-set extraction methods.
+
+- MoTrPAC
+  Uses multiple model families over tissue-partitioned transcriptomics data. Some models run directly from raw-count-derived contrasts, while others build aggregated libraries from either released differential analysis inputs or raw-input-derived intermediate results.
+
+- HuBMAP
+  Uses library-generation workflows over released ASCT+B inputs. DIG performs the workflow logic and provenance generation, while the wrapper selects models, handles cluster execution, and refreshes metadata/provenance/model sidecars.
+
+- LINCS_L1000
+  Uses multiple library-generation models for different signature sources, such as chemical perturbation and CRISPR knockout. DIG owns the workflows and converters; the wrapper handles model selection, manifests, and cluster integration.
+
+Rules you must follow:
+- keep geneset-extractor-dev as a wrapper around DIG
+- place primary workflow logic in dig-gene-set-extractors
+- match the existing directory structure, config style, naming, metadata, provenance, model sidecars, and publish/refresh behavior
+- avoid inventing new structures when an existing pattern can be reused
+- compare any new design explicitly against GTEx, MoTrPAC, HuBMAP, and LINCS_L1000
+
+Please start by inspecting the four existing libraries in both repos and propose:
+- the closest existing pattern to copy
+- the likely model families for LIBRARY_X
+- the partition list(s) needed
+- the minimum file set required in each repo
+- any expected deviations from existing standards
+```
 
 ### Example prompts
 
@@ -235,6 +297,21 @@ When adding a new library, decide whether it has:
 
 If the library naturally supports multiple analytical styles, model them explicitly instead of burying differences in undocumented flags.
 
+### Existing modeling patterns to reuse
+
+When deciding how many models to create, prefer one of the patterns already used in the current libraries:
+
+- GTEx-style:
+  tissue-partitioned models with multiple analytical families over the same assay
+- MoTrPAC-style:
+  tissue-partitioned models with both direct differential-expression workflows and aggregated library workflows
+- HuBMAP-style:
+  one or a small number of library-construction paths over a released reference resource
+- LINCS_L1000-style:
+  multiple signature-source models over a shared general output contract
+
+The goal is not to invent a fifth structure if one of these four already matches the new library.
+
 ## 8. Output Standard
 
 Outputs must follow the same standards already used across the existing libraries.
@@ -258,6 +335,49 @@ The final user-facing outputs must fit the shared tooling for:
 Do not invent a library-specific final output structure if the standard one can be reused.
 
 ### Directory style
+
+```text
+<out_root>/genesets/<partition>/models/<model_id>/
+  workflow/
+  extractor/
+```
+
+If the library does not naturally partition by tissue, choose the nearest equivalent partition label and still keep the same top-level output contract.
+
+## 9. Validate Shared Tooling
+
+Before considering the work complete, confirm that the new library works with the existing shared utilities:
+
+- model JSON writing
+- metadata refresh
+- provenance refresh
+- publish to S3
+- path rewriting and source mapping if needed
+
+The preferred standard is that the new library works with the current shared tooling without introducing library-specific exceptions.
+
+## 10. Package Submission Artifacts
+
+At the end of the workflow, package the deliverables for review.
+
+Collect:
+
+- all run scripts used for the new library
+- any wrapper scripts needed to reproduce the run
+- the resulting output directory or validated test-run output directory
+
+Create one or more zip archives and upload them to:
+
+```text
+/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/submissions
+```
+
+The submission archive should make it easy for a reviewer to inspect:
+
+- the commands used to run the library
+- the exact run scripts
+- the output structure
+- the metadata/provenance/model sidecar results
 
 Match existing libraries as closely as possible. In practice this usually means:
 
