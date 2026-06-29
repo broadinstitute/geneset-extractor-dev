@@ -23,6 +23,7 @@ TRANSIENT_SUFFIXES = {
     ".swo",
     ".tmp",
     ".bak",
+    ".orig",
     ".filepart",
     ":Zone.Identifier",
 }
