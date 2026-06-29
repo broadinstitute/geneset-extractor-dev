@@ -56,24 +56,30 @@ def read_template_map(path: Path) -> dict[str, str]:
     return mapping
 
 
-def read_s3_input_source_map(path: Path) -> dict[str, str]:
+def read_input_source_map(path: Path) -> dict[str, str]:
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         fieldnames = set(reader.fieldnames or [])
-        if "s3_uri" not in fieldnames or "source_uri" not in fieldnames:
-            raise SystemExit("source map TSV must include columns: s3_uri, source_uri")
+        if "source_uri" not in fieldnames:
+            raise SystemExit("source map TSV must include columns: local_path, source_uri")
+        path_column = ""
+        if "local_path" in fieldnames:
+            path_column = "local_path"
+        elif "s3_uri" in fieldnames:
+            path_column = "s3_uri"
+        else:
+            raise SystemExit("source map TSV must include columns: local_path, source_uri")
         mapping: dict[str, str] = {}
         for row in reader:
-            s3_uri = str(row.get("s3_uri", "")).strip()
+            local_path = str(row.get(path_column, "")).strip()
             source_uri = str(row.get("source_uri", "")).strip()
-            if not s3_uri and not source_uri:
+            if not local_path and not source_uri:
                 continue
-            if not s3_uri or not source_uri:
-                raise SystemExit("source map TSV rows must provide both s3_uri and source_uri")
-            parse_s3_uri(s3_uri)
-            if s3_uri in mapping:
-                raise SystemExit(f"Duplicate s3_uri in source map TSV: {s3_uri}")
-            mapping[s3_uri] = source_uri
+            if not local_path or not source_uri:
+                raise SystemExit("source map TSV rows must provide both local_path and source_uri")
+            if local_path in mapping:
+                raise SystemExit(f"Duplicate local_path in source map TSV: {local_path}")
+            mapping[local_path] = source_uri
     if not mapping:
         raise SystemExit(f"No source map rows found in {path}")
     return dict(sorted(mapping.items(), key=lambda item: len(item[0]), reverse=True))
@@ -353,6 +359,33 @@ def build_input_replacements(
     return dict(sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True))
 
 
+def build_source_input_replacements(
+    *,
+    metadata_paths: list[Path],
+    local_output_root: Path,
+    source_map: dict[str, str],
+) -> dict[str, str]:
+    input_paths: set[Path] = set()
+    for metadata_path in metadata_paths:
+        provenance_path = provenance_snapshot_path(metadata_path)
+        if not provenance_path.exists():
+            continue
+        for source_path in extract_file_paths_from_provenance(provenance_path):
+            if is_within_directory(source_path, local_output_root):
+                continue
+            input_paths.add(source_path)
+
+    replacements: dict[str, str] = {}
+    for source_path in sorted(input_paths):
+        source_key = str(source_path)
+        source_uri = source_map.get(source_key)
+        if not source_uri:
+            continue
+        replacements[source_key] = source_uri
+        replacements[source_path.as_uri()] = source_uri
+    return dict(sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True))
+
+
 def rewrite_metadata_and_provenance(
     *,
     metadata_paths: list[Path],
@@ -395,7 +428,7 @@ def main() -> int:
         source_map_path = Path(args.s3_input_source_map_tsv).resolve()
         if not source_map_path.exists():
             raise SystemExit(f"Missing source map TSV: {source_map_path}")
-        source_map = read_s3_input_source_map(source_map_path)
+        source_map = read_input_source_map(source_map_path)
     snapshot_originals(metadata_paths)
     restore_from_originals(metadata_paths)
 
@@ -441,12 +474,18 @@ def main() -> int:
                 s3_input_root=args.s3_input_root,
             )
         )
+    if source_map:
+        replacements.update(
+            build_source_input_replacements(
+                metadata_paths=metadata_paths,
+                local_output_root=local_output_root,
+                source_map=source_map,
+            )
+        )
     replacements.update(build_execution_replacements(dig_dir))
     rewrite_passes: list[dict[str, str]] = []
     if replacements:
         rewrite_passes.append(dict(sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)))
-    if source_map:
-        rewrite_passes.append(source_map)
     if rewrite_passes:
         rewrite_metadata_and_provenance(
             metadata_paths=metadata_paths,
