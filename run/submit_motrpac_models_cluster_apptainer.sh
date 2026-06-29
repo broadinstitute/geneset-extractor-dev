@@ -551,8 +551,8 @@ run_task() {
 
   echo "MoTrPAC task ${task_id}: tissue=${tissue_id} group=${model_group} model=${model_id}"
 
-  if [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then
-    local model_family cmd models_root tissue_label transcript_tissue_label runner
+  local model_family cmd models_root tissue_label transcript_tissue_label runner
+  build_model_only_cmd() {
     model_family="$(resolve_model_family_for_id "${model_id}")"
     if [[ -z "${model_family}" ]]; then
       echo "Unable to resolve MoTrPAC model family for ${model_id}" >&2
@@ -643,6 +643,10 @@ run_task() {
         exit 1
         ;;
     esac
+  }
+
+  if [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then
+    build_model_only_cmd
     echo "+ ${cmd[*]}"
     "${cmd[@]}"
     return
@@ -650,6 +654,9 @@ run_task() {
 
   if [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
     local model_dir refresh_cmd
+    build_model_only_cmd
+    echo "+ ${cmd[*]}"
+    "${cmd[@]}"
     if [[ "${model_group}" == "HZ" ]]; then
       model_dir="${MOTRPAC_OUT_ROOT}/genesets/all_tissues/models/${model_id}"
     else

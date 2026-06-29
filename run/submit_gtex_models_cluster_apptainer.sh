@@ -533,9 +533,9 @@ run_task() {
 
   echo "GTEx task ${task_id}: tissue=${tissue_id} group=${model_group} model=${model_id}"
 
-  if [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then
-    local models_root runner
-    models_root="${GTEX_OUT_ROOT}/genesets/${tissue_id}/models"
+  local cmd models_root runner
+  models_root="${GTEX_OUT_ROOT}/genesets/${tissue_id}/models"
+  build_model_only_cmd() {
     case "${model_group}" in
       AB)
         runner="${REPO_ROOT}/geneset-extractor-dev/GTEx/src/run_age_binned_model.py"
@@ -591,6 +591,10 @@ run_task() {
         exit 1
         ;;
     esac
+  }
+
+  if [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then
+    build_model_only_cmd
     echo "+ ${cmd[*]}"
     "${cmd[@]}"
     return
@@ -598,6 +602,9 @@ run_task() {
 
   if [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
     local model_dir refresh_cmd
+    build_model_only_cmd
+    echo "+ ${cmd[*]}"
+    "${cmd[@]}"
     model_dir="${GTEX_OUT_ROOT}/genesets/${tissue_id}/models/${model_id}"
     refresh_cmd=(
       bash "${REPO_ROOT}/geneset-extractor-dev/run/refresh_model_metadata_and_provenance.sh"

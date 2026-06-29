@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import argparse
 import csv
+import importlib
 import json
 import os
 import shlex
 import subprocess
 import sys
 import shutil
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -18,6 +20,10 @@ DIRECTORY_ARG_PLACEHOLDERS = {
     "--raw_counts_dir": "/path/to/raw_counts_dir",
     "--dea_dir": "/path/to/dea_dir",
 }
+
+WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
+DEV_REPO_ROOT = WORKSPACE_ROOT / "geneset-extractor-dev"
+KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000")
 
 
 def parse_args() -> argparse.Namespace:
@@ -154,6 +160,274 @@ def restore_from_originals(metadata_paths: list[Path]) -> None:
 def run_command(cmd: list[str], *, cwd: Path, env: dict[str, str]) -> None:
     print("$ " + shell_join(cmd), flush=True)
     subprocess.run(cmd, cwd=str(cwd), env=env, check=True)
+
+
+@contextmanager
+def prepend_sys_path(path: Path):
+    path_text = str(path)
+    sys.path.insert(0, path_text)
+    try:
+        yield
+    finally:
+        try:
+            sys.path.remove(path_text)
+        except ValueError:
+            pass
+
+
+def read_tsv_rows(path: Path) -> list[dict[str, str]]:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))
+
+
+def resolve_tsv_value(path: Path, *, key_field: str, key_value: str, value_field: str) -> str:
+    for row in read_tsv_rows(path):
+        if str(row.get(key_field, "")).strip() == key_value:
+            return str(row.get(value_field, "")).strip()
+    return ""
+
+
+def infer_library_name(
+    *,
+    description_template_tsv: str | None,
+    metadata_paths: list[Path],
+) -> str:
+    if description_template_tsv:
+        template_path = Path(description_template_tsv).resolve()
+        for part in template_path.parts:
+            if part in KNOWN_LIBRARIES:
+                return part
+    for metadata_path in metadata_paths:
+        try:
+            payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        gene_set = payload.get("gene_set", {})
+        if isinstance(gene_set, dict):
+            name = str(gene_set.get("name", "")).strip()
+            if name.startswith("GTEx_"):
+                return "GTEx"
+            if name.startswith("MoTrPAC_"):
+                return "MoTrPAC"
+            if name.startswith("HuBMAP_"):
+                return "HuBMAP"
+            if name.startswith("LINCS_L1000_"):
+                return "LINCS_L1000"
+    raise SystemExit("Unable to infer library for model refresh. Provide --description_template_tsv from a library config.")
+
+
+def gtex_model_group(model_id: str) -> str:
+    if str(model_id).startswith("AB"):
+        return "AB"
+    if str(model_id).startswith("AC"):
+        return "AC"
+    if str(model_id).startswith("HZ"):
+        return "HZ"
+    raise SystemExit(f"Unsupported GTEx model_id for standalone refresh: {model_id}")
+
+
+def regenerate_gtex_model_sidecars(args: argparse.Namespace, model_dir: Path, env: dict[str, str]) -> None:
+    tissue_id = model_dir.parent.parent.name
+    models_root = model_dir.parent
+    tissue_list_tsv = DEV_REPO_ROOT / "GTEx" / "config" / "broad_tissue_list.tsv"
+    tissue_label = (
+        resolve_tsv_value(tissue_list_tsv, key_field="tissue_id", key_value=tissue_id, value_field="tissue_name")
+        or resolve_tsv_value(tissue_list_tsv, key_field="tissue_id", key_value=tissue_id, value_field="tissue_label")
+    )
+    if not tissue_label:
+        raise SystemExit(f"Unable to resolve GTEx tissue label for tissue_id={tissue_id}")
+    group = gtex_model_group(args.model_id)
+    if group == "AB":
+        cmd = [
+            str(Path(args.python_bin).resolve()),
+            str(DEV_REPO_ROOT / "GTEx" / "src" / "run_age_binned_model.py"),
+            "--model_id",
+            args.model_id,
+            "--tissue_id",
+            tissue_id,
+            "--tissue_label",
+            tissue_label,
+            "--run_root",
+            str(models_root),
+            "--python_bin",
+            str(Path(args.python_bin).resolve()),
+            "--dig_dir",
+            str(Path(args.dig_dir).resolve()),
+            "--age_binned_model_manifest",
+            str(DEV_REPO_ROOT / "GTEx" / "config" / "age_binned_model_manifest.tsv"),
+            "--tissue_column",
+            "SMTS",
+            "--tissue_value",
+            tissue_label,
+            "--write_model_only",
+        ]
+    elif group == "AC":
+        cmd = [
+            str(Path(args.python_bin).resolve()),
+            str(DEV_REPO_ROOT / "GTEx" / "src" / "run_continuous_age_model.py"),
+            "--tissue_id",
+            tissue_id,
+            "--tissue_label",
+            tissue_label,
+            "--model_ids",
+            args.model_id,
+            "--run_root",
+            str(models_root),
+            "--python_bin",
+            str(Path(args.python_bin).resolve()),
+            "--rscript_bin",
+            os.environ.get("RSCRIPT_BIN", "Rscript"),
+            "--dig_dir",
+            str(Path(args.dig_dir).resolve()),
+            "--continuous_age_model_manifest",
+            str(DEV_REPO_ROOT / "GTEx" / "config" / "continuous_age_model_manifest.tsv"),
+            "--tissue_column",
+            "SMTS",
+            "--tissue_value",
+            tissue_label,
+            "--write_model_only",
+        ]
+    else:
+        cmd = [
+            str(Path(args.python_bin).resolve()),
+            str(DEV_REPO_ROOT / "GTEx" / "src" / "run_hz_notebook_model.py"),
+            "--model_id",
+            args.model_id,
+            "--tissue_id",
+            tissue_id,
+            "--tissue_label",
+            tissue_label,
+            "--run_root",
+            str(models_root),
+            "--python_bin",
+            str(Path(args.python_bin).resolve()),
+            "--rscript_bin",
+            os.environ.get("RSCRIPT_BIN", "Rscript"),
+            "--dig_dir",
+            str(Path(args.dig_dir).resolve()),
+            "--tissue_column",
+            "SMTS",
+            "--tissue_value",
+            tissue_label,
+            "--write_model_only",
+        ]
+    run_command(cmd, cwd=WORKSPACE_ROOT, env=env)
+
+
+def regenerate_motrpac_model_sidecars(args: argparse.Namespace, model_dir: Path, env: dict[str, str]) -> None:
+    model_list_tsv = DEV_REPO_ROOT / "MoTrPAC" / "config" / "model_list.tsv"
+    model_family = resolve_tsv_value(model_list_tsv, key_field="model_id", key_value=args.model_id, value_field="model_family")
+    if not model_family:
+        raise SystemExit(f"Unable to resolve MoTrPAC model family for model_id={args.model_id}")
+    if model_family in {"training", "timewise"}:
+        tissue_id = model_dir.parent.parent.name
+        models_root = model_dir.parent
+        tissue_list_tsv = DEV_REPO_ROOT / "MoTrPAC" / "config" / "tissue_list.tsv"
+        tissue_label = resolve_tsv_value(tissue_list_tsv, key_field="tissue_id", key_value=tissue_id, value_field="tissue_label")
+        transcript_tissue_label = resolve_tsv_value(tissue_list_tsv, key_field="tissue_id", key_value=tissue_id, value_field="transcript_tissue_label")
+        if not tissue_label or not transcript_tissue_label:
+            raise SystemExit(f"Unable to resolve MoTrPAC tissue labels for tissue_id={tissue_id}")
+        runner = "run_motrpac_training_model.py" if model_family == "training" else "run_motrpac_timewise_model.py"
+        cmd = [
+            str(Path(args.python_bin).resolve()),
+            str(DEV_REPO_ROOT / "MoTrPAC" / "src" / runner),
+            "--model_id",
+            args.model_id,
+            "--tissue_id",
+            tissue_id,
+            "--tissue_label",
+            tissue_label,
+            "--transcript_tissue_label",
+            transcript_tissue_label,
+            "--run_root",
+            str(models_root),
+            "--python_bin",
+            str(Path(args.python_bin).resolve()),
+            "--rscript_bin",
+            os.environ.get("RSCRIPT_BIN", "Rscript"),
+            "--dig_dir",
+            str(Path(args.dig_dir).resolve()),
+            "--model_manifest",
+            str(DEV_REPO_ROOT / "MoTrPAC" / "config" / "model_manifest.tsv"),
+            "--write_model_only",
+        ]
+        run_command(cmd, cwd=WORKSPACE_ROOT, env=env)
+        return
+
+    with prepend_sys_path(DEV_REPO_ROOT / "MoTrPAC" / "src"):
+        if model_family == "hz_released_dea":
+            module = importlib.import_module("run_motrpac_hz_released_dea_model")
+            settings_by_model = module.load_model_settings(DEV_REPO_ROOT / "MoTrPAC" / "config" / "model_manifest.tsv")
+            module.write_model_sidecar(
+                path=model_dir / "extractor" / "geneset.model.json",
+                model_id=args.model_id,
+                settings=settings_by_model[args.model_id],
+            )
+            return
+        if model_family == "hz_raw_aggregated":
+            module = importlib.import_module("run_motrpac_hz_raw_aggregated_model")
+            settings_by_model = module.row_map(module.read_tsv(DEV_REPO_ROOT / "MoTrPAC" / "config" / "model_manifest.tsv"), "model_id")
+            module.write_model_sidecar(
+                path=model_dir / "extractor" / "geneset.model.json",
+                model_id=args.model_id,
+                settings=settings_by_model[args.model_id],
+            )
+            return
+    raise SystemExit(f"Unsupported MoTrPAC model family for standalone refresh: {model_family}")
+
+
+def regenerate_hubmap_model_sidecars(args: argparse.Namespace, model_dir: Path) -> None:
+    with prepend_sys_path(DEV_REPO_ROOT / "HuBMAP" / "src"):
+        module = importlib.import_module("run_hubmap_hz_model")
+        settings_by_model = module.load_model_settings(DEV_REPO_ROOT / "HuBMAP" / "config" / "model_manifest.tsv")
+        module.write_model_sidecar(
+            path=model_dir / "extractor" / "geneset.model.json",
+            model_id=args.model_id,
+            settings=settings_by_model[args.model_id],
+        )
+
+
+def regenerate_lincs_model_sidecars(args: argparse.Namespace, model_dir: Path) -> None:
+    with prepend_sys_path(DEV_REPO_ROOT / "LINCS_L1000" / "src"):
+        module = importlib.import_module("run_lincs_l1000_hz_model")
+        settings_by_model = module.load_model_settings(DEV_REPO_ROOT / "LINCS_L1000" / "config" / "model_manifest.tsv")
+        workflow_name = module.model_workflow_info(args.model_id)[1]
+        term_prefix = module.lincs_term_prefix(args.model_id)
+        module.write_model_sidecar(
+            path=model_dir / "extractor" / "geneset.model.json",
+            model_id=args.model_id,
+            settings=settings_by_model[args.model_id],
+            workflow_name=workflow_name,
+            term_prefix=term_prefix,
+        )
+
+
+def regenerate_model_sidecars(
+    *,
+    args: argparse.Namespace,
+    model_dir: Path,
+    metadata_paths: list[Path],
+    env: dict[str, str],
+) -> None:
+    library_name = infer_library_name(
+        description_template_tsv=args.description_template_tsv,
+        metadata_paths=metadata_paths,
+    )
+    if library_name == "GTEx":
+        regenerate_gtex_model_sidecars(args, model_dir, env)
+        return
+    if library_name == "MoTrPAC":
+        regenerate_motrpac_model_sidecars(args, model_dir, env)
+        return
+    if library_name == "HuBMAP":
+        regenerate_hubmap_model_sidecars(args, model_dir)
+        return
+    if library_name == "LINCS_L1000":
+        regenerate_lincs_model_sidecars(args, model_dir)
+        return
+    raise SystemExit(f"Unsupported library for standalone model-sidecar regeneration: {library_name}")
 
 
 def parse_s3_uri(s3_uri: str) -> tuple[str, str]:
@@ -426,6 +700,12 @@ def main() -> int:
     existing_pythonpath = env.get("PYTHONPATH", "").strip()
     dig_pythonpath = str(dig_dir / "src")
     env["PYTHONPATH"] = dig_pythonpath if not existing_pythonpath else f"{dig_pythonpath}{os.pathsep}{existing_pythonpath}"
+    regenerate_model_sidecars(
+        args=args,
+        model_dir=model_dir,
+        metadata_paths=metadata_paths,
+        env=env,
+    )
 
     for metadata_path in metadata_paths:
         ensure_model_sidecar(metadata_path, args.model_id)
