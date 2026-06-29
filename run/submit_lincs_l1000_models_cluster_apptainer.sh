@@ -357,11 +357,6 @@ run_inner_worker() {
   if [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then
     build_model_only_cmd
   elif [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
-    build_model_only_cmd
-    printf '$'
-    printf ' %q' "${cmd[@]}"
-    printf '\n'
-    "${cmd[@]}"
     cmd=(
       bash "${REPO_ROOT}/geneset-extractor-dev/run/refresh_model_metadata_and_provenance.sh"
       --model_id "${model_id}"

@@ -552,9 +552,6 @@ run_task() {
 
   if [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
     local model_dir refresh_cmd
-    build_model_only_cmd
-    echo "+ ${cmd[*]}"
-    "${cmd[@]}"
     if [[ "${model_group}" == "HZ" ]]; then
       model_dir="${MOTRPAC_OUT_ROOT}/genesets/all_tissues/models/${model_id}"
     else

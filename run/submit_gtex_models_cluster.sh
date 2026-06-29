@@ -496,9 +496,6 @@ run_task() {
 
   if [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
     local model_dir refresh_cmd
-    build_model_only_cmd
-    echo "+ ${cmd[*]}"
-    "${cmd[@]}"
     model_dir="${GTEX_OUT_ROOT}/genesets/${tissue_id}/models/${model_id}"
     refresh_cmd=(
       bash "${REPO_ROOT}/geneset-extractor-dev/run/refresh_model_metadata_and_provenance.sh"
