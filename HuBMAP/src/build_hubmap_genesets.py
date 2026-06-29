@@ -141,8 +141,6 @@ def main() -> int:
             if raw_asctb_dir is None:
                 raise SystemExit("HZ1 requires --raw_asctb_dir")
             cmd.extend(["--raw_asctb_dir", str(raw_asctb_dir)])
-            if asctb_dir is not None:
-                cmd.extend(["--asctb_dir", str(asctb_dir)])
         elif model_id == "HZ2":
             resolved_input_matrix = input_matrix
             if resolved_input_matrix is None:

@@ -197,8 +197,8 @@ def build_workflow_cmd(
         ]
         if raw_asctb_dir is not None:
             cmd.extend(["--raw_asctb_dir", str(raw_asctb_dir)])
-        resolved_asctb_dir = asctb_dir if asctb_dir is not None else (workflow_out / "ASCTB_Tables")
-        cmd.extend(["--asctb_dir", str(resolved_asctb_dir)])
+        elif asctb_dir is not None:
+            cmd.extend(["--asctb_dir", str(asctb_dir)])
     elif model_id == "HZ2":
         if input_matrix is None:
             sibling_hz1_matrix = workflow_out.parent.parent / "HZ1" / "workflow" / "gene_attribute_matrix.txt.gz"
