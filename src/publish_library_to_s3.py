@@ -72,6 +72,10 @@ def parse_args():  # type: () -> argparse.Namespace
         help="Destination S3 URI where provenance-resolved rerun inputs should be published.",
     )
     parser.add_argument(
+        "--model_id",
+        help="Optional single model identifier to publish from the library output tree, for example AB1 or HZ1.",
+    )
+    parser.add_argument(
         "--manifest_out",
         help="Optional TSV manifest path. Defaults to <local_output_root>/publish_library_manifest.tsv.",
     )
@@ -142,7 +146,26 @@ def should_skip_path(path):  # type: (Path) -> bool
     return False
 
 
-def iter_output_candidates(*, local_output_root, s3_output_root, excluded_paths=None):  # type: (**Any) -> List[CandidateFile]
+def _parts_contain_model_id(parts, model_id):  # type: (Tuple[str, ...], str) -> bool
+    for index in range(len(parts) - 1):
+        if parts[index] == "models" and parts[index + 1] == model_id:
+            return True
+    return False
+
+
+def path_matches_model_filter(path, local_output_root, model_id):  # type: (Path, Path, Optional[str]) -> bool
+    if not model_id:
+        return True
+    try:
+        relative_parts = path.relative_to(local_output_root).parts
+    except ValueError:
+        relative_parts = path.parts
+    if _parts_contain_model_id(relative_parts, model_id):
+        return True
+    return _parts_contain_model_id(local_output_root.parts, model_id)
+
+
+def iter_output_candidates(*, local_output_root, s3_output_root, excluded_paths=None, model_id=None):  # type: (**Any) -> List[CandidateFile]
     candidates = []  # type: List[CandidateFile]
     normalized_s3_root = s3_output_root.rstrip("/")
     excluded_resolved_paths = set(path.resolve() for path in (excluded_paths or []))  # type: Set[Path]
@@ -153,6 +176,8 @@ def iter_output_candidates(*, local_output_root, s3_output_root, excluded_paths=
         if should_skip_path(path) or not path.is_file():
             continue
         if path.resolve() in excluded_resolved_paths:
+            continue
+        if not path_matches_model_filter(path, local_output_root, model_id):
             continue
         relative_path = path.relative_to(local_output_root).as_posix()
         candidates.append(
@@ -170,13 +195,15 @@ def iter_output_candidates(*, local_output_root, s3_output_root, excluded_paths=
     return candidates
 
 
-def iter_provenance_paths(local_output_root):  # type: (Path) -> List[Path]
+def iter_provenance_paths(local_output_root, model_id=None):  # type: (Path, Optional[str]) -> List[Path]
     paths = []
     print("scanning_provenance_files root={0}".format(local_output_root), flush=True)
     for index, path in enumerate(sorted(local_output_root.rglob("geneset.provenance.json")), 1):
         if index == 1 or index % 250 == 0:
             print("scanning_provenance_files found={0}".format(index), flush=True)
         if should_skip_path(path):
+            continue
+        if not path_matches_model_filter(path, local_output_root, model_id):
             continue
         paths.append(path)
     print("scanning_provenance_files complete found={0}".format(len(paths)), flush=True)
@@ -506,8 +533,9 @@ def main():  # type: () -> int
         local_output_root=local_output_root,
         s3_output_root=args.s3_output_root,
         excluded_paths=publisher_artifact_paths,
+        model_id=args.model_id,
     )
-    provenance_paths = iter_provenance_paths(local_output_root)
+    provenance_paths = iter_provenance_paths(local_output_root, model_id=args.model_id)
     input_candidates = resolve_input_candidates_from_provenance(
         local_output_root=local_output_root,
         output_candidates=output_candidates,
@@ -636,6 +664,7 @@ def main():  # type: () -> int
         "local_output_root": str(local_output_root),
         "s3_output_root": args.s3_output_root,
         "s3_input_root": args.s3_input_root,
+        "model_id": args.model_id,
         "dry_run": bool(args.dry_run),
         "overwrite": bool(args.overwrite),
         "force_publish": bool(args.force_publish),
