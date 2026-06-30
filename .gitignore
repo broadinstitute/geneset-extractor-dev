@@ -151,3 +151,16 @@
 !KOMP2/**/*.png
 
 archive/
+
+# KidsFirst DE Analysis
+!KidsFirst_DE_Analysis/
+!KidsFirst_DE_Analysis/run/
+!KidsFirst_DE_Analysis/run/**/
+!KidsFirst_DE_Analysis/src/
+!KidsFirst_DE_Analysis/src/**/
+!KidsFirst_DE_Analysis/docs/
+!KidsFirst_DE_Analysis/docs/**/
+!KidsFirst_DE_Analysis/README.md
+!KidsFirst_DE_Analysis/run/**/*.sh
+!KidsFirst_DE_Analysis/src/**/*.py
+!KidsFirst_DE_Analysis/docs/**/*.md
