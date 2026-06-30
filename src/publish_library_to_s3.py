@@ -52,8 +52,7 @@ class CandidateFile(object):
 def parse_args():  # type: () -> argparse.Namespace
     parser = argparse.ArgumentParser(
         description=(
-            "Publish one library run output tree plus provenance-resolved rerun inputs to S3 "
-            "without modifying local metadata or provenance files."
+            "Publish one library run output tree to S3 without modifying local metadata or provenance files."
         )
     )
     parser.add_argument(
@@ -65,11 +64,6 @@ def parse_args():  # type: () -> argparse.Namespace
         "--s3_output_root",
         required=True,
         help="Destination S3 URI that mirrors the local output root.",
-    )
-    parser.add_argument(
-        "--s3_input_root",
-        required=True,
-        help="Destination S3 URI where provenance-resolved rerun inputs should be published.",
     )
     parser.add_argument(
         "--model_id",
@@ -503,7 +497,6 @@ def main():  # type: () -> int
         raise SystemExit("--force_publish requires --overwrite for non-dry-run uploads.")
     local_output_root = ensure_directory(Path(args.local_output_root), "local output root")
     _bucket, _prefix = parse_s3_uri(args.s3_output_root)
-    _input_bucket, _input_prefix = parse_s3_uri(args.s3_input_root)
 
     manifest_path = (
         Path(args.manifest_out).expanduser().resolve()
@@ -536,34 +529,23 @@ def main():  # type: () -> int
         model_id=args.model_id,
     )
     provenance_paths = iter_provenance_paths(local_output_root, model_id=args.model_id)
-    input_candidates = resolve_input_candidates_from_provenance(
-        local_output_root=local_output_root,
-        output_candidates=output_candidates,
-        provenance_paths=provenance_paths,
-        s3_input_root=args.s3_input_root,
-    )
     log_line(log_path, f"discovered_output_files={len(output_candidates)}")
     log_line(log_path, f"scanned_provenance_files={len(provenance_paths)}")
-    log_line(log_path, f"discovered_input_files={len(input_candidates)}")
     print(
-        "publish_library_to_s3 "
-        "outputs={0} provenance_files={1} inputs={2}".format(
+        "publish_library_to_s3 outputs={0} provenance_files={1}".format(
             len(output_candidates),
             len(provenance_paths),
-            len(input_candidates),
         ),
         flush=True,
     )
 
-    candidates = output_candidates + input_candidates
+    candidates = output_candidates
     manifest_rows = []  # type: List[Dict[str, Any]]
     uploaded_count = 0
     skipped_existing_count = 0
     failed_count = 0
     output_bucket, output_prefix = parse_s3_uri(args.s3_output_root)
-    input_bucket, input_prefix = parse_s3_uri(args.s3_input_root)
     output_existing_keys = set()  # type: Set[str]
-    input_existing_keys = set()  # type: Set[str]
     if args.force_publish:
         print("force_publish=true", flush=True)
     else:
@@ -575,15 +557,6 @@ def main():  # type: () -> int
         )
         if output_list_error:
             raise SystemExit("Unable to list existing S3 output objects: {0}".format(output_list_error))
-
-        print("listing_s3 input_prefix={0}".format(args.s3_input_root), flush=True)
-        input_existing_keys, input_list_error = list_s3_keys_under_prefix(
-            aws_cli_bin=args.aws_cli_bin,
-            s3_uri_root=args.s3_input_root,
-            log_path=log_path,
-        )
-        if input_list_error:
-            raise SystemExit("Unable to list existing S3 input objects: {0}".format(input_list_error))
 
     total_candidates = len(candidates)
     for index, candidate in enumerate(candidates, 1):
@@ -612,10 +585,7 @@ def main():  # type: () -> int
             exists = False
         else:
             candidate_bucket, candidate_key = parse_s3_uri(candidate.s3_uri)
-            if candidate.category == "output":
-                exists = candidate_bucket == output_bucket and candidate_key in output_existing_keys
-            else:
-                exists = candidate_bucket == input_bucket and candidate_key in input_existing_keys
+            exists = candidate_bucket == output_bucket and candidate_key in output_existing_keys
         if exists and not args.overwrite:
             row["status"] = "skipped_existing"
             skipped_existing_count += 1
@@ -663,14 +633,12 @@ def main():  # type: () -> int
     summary_payload = {
         "local_output_root": str(local_output_root),
         "s3_output_root": args.s3_output_root,
-        "s3_input_root": args.s3_input_root,
         "model_id": args.model_id,
         "dry_run": bool(args.dry_run),
         "overwrite": bool(args.overwrite),
         "force_publish": bool(args.force_publish),
         "n_output_candidates": len(output_candidates),
         "n_provenance_files": len(provenance_paths),
-        "n_input_candidates": len(input_candidates),
         "n_uploaded": uploaded_count,
         "n_skipped_existing": skipped_existing_count,
         "n_failed": failed_count,
@@ -684,7 +652,6 @@ def main():  # type: () -> int
         "summary "
         f"n_output_candidates={len(output_candidates)} "
         f"n_provenance_files={len(provenance_paths)} "
-        f"n_input_candidates={len(input_candidates)} "
         f"n_uploaded={uploaded_count} "
         f"n_skipped_existing={skipped_existing_count} "
         f"n_failed={failed_count}",
