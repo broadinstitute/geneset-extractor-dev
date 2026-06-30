@@ -67,7 +67,7 @@ def parse_args():  # type: () -> argparse.Namespace
     )
     parser.add_argument(
         "--model_id",
-        help="Optional single model identifier to publish from the library output tree, for example AB1 or HZ1.",
+        help="Optional comma-delimited model identifier list to publish from the library output tree, for example AB1,AC1,HZ1.",
     )
     parser.add_argument(
         "--manifest_out",
@@ -140,6 +140,20 @@ def should_skip_path(path):  # type: (Path) -> bool
     return False
 
 
+def parse_model_ids(raw_model_ids):  # type: (Optional[str]) -> List[str]
+    if not raw_model_ids:
+        return []
+    model_ids = []  # type: List[str]
+    seen = set()  # type: Set[str]
+    for part in raw_model_ids.split(","):
+        model_id = part.strip()
+        if not model_id or model_id in seen:
+            continue
+        seen.add(model_id)
+        model_ids.append(model_id)
+    return model_ids
+
+
 def _parts_contain_model_id(parts, model_id):  # type: (Tuple[str, ...], str) -> bool
     for index in range(len(parts) - 1):
         if parts[index] == "models" and parts[index + 1] == model_id:
@@ -147,22 +161,26 @@ def _parts_contain_model_id(parts, model_id):  # type: (Tuple[str, ...], str) ->
     return False
 
 
-def path_matches_model_filter(path, local_output_root, model_id):  # type: (Path, Path, Optional[str]) -> bool
-    if not model_id:
+def path_matches_model_filter(path, local_output_root, model_ids):  # type: (Path, Path, List[str]) -> bool
+    if not model_ids:
         return True
     try:
         relative_parts = path.relative_to(local_output_root).parts
     except ValueError:
         relative_parts = path.parts
-    if _parts_contain_model_id(relative_parts, model_id):
-        return True
-    return _parts_contain_model_id(local_output_root.parts, model_id)
+    for model_id in model_ids:
+        if _parts_contain_model_id(relative_parts, model_id):
+            return True
+        if _parts_contain_model_id(local_output_root.parts, model_id):
+            return True
+    return False
 
 
-def iter_output_candidates(*, local_output_root, s3_output_root, excluded_paths=None, model_id=None):  # type: (**Any) -> List[CandidateFile]
+def iter_output_candidates(*, local_output_root, s3_output_root, excluded_paths=None, model_ids=None):  # type: (**Any) -> List[CandidateFile]
     candidates = []  # type: List[CandidateFile]
     normalized_s3_root = s3_output_root.rstrip("/")
     excluded_resolved_paths = set(path.resolve() for path in (excluded_paths or []))  # type: Set[Path]
+    model_ids = model_ids or []
     print("scanning_output_tree root={0}".format(local_output_root), flush=True)
     for index, path in enumerate(sorted(local_output_root.rglob("*")), 1):
         if index == 1 or index % 5000 == 0:
@@ -171,7 +189,7 @@ def iter_output_candidates(*, local_output_root, s3_output_root, excluded_paths=
             continue
         if path.resolve() in excluded_resolved_paths:
             continue
-        if not path_matches_model_filter(path, local_output_root, model_id):
+        if not path_matches_model_filter(path, local_output_root, model_ids):
             continue
         relative_path = path.relative_to(local_output_root).as_posix()
         candidates.append(
@@ -189,15 +207,16 @@ def iter_output_candidates(*, local_output_root, s3_output_root, excluded_paths=
     return candidates
 
 
-def iter_provenance_paths(local_output_root, model_id=None):  # type: (Path, Optional[str]) -> List[Path]
+def iter_provenance_paths(local_output_root, model_ids=None):  # type: (Path, Optional[List[str]]) -> List[Path]
     paths = []
+    model_ids = model_ids or []
     print("scanning_provenance_files root={0}".format(local_output_root), flush=True)
     for index, path in enumerate(sorted(local_output_root.rglob("geneset.provenance.json")), 1):
         if index == 1 or index % 250 == 0:
             print("scanning_provenance_files found={0}".format(index), flush=True)
         if should_skip_path(path):
             continue
-        if not path_matches_model_filter(path, local_output_root, model_id):
+        if not path_matches_model_filter(path, local_output_root, model_ids):
             continue
         paths.append(path)
     print("scanning_provenance_files complete found={0}".format(len(paths)), flush=True)
@@ -497,6 +516,7 @@ def main():  # type: () -> int
         raise SystemExit("--force_publish requires --overwrite for non-dry-run uploads.")
     local_output_root = ensure_directory(Path(args.local_output_root), "local output root")
     _bucket, _prefix = parse_s3_uri(args.s3_output_root)
+    model_ids = parse_model_ids(args.model_id)
 
     manifest_path = (
         Path(args.manifest_out).expanduser().resolve()
@@ -526,9 +546,9 @@ def main():  # type: () -> int
         local_output_root=local_output_root,
         s3_output_root=args.s3_output_root,
         excluded_paths=publisher_artifact_paths,
-        model_id=args.model_id,
+        model_ids=model_ids,
     )
-    provenance_paths = iter_provenance_paths(local_output_root, model_id=args.model_id)
+    provenance_paths = iter_provenance_paths(local_output_root, model_ids=model_ids)
     log_line(log_path, f"discovered_output_files={len(output_candidates)}")
     log_line(log_path, f"scanned_provenance_files={len(provenance_paths)}")
     print(
@@ -634,6 +654,7 @@ def main():  # type: () -> int
         "local_output_root": str(local_output_root),
         "s3_output_root": args.s3_output_root,
         "model_id": args.model_id,
+        "model_ids": model_ids,
         "dry_run": bool(args.dry_run),
         "overwrite": bool(args.overwrite),
         "force_publish": bool(args.force_publish),
