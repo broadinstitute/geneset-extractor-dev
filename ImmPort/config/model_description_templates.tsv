@@ -1,0 +1,2 @@
+model_id	description_template
+IM1	ImmPort bulk RNA-seq immune-response gene set for {signature_name} (model {model.model_id}): signed up and down differential-expression signatures from study RNA-seq data.

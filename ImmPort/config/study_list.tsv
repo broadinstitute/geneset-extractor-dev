@@ -1,0 +1,5 @@
+study_id	study_accession	study_label	expression_object	sample_metadata_object	group_column	case_label	control_label	covariates	released_de_object	enabled
+SDY1299_HIGH_vs_other	SDY1299	RA synovial subtype (SDY1299): HIGH vs other				HIGH	other		SDY1299/RNA_sequencing_result/Supplemental Table 2 deseq.HIGH_vs_other.703906.txt	true
+SDY1299_MIXED_vs_other	SDY1299	RA synovial subtype (SDY1299): MIXED vs other				MIXED	other		SDY1299/RNA_sequencing_result/Supplemental Table 3 deseq.MIXED_vs_other.703905.txt	false
+SDY1299_LOW_vs_other	SDY1299	RA synovial subtype (SDY1299): LOW vs other				LOW	other		SDY1299/RNA_sequencing_result/Supplemental Table 4 deseq.LOW_vs_other.703904.txt	true
+SDY2948	SDY2948	SDY2948 PBMC: MTB300 antigen-stimulated vs unstimulated (Neg)	expr.tsv	samples.tsv	condition	MTB300	Neg			true

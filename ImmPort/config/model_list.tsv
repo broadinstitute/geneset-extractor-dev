@@ -1,0 +1,2 @@
+model_id	model_family	description	enabled
+IM1	bulk_de	per_study_case_vs_control_with_covariate	true

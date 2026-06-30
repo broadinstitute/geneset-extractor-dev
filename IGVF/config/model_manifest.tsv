@@ -1,0 +1,2 @@
+model_id	workflow_input_mode	workflow_gmt_name	workflow_min_gmt_size	workflow_z_threshold	workflow_orientation	workflow_sep	workflow_term_column	workflow_gene_symbol_column	workflow_gene_id_column	workflow_ratio_column	workflow_effect_column	workflow_score_column	workflow_pvalue_column	workflow_pvalue_max	workflow_score_threshold	workflow_top_k_per_direction
+PS1	long_de	gene_set_library_crisp.gmt	5	3.0	perturbation_by_gene	auto	region	gene_names	NA	fc	NA	log(pval)-hypergeom	NA	NA	NA	NA
