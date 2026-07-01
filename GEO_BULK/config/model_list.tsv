@@ -1,0 +1,2 @@
+model_id	model_family	description	enabled
+GB1	bulk_rna_de	GEO bulk RNA two-group differential-expression signatures	true

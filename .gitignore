@@ -23,12 +23,17 @@
 !LINCS_L1000/config/model_list.tsv
 !LINCS_L1000/config/model_manifest.tsv
 !LINCS_L1000/config/model_description_templates.tsv
+!GEO_BULK/config/dataset_list.tsv
+!GEO_BULK/config/model_list.tsv
+!GEO_BULK/config/model_manifest.tsv
+!GEO_BULK/config/model_description_templates.tsv
 !HuBMAP/config/model_list.tsv
 !HuBMAP/config/model_manifest.tsv
 !HuBMAP/config/model_description_templates.tsv
 
 # Allow traversing these subdirectories
 !LINCS_L1000/
+!GEO_BULK/
 !RummaGEO/
 !ExRNA/
 !GTEx/
@@ -44,6 +49,7 @@
 !docs/
 
 !LINCS_L1000/**/
+!GEO_BULK/**/
 !RummaGEO/**/
 !ExRNA/**/
 !GTEx/**/
@@ -86,6 +92,13 @@
 !LINCS_L1000/**/*.md
 !LINCS_L1000/**/*.pdf
 !LINCS_L1000/**/*.png
+!GEO_BULK/**/*.py
+!GEO_BULK/**/*.r
+!GEO_BULK/**/*.R
+!GEO_BULK/**/*.sh
+!GEO_BULK/**/*.md
+!GEO_BULK/**/*.pdf
+!GEO_BULK/**/*.png
 !RummaGEO/**/*.py
 !RummaGEO/**/*.r
 !RummaGEO/**/*.R
