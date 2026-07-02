@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 import argparse
 import csv
 import json
@@ -8,31 +10,18 @@ import re
 import shlex
 import subprocess
 import sys
-from typing import Dict, List
+from typing import Dict
 
 from amp_ad_selection_io import default_model_manifest_path, repo_root
 
 
 CONTRAST_COLUMNS = ["Study", "Tissue", "Model", "Comparison", "Sex"]
-REQUIRED_COLUMNS = [
-    "Study",
-    "Tissue",
-    "Model",
-    "Comparison",
-    "Sex",
-    "ensembl_gene_id",
-    "hgnc_symbol",
-    "logFC",
-    "t",
-    "P.Value",
-    "adj.P.Val",
-]
 SAFE_RE = re.compile(r"[^A-Za-z0-9._=-]+")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run the AMP-AD ADKP released DEG model as a wrapper around DIG rna_deg_multi."
+        description="Run the AMP-AD ADKP released DEG model through DIG-owned preparation and extraction."
     )
     parser.add_argument("--model_id", default="AD1")
     parser.add_argument("--input_tsv", required=True)
@@ -73,17 +62,22 @@ def load_model_settings(path):
 
 
 def safe_component(value):
-    text = SAFE_RE.sub("_", str(value).strip())
-    text = text.strip("_")
+    text = SAFE_RE.sub("_", str(value or "").strip()).strip("_")
     return text or "NA"
 
 
-def make_comparison_id(row):
-    return "__".join(safe_component(row.get(col, "")) for col in CONTRAST_COLUMNS)
+def comparison_human_from_id(value):
+    parts = str(value or "").split("__")
+    if len(parts) == len(CONTRAST_COLUMNS):
+        return " / ".join(part or "NA" for part in parts)
+    return str(value or "").replace("_", " ")
 
 
-def make_comparison_name(row):
-    return " / ".join(str(row.get(col, "")).strip() or "NA" for col in CONTRAST_COLUMNS)
+def comparison_gmt_from_id(value):
+    parts = str(value or "").split("__")
+    if len(parts) == len(CONTRAST_COLUMNS):
+        return "_".join(safe_component(part) for part in parts)
+    return safe_component(value)
 
 
 def write_text(path, text):
@@ -92,60 +86,21 @@ def write_text(path, text):
 
 
 def shell_join(cmd):
-    return " ".join(shlex.quote(part) for part in cmd)
+    return " ".join(shlex.quote(str(part)) for part in cmd)
 
 
-def prepare_deg_long(input_tsv, output_tsv, contrast_summary_tsv, run_summary_json):
-    output_tsv.parent.mkdir(parents=True, exist_ok=True)
-    contrast_counts = {}  # type: Dict[str, int]
-    contrast_names = {}  # type: Dict[str, str]
-    row_count = 0
-    with input_tsv.open("r", encoding="utf-8", newline="") as in_handle:
-        reader = csv.DictReader(in_handle, delimiter="\t")
-        if not reader.fieldnames:
-            raise SystemExit(f"Input TSV has no header: {input_tsv}")
-        missing = [col for col in REQUIRED_COLUMNS if col not in reader.fieldnames]
-        if missing:
-            raise SystemExit(f"Input TSV is missing required columns: {', '.join(missing)}")
-        fieldnames = ["comparison_id", "comparison_name"] + list(reader.fieldnames)
-        with output_tsv.open("w", encoding="utf-8", newline="") as out_handle:
-            writer = csv.DictWriter(out_handle, delimiter="\t", fieldnames=fieldnames, lineterminator="\n")
-            writer.writeheader()
-            for row in reader:
-                comparison_id = make_comparison_id(row)
-                comparison_name = make_comparison_name(row)
-                row_out = {"comparison_id": comparison_id, "comparison_name": comparison_name}
-                row_out.update(row)
-                writer.writerow(row_out)
-                contrast_counts[comparison_id] = contrast_counts.get(comparison_id, 0) + 1
-                contrast_names.setdefault(comparison_id, comparison_name)
-                row_count += 1
-
-    with contrast_summary_tsv.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            delimiter="\t",
-            fieldnames=["comparison_id", "comparison_name", "n_rows"],
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        for comparison_id in sorted(contrast_counts):
-            writer.writerow(
-                {
-                    "comparison_id": comparison_id,
-                    "comparison_name": contrast_names[comparison_id],
-                    "n_rows": contrast_counts[comparison_id],
-                }
-            )
-
-    payload = {
-        "input_tsv": str(input_tsv),
-        "prepared_deg_tsv": str(output_tsv),
-        "n_rows": row_count,
-        "n_comparisons": len(contrast_counts),
-        "comparison_id_columns": CONTRAST_COLUMNS,
-    }
-    write_text(run_summary_json, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+def build_workflow_cmd(*, python_bin, input_tsv, workflow_out):
+    return [
+        python_bin,
+        "-m",
+        "geneset_extractors.cli",
+        "workflows",
+        "amp_ad_released_dea",
+        "--input_tsv",
+        str(input_tsv),
+        "--out_dir",
+        str(workflow_out),
+    ]
 
 
 def build_extractor_cmd(*, python_bin, prepared_tsv, extractor_out, settings):
@@ -160,7 +115,7 @@ def build_extractor_cmd(*, python_bin, prepared_tsv, extractor_out, settings):
         "--comparison_column",
         "comparison_id",
         "--comparison_name_column",
-        "comparison_name",
+        "comparison_gmt_label",
         "--out_dir",
         str(extractor_out),
         "--organism",
@@ -168,7 +123,7 @@ def build_extractor_cmd(*, python_bin, prepared_tsv, extractor_out, settings):
         "--genome_build",
         manifest_value(settings, "genome_build", "hg19"),
         "--signature_name",
-        manifest_value(settings, "signature_name", "AMP_AD_bulk_brain_RNA"),
+        manifest_value(settings, "signature_name", "AMP_AD"),
         "--gene_id_column",
         "ensembl_gene_id",
         "--gene_symbol_column",
@@ -201,6 +156,10 @@ def build_extractor_cmd(*, python_bin, prepared_tsv, extractor_out, settings):
         manifest_value(settings, "extractor_gmt_min_genes", "5"),
         "--gmt_max_genes",
         manifest_value(settings, "extractor_gmt_max_genes", "500"),
+        "--gmt_name_separator",
+        "_",
+        "--gmt_signed_labels",
+        "up_dn",
     ]
     for key, flag in [
         ("extractor_padj_max", "--padj_max"),
@@ -216,15 +175,22 @@ def build_extractor_cmd(*, python_bin, prepared_tsv, extractor_out, settings):
     return cmd
 
 
-def write_model_commands(model_out, prep_cmd, extractor_cmd, dig_dir):
+def add_mirror_flags(cmd, args):
+    if args.provenance_mirror_local_prefix:
+        cmd.extend(["--provenance_mirror_local_prefix", args.provenance_mirror_local_prefix])
+    if args.provenance_mirror_remote_prefix:
+        cmd.extend(["--provenance_mirror_remote_prefix", args.provenance_mirror_remote_prefix])
+
+
+def write_model_commands(model_out, workflow_cmd, extractor_cmd, dig_dir):
     text = "\n".join(
         [
             "# AMP-AD Model Commands",
             "",
-            "## Prepare Released DEG Table",
+            "## Prepare Released DEG Table With DIG",
             "",
             "```bash",
-            shell_join(prep_cmd),
+            f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))}:$PYTHONPATH {shell_join(workflow_cmd)}",
             "```",
             "",
             "## Extract Gene Sets",
@@ -245,16 +211,91 @@ def read_manifest_rows(path):
         return list(csv.DictReader(handle, delimiter="\t"))
 
 
-def write_model_sidecars(extractor_out, model_id, settings):
+def read_template(path, model_id):
+    if not path or not Path(path).exists():
+        return ""
+    with Path(path).open("r", encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            if str(row.get("model_id", "")).strip() == model_id:
+                return str(row.get("description_template", "")).strip()
+    return ""
+
+
+def render_description(template, *, model_id, comparison_label):
+    if not template:
+        return (
+            f"AMP-AD bulk brain RNA differential-expression gene set for {comparison_label} "
+            f"using model {model_id}: library built from the AD Knowledge Portal released merged "
+            "differential-expression summary table, grouped by study, tissue, model, comparison, and sex."
+        )
+    return template.replace("{comparison_label}", comparison_label).replace("{model.model_id}", model_id)
+
+
+def patch_metadata_description(meta_path, description):
+    if not meta_path.exists():
+        return
+    payload = json.loads(meta_path.read_text(encoding="utf-8"))
+    payload.setdefault("gene_set", {})["description"] = description
+    write_text(meta_path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def rewrite_gmt_descriptions(gmt_path, description):
+    if not gmt_path.exists():
+        return
+    lines = []
+    for raw in gmt_path.read_text(encoding="utf-8").splitlines():
+        if not raw.strip():
+            continue
+        fields = raw.split("\t")
+        if len(fields) < 3:
+            lines.append(raw)
+            continue
+        name = fields[0]
+        lowered = name.lower()
+        if lowered.endswith("_up"):
+            desc = f"Up-regulated genes from the {description}"
+        elif lowered.endswith("_dn"):
+            desc = f"Down-regulated genes from the {description}"
+        else:
+            desc = description
+        lines.append("\t".join([name, desc, *fields[2:]]))
+    write_text(gmt_path, "\n".join(lines) + ("\n" if lines else ""))
+
+
+def scrub_publish_paths(model_out, *, local_prefix, remote_prefix):
+    if not local_prefix or not remote_prefix:
+        return
+    replacements = [
+        (str(Path(local_prefix).resolve()), str(remote_prefix).rstrip("/")),
+        (str(Path(local_prefix).resolve()).replace("/diabetes2/", "/diabetes/"), str(remote_prefix).rstrip("/")),
+        (str(Path(sys.executable).resolve()), "python"),
+    ]
+    text_suffixes = {".json", ".md", ".txt", ".log"}
+    for path in model_out.rglob("*"):
+        if not path.is_file() or path.suffix not in text_suffixes:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        new_text = text
+        for source, target in replacements:
+            new_text = new_text.replace(source, target)
+        if new_text != text:
+            path.write_text(new_text, encoding="utf-8")
+
+
+def write_model_sidecars(extractor_out, model_id, settings, *, input_tsv, template_path=None):
     manifest_path = extractor_out / "manifest.tsv"
     rows = read_manifest_rows(manifest_path)
+    template = read_template(template_path, model_id)
     root_payload = {
         "schema_version": "1",
         "library": "AMP_AD",
         "model_id": model_id,
         "model_group": "AD",
         "model_label": "adkp_released_dea",
-        "workflow_name": "amp_ad_prepare_released_dea",
+        "workflow_name": "amp_ad_released_dea",
         "extractor_name": "rna_deg_multi",
         "parameters": {
             "comparison_id_columns": CONTRAST_COLUMNS,
@@ -264,25 +305,43 @@ def write_model_sidecars(extractor_out, model_id, settings):
             "select": manifest_value(settings, "extractor_select", "top_k"),
         },
         "inputs": {
+            "input_tsv": str(input_tsv),
+            "input_label": "AD Knowledge Portal merged differential-expression summary table",
+            "source_repository": "AMP-AD Knowledge Portal",
+            "source_dataset": "released merged differential-expression summary table",
+            "study_fields": CONTRAST_COLUMNS,
+            "comparison_fields": CONTRAST_COLUMNS,
             "organism": "human",
             "genome_build": manifest_value(settings, "genome_build", "hg19"),
         },
         "naming": {
+            "signature_name": manifest_value(settings, "signature_name", "AMP_AD"),
             "comparison_style": "Study__Tissue__Model__Comparison__Sex",
-            "gene_set_pattern": "AMP_AD_bulk_brain_RNA_<comparison>_up|dn",
+            "gene_set_pattern": "AMP_AD_<comparison>_up|dn",
+            "direction_labels": ["up", "dn"],
         },
     }
     write_text(extractor_out / "geneset.model.json", json.dumps(root_payload, indent=2, sort_keys=True) + "\n")
     for row in rows:
+        comparison = str(row.get("comparison", "")).strip()
+        comparison_human = comparison_human_from_id(comparison)
+        comparison_gmt = comparison_gmt_from_id(comparison)
+        description = render_description(template, model_id=model_id, comparison_label=comparison_human)
+        gmt_path = extractor_out / str(row.get("path", "")).strip() / "genesets.gmt"
         meta_rel = str(row.get("meta_path", "")).strip()
         if not meta_rel:
             continue
         payload = dict(root_payload)
         payload["naming"] = {
             **root_payload["naming"],
-            "comparison_label": str(row.get("label", "")).strip(),
+            "comparison_label": comparison_gmt,
+            "comparison_label_human": comparison_human,
         }
-        write_text((extractor_out / meta_rel).with_name("geneset.model.json"), json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        meta_path = extractor_out / meta_rel
+        write_text(meta_path.with_name("geneset.model.json"), json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        patch_metadata_description(meta_path, description)
+        rewrite_gmt_descriptions(gmt_path, description)
+    rewrite_gmt_descriptions(extractor_out / "genesets.gmt", "AMP-AD bulk brain RNA differential-expression gene set library")
 
 
 def run_command(cmd, log_path, env):
@@ -311,44 +370,45 @@ def main():
     workflow_out = model_out / "workflow"
     extractor_out = model_out / "extractor"
     prepared_tsv = workflow_out / "adkp_ampad_deg_long.tsv"
-    contrast_summary = workflow_out / "contrast_summary.tsv"
-    run_summary = workflow_out / "run_summary.json"
     log_path = model_out / "run.log"
 
-    prep_cmd = [
-        str(Path(args.python_bin).resolve()),
-        str(Path(__file__).resolve()),
-        "--model_id",
-        args.model_id,
-        "--input_tsv",
-        str(input_tsv),
-        "--run_root",
-        str(Path(args.run_root).expanduser().resolve()),
-        "--dig_dir",
-        str(dig_dir),
-        "--model_manifest",
-        str(Path(args.model_manifest).resolve()),
-    ]
+    workflow_cmd = build_workflow_cmd(
+        python_bin=str(Path(args.python_bin).resolve()),
+        input_tsv=input_tsv,
+        workflow_out=workflow_out,
+    )
     extractor_cmd = build_extractor_cmd(
         python_bin=str(Path(args.python_bin).resolve()),
         prepared_tsv=prepared_tsv,
         extractor_out=extractor_out,
         settings=settings,
     )
-    write_model_commands(model_out, prep_cmd, extractor_cmd, dig_dir)
+    add_mirror_flags(workflow_cmd, args)
+    add_mirror_flags(extractor_cmd, args)
+    write_model_commands(model_out, workflow_cmd, extractor_cmd, dig_dir)
 
+    template_path = Path(args.model_manifest).resolve().parent / "model_description_templates.tsv"
     if args.write_model_only:
-        write_model_sidecars(extractor_out, args.model_id, settings)
+        write_model_sidecars(extractor_out, args.model_id, settings, input_tsv=input_tsv, template_path=template_path)
+        scrub_publish_paths(
+            model_out,
+            local_prefix=args.provenance_mirror_local_prefix,
+            remote_prefix=args.provenance_mirror_remote_prefix,
+        )
         return 0
     if args.write_commands_only:
         return 0
 
-    prepare_deg_long(input_tsv, prepared_tsv, contrast_summary, run_summary)
-
     env = os.environ.copy()
     env["PYTHONPATH"] = f"{dig_dir / 'src'}{os.pathsep}{env.get('PYTHONPATH', '')}"
+    run_command(workflow_cmd, log_path, env)
     run_command(extractor_cmd, log_path, env)
-    write_model_sidecars(extractor_out, args.model_id, settings)
+    write_model_sidecars(extractor_out, args.model_id, settings, input_tsv=input_tsv, template_path=template_path)
+    scrub_publish_paths(
+        model_out,
+        local_prefix=args.provenance_mirror_local_prefix,
+        remote_prefix=args.provenance_mirror_remote_prefix,
+    )
     return 0
 
 
