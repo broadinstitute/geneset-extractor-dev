@@ -24,7 +24,7 @@ DIRECTORY_ARG_PLACEHOLDERS = {
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEV_REPO_ROOT = WORKSPACE_ROOT / "geneset-extractor-dev"
-KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000")
+KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "CPTAC")
 
 
 def parse_args() -> argparse.Namespace:
@@ -260,6 +260,22 @@ def motrpac_row_description(model_payload: dict[str, object], base_description: 
     )
 
 
+def cptac_row_description(model_payload: dict[str, object], base_description: str, direction: str, stem: str) -> str:
+    header, body = split_description(base_description)
+    header = replace_header_gene_set_kind(header, direction)
+    higher_lower = "higher" if direction == "up" else "lower"
+    clause = f"genes with {higher_lower} phosphoregulation in tumor relative to adjacent normal"
+    naming = model_payload.get("naming", {}) if isinstance(model_payload.get("naming"), dict) else {}
+    parameters = model_payload.get("parameters", {}) if isinstance(model_payload.get("parameters"), dict) else {}
+    variant_label = str(naming.get("variant_label", "")).strip()
+    protein_adjustment = str(parameters.get("protein_adjustment", "")).strip()
+    if variant_label == "ProteinAdjusted" or protein_adjustment == "subtract":
+        clause += " after protein-level adjustment"
+    if body:
+        clause += f", identified by {body}"
+    return f"{header}: {clause}."
+
+
 def lincs_row_description(model_payload: dict[str, object], base_description: str, direction: str, stem: str) -> str:
     _header, body = split_description(base_description)
     model_id = str(model_payload.get("model_id", "")).strip()
@@ -298,6 +314,8 @@ def render_gmt_row_description(set_name: str, model_payload: dict[str, object], 
         return gtex_row_description(model_payload, base_description, direction, stem)
     if library == "MoTrPAC" and direction:
         return motrpac_row_description(model_payload, base_description, direction, stem)
+    if library == "CPTAC" and direction:
+        return cptac_row_description(model_payload, base_description, direction, stem)
     if library == "LINCS_L1000" and direction:
         return lincs_row_description(model_payload, base_description, direction, stem)
     if library == "HuBMAP":
@@ -495,6 +513,8 @@ def infer_library_name(
                 return "HuBMAP"
             if name.startswith("LINCS_L1000_"):
                 return "LINCS_L1000"
+            if name.startswith("CPTAC_"):
+                return "CPTAC"
     raise SystemExit("Unable to infer library for model refresh. Provide --description_template_tsv from a library config.")
 
 
@@ -719,6 +739,32 @@ def regenerate_lincs_model_sidecars(args: argparse.Namespace, model_dir: Path) -
         )
 
 
+def regenerate_cptac_model_sidecars(args: argparse.Namespace, model_dir: Path, env: dict[str, str]) -> None:
+    cohort_id = model_dir.parent.parent.name
+    model_id = args.model_id
+    with prepend_sys_path(DEV_REPO_ROOT / "CPTAC" / "src"):
+        sio = importlib.import_module("cptac_selection_io")
+        config_dir = sio.default_config_dir()
+        studies = sio.load_study_manifest(config_dir / "study_manifest.tsv")
+        models = sio.load_models(config_dir / "model_list.tsv", config_dir / "model_manifest.tsv")
+        study = studies.get(cohort_id)
+        if not study:
+            raise SystemExit(f"Unable to resolve CPTAC cohort for cohort_id={cohort_id}")
+        model = models.get(model_id)
+        if not model:
+            raise SystemExit(f"Unable to resolve CPTAC model for model_id={model_id}")
+        module = importlib.import_module("run_cptac_ptm_model")
+        module.write_model_sidecars(
+            extractor_dir=model_dir / "extractor",
+            model_id=model_id,
+            cohort_id=cohort_id,
+            cohort_label=study["cohort_label"],
+            phospho_pdc_study_id=study["phospho_pdc_study_id"],
+            proteome_pdc_study_id=study["proteome_pdc_study_id"],
+            model=model,
+        )
+
+
 def regenerate_model_sidecars(
     *,
     args: argparse.Namespace,
@@ -741,6 +787,9 @@ def regenerate_model_sidecars(
         return
     if library_name == "LINCS_L1000":
         regenerate_lincs_model_sidecars(args, model_dir)
+        return
+    if library_name == "CPTAC":
+        regenerate_cptac_model_sidecars(args, model_dir, env)
         return
     raise SystemExit(f"Unsupported library for standalone model-sidecar regeneration: {library_name}")
 
