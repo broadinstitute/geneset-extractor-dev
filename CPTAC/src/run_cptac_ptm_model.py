@@ -13,7 +13,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cptac_selection_io as sio
 import fetch_pdc_study as fetch
-import build_pdc_provenance_overlay as ovl
 
 DEFAULT_OUT_ROOT = "cptac_all_models"
 
@@ -214,17 +213,18 @@ def run_model(
         cmd, env = engine_cmd(dig_dir, python_bin, *prepare_args)
         _run(cmd, env, dig_dir, log_lines)
 
-        # 3. overlay (read the manifest the fetch step wrote)
-        manifest_rows = sio.read_tsv(fetched["file_manifest"])
-        operation_meta = {
-            "script_url": "https://github.com/broadinstitute/geneset-extractor-dev/blob/main/CPTAC/src/run_cptac_ptm_model.py",
-        }
-        written = ovl.write_overlay(
-            manifest_rows=manifest_rows,
-            prepared_dir=str(workflow_dir),
-            operation_meta=operation_meta,
-            out_dir=model_out,
-        )
+        # 3. overlay (DIG builds it from the manifest the fetch step wrote)
+        overlay_args = [
+            "provenance", "overlay",
+            "--pdc_file_manifest_tsv", str(fetched["file_manifest"]),
+            "--prepared_dir", str(workflow_dir),
+            "--out_dir", str(model_out),
+            "--operation_script_url",
+            "https://github.com/broadinstitute/geneset-extractor-dev/blob/main/CPTAC/src/run_cptac_ptm_model.py",
+        ]
+        cmd, env = engine_cmd(dig_dir, python_bin, *overlay_args)
+        _run(cmd, env, dig_dir, log_lines)
+        overlay_json = model_out / "provenance_overlay.json"
 
         # 4. extract
         eflags = sio.extractor_flags(model)
@@ -251,7 +251,7 @@ def run_model(
             "--ptm_type", pflags.get("ptm_type", "phospho"),
             "--use_reference_bundle", "false",
             "--emit_small_gene_sets", "true",
-            "--provenance_overlay_json", str(written["overlay_json"]),
+            "--provenance_overlay_json", str(overlay_json),
             "--signature_name", f"CPTAC_{cohort_token(study['cohort_label'])}",
             "--gmt_name_style", "publish",
             "--gmt_signed_labels", "up,dn",
