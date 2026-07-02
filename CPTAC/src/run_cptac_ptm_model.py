@@ -14,8 +14,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cptac_selection_io as sio
 import fetch_pdc_study as fetch
 
-DEFAULT_OUT_ROOT = "cptac_all_models"
-
 
 def engine_cmd(dig_dir: Path, python_bin: str, *args: str) -> tuple[list[str], dict]:
     cmd = [python_bin, "-m", "geneset_extractors.cli", *args]

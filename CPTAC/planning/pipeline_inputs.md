@@ -116,7 +116,7 @@ Optional:
 The main output tree for a per-study, per-model run is:
 
 - `<out_root>/genesets/<cohort_id>/fetch/` — downloaded reports, sample annotations, file manifest
-- `<out_root>/genesets/<cohort_id>/models/<model_id>/prepared/` — engine-prepared PTM and protein matrices, sample metadata
+- `<out_root>/genesets/<cohort_id>/models/<model_id>/workflow/` — engine-prepared PTM and protein matrices, sample metadata
 - `<out_root>/genesets/<cohort_id>/models/<model_id>/extractor/` — gene sets (GMT), extractor outputs
 - `<out_root>/genesets/<cohort_id>/models/<model_id>/provenance_overlay.json` — CRDC-native provenance overlay consumed by the extractor
 - `<out_root>/genesets/<cohort_id>/models/<model_id>/run.log` — captured stdout/stderr from both engine invocations
