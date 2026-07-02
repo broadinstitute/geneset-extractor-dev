@@ -1059,6 +1059,32 @@ def build_source_input_replacements(
     return dict(sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True))
 
 
+def build_metadata_patch_command(
+    *,
+    python_bin: Path,
+    metadata_path: Path,
+    model_dir: Path,
+    show_template_vars: bool,
+    template: str,
+) -> list[str]:
+    cmd = [
+        str(python_bin),
+        "-m",
+        "geneset_extractors.cli",
+        "metadata",
+        "patch",
+        str(metadata_path),
+    ]
+    if show_template_vars:
+        cmd.append("--show_template_vars")
+    else:
+        cmd.extend(["--description_template", template])
+    overlay_path = model_dir / "provenance_overlay.json"
+    if overlay_path.exists():
+        cmd.extend(["--provenance_overlay_json", str(overlay_path)])
+    return cmd
+
+
 def rewrite_metadata_and_provenance(
     *,
     metadata_paths: list[Path],
@@ -1118,18 +1144,13 @@ def main() -> int:
 
     for metadata_path in metadata_paths:
         ensure_model_sidecar(metadata_path, args.model_id)
-        cmd = [
-            str(Path(args.python_bin).resolve()),
-            "-m",
-            "geneset_extractors.cli",
-            "metadata",
-            "patch",
-            str(metadata_path),
-        ]
-        if args.show_template_vars:
-            cmd.append("--show_template_vars")
-        else:
-            cmd.extend(["--description_template", template])
+        cmd = build_metadata_patch_command(
+            python_bin=Path(args.python_bin).resolve(),
+            metadata_path=metadata_path,
+            model_dir=model_dir,
+            show_template_vars=args.show_template_vars,
+            template=template,
+        )
         run_command(cmd, cwd=dig_dir, env=env)
 
     local_output_root = (
