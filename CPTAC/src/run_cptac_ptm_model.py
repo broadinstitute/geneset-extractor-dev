@@ -247,11 +247,14 @@ def run_model(
             "--gene_aggregation", eflags.get("gene_aggregation", "signed_topk_mean"),
             "--out_dir", str(extractor_dir),
             "--organism", "human",
-            "--genome_build", "human",
+            "--genome_build", "hg38",
             "--ptm_type", pflags.get("ptm_type", "phospho"),
             "--use_reference_bundle", "false",
             "--emit_small_gene_sets", "true",
             "--provenance_overlay_json", str(written["overlay_json"]),
+            "--signature_name", f"CPTAC_{cohort_token(study['cohort_label'])}",
+            "--gmt_name_style", "publish",
+            "--gmt_signed_labels", "up,dn",
         ]
         cmd, env = engine_cmd(dig_dir, python_bin, *extract_args)
         _run(cmd, env, dig_dir, log_lines)

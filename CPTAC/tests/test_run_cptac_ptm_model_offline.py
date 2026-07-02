@@ -86,6 +86,27 @@ def test_run_model_offline_end_to_end(tmp_path):
     assert c["local_id"] == "drs://dg.4DFC/11111111-1111-1111-1111-111111111111"
     assert file_nodes[0]["dcc_url"] == "https://pdc.cancer.gov/pdc/study/PDC000128"
 
+    # Publish-facing GMT set names: cohort-level signature + DIG-appended variant label,
+    # no legacy '__signature=' scaffold.
+    gmt_paths = list(Path(model_dir).rglob("genesets.gmt"))
+    assert gmt_paths, "no genesets.gmt produced"
+    set_names: set[str] = set()
+    for gmt_path in gmt_paths:
+        for line in gmt_path.read_text().splitlines():
+            if not line.strip():
+                continue
+            set_names.add(line.split("\t", 1)[0])
+    assert "CPTAC_ClearCellRCC_ProteinAdjusted_up" in set_names
+    assert "CPTAC_ClearCellRCC_Unadjusted_up" in set_names
+    assert not any("__signature=" in name for name in set_names)
+
+    # genome_build must record the assembly ("hg38"), not the organism ("human").
+    for path in model_jsons:
+        meta_path = path.parent / "geneset.meta.json"
+        meta_payload = json.loads(meta_path.read_text())
+        assert meta_payload["gene_set"]["genome_build"] == "hg38"
+        assert meta_payload["input"]["genome_build"] == "hg38"
+
 
 def test_cohort_token():
     assert runner.cohort_token("Clear Cell RCC") == "ClearCellRCC"
