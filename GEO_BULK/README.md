@@ -2,7 +2,7 @@
 
 This library downloads public NCBI GEO files without authentication, derives explicit two-group bulk RNA differential-expression signatures through `dig-gene-set-extractors`, and retains source-file provenance.
 
-The enabled validation batch contains ninety explicit two-group comparisons:
+The enabled validation batch contains one hundred explicit two-group comparisons:
 
 - `GSE152418`: acute COVID-19 PBMCs versus healthy controls;
 - `GSE114765`: N-acetyl cysteine-treated versus untreated activated human CD8 T cells;
@@ -94,19 +94,90 @@ The enabled validation batch contains ninety explicit two-group comparisons:
 - `GSE206374`: BHLHE40 overexpression versus vector control in Jurkat cells;
 - `GSE210336`: Bifidobacterium longum versus PBS in neonatal and adult T cells;
 - `GSE212248`: biallelic RB1 mutation versus wild type in iPSC-derived microglia.
+- `GSE160761`: valproate versus vehicle in bipolar-disorder iPSC-derived neurons;
+- `GSE142221`: FOXA1 knockdown versus siRNA control in LNCaP prostate cancer cells;
+- `GSE160917`: DROSHA knockout versus control in 293T cells;
+- `GSE210070`: caspase-10 knockout versus control in PMA-treated U937 cells;
+- `GSE202345`: cardiac progenitor cells versus matched extracellular vesicles;
+- `GSE200291`: anti-TNF/IL-6 nanobody versus isotype control in rheumatoid-arthritis FLS/T-cell cocultures;
+- `GSE151243`: hidradenitis suppurativa lesion versus perilesion skin;
+- `GSE155832`: TGF-beta1 versus control in lung epithelial cells and fibroblasts;
+- `GSE142394`: co-culture versus control in H9 human embryonic stem cells;
+- `GSE152705`: combined Gaq and MEK inhibition versus vehicle in uveal melanoma cells.
 
-The first study excludes one convalescent sample through its explicit group-value configuration. The other enabled studies use NCBI-standardized count matrices whose columns are stable GSM accessions. Failed QC candidates remain disabled in the dataset table: `GSE191314`, `GSE161969`, `GSE70084`, `GSE209655`, `GSE228524`, `GSE129522`, `GSE115137`, `GSE188251`, `GSE220537`, `GSE227682`, `GSE232596`, `GSE202571`, `GSE235757`, `GSE239939`, `GSE232638`, `GSE193971`, `GSE146640`, `GSE151280`, `GSE159618`, `GSE161631`, `GSE216125`, and `GSE221945` produced no gene sets meeting the predeclared thresholds, while `GSE179747`, `GSE76453`, `GSE229339`, `GSE233159`, `GSE205274`, `GSE149413`, `GSE155530`, and `GSE164058` produced marginal or one-direction sets that failed QC.
+The first study excludes one convalescent sample through its explicit group-value configuration. The other enabled studies use NCBI-standardized count matrices whose columns are stable GSM accessions. Failed QC candidates remain disabled in the dataset table: `GSE191314`, `GSE161969`, `GSE70084`, `GSE209655`, `GSE228524`, `GSE129522`, `GSE115137`, `GSE188251`, `GSE220537`, `GSE227682`, `GSE232596`, `GSE202571`, `GSE235757`, `GSE239939`, `GSE232638`, `GSE193971`, `GSE146640`, `GSE151280`, `GSE159618`, `GSE161631`, `GSE216125`, and `GSE221945` produced no gene sets meeting the predeclared thresholds, while `GSE179747`, `GSE76453`, `GSE229339`, `GSE233159`, `GSE205274`, `GSE149413`, `GSE155530`, and `GSE164058` produced marginal or one-direction sets that failed QC. A final screening batch disabled four additional candidates that failed acceptance (`GSE164073` group-size mismatch, `GSE197505` and `GSE163597` empty differential-expression output, `GSE196469` single surviving gene) and held three passing candidates in reserve for a later release (`GSE212591`, `GSE153264`, `GSE146017`).
+
+## Gene-set naming and descriptions
+
+Each comparison emits a positive and a negative gene set named
+`GEO_BULK_<dataset_id>_<Comparison>_up` / `_dn` (for example
+`GEO_BULK_GSE102237_CellCycleArrestVsUntreated_up`). GMT second-column
+descriptions and metadata are regenerated during refresh from
+`config/model_description_templates.tsv` plus the `naming` block of each
+`geneset.model.json` sidecar, so names and descriptions are reproducible from
+config. Outputs land under `geo_bulk_all_models/genesets/<dataset_id>/models/<model_id>/`
+with `workflow/` and `extractor/` subdirectories.
+
+## Local run
 
 From the parent workspace:
 
 ```bash
 geneset-extractor-dev/GEO_BULK/run/build_geo_bulk_genesets.sh \
---datasets GSE152418,GSE114765,GSE152546,GSE157103,GSE247417,GSE109182,GSE117106,GSE164637,GSE178521,GSE198478,GSE75440,GSE182759,GSE214212,GSE132245,GSE123861,GSE160819,GSE102237,GSE225644,GSE182261,GSE256536,GSE237011,GSE151774,GSE198434,GSE128191,GSE254681,GSE178352,GSE78853,GSE86219,GSE125086,GSE60391,GSE216870,GSE217526,GSE218282,GSE220643,GSE221217,GSE221409,GSE245941,GSE247175,GSE247883,GSE248935,GSE224742,GSE227181,GSE233112,GSE233647,GSE235595,GSE241523,GSE207472,GSE208353,GSE209911,GSE210150,GSE213559,GSE227541,GSE244672,GSE242667,GSE235075,GSE203070,GSE226653,GSE230773,GSE223426,GSE222862,GSE234446,GSE193382,GSE195803,GSE195804,GSE196226,GSE198630,GSE201646,GSE208711,GSE210080,GSE211118,GSE212201,GSE215335,GSE217132,GSE221871,GSE143365,GSE143957,GSE145249,GSE148171,GSE150807,GSE151083,GSE159531,GSE160336,GSE160990,GSE195696,GSE200462,GSE201174,GSE202724,GSE206374,GSE210336,GSE212248 \
+--datasets GSE224742,GSE227181,GSE233112,GSE233647,GSE235595,GSE241523,GSE216870,GSE217526,GSE218282,GSE220643,GSE221217,GSE221409,GSE245941,GSE247175,GSE247883,GSE248935,GSE60391,GSE86219,GSE125086,GSE254681,GSE178352,GSE78853,GSE182261,GSE256536,GSE237011,GSE151774,GSE198434,GSE128191,GSE182759,GSE214212,GSE132245,GSE123861,GSE160819,GSE102237,GSE225644,GSE152418,GSE114765,GSE152546,GSE157103,GSE247417,GSE109182,GSE117106,GSE164637,GSE178521,GSE198478,GSE75440,GSE207472,GSE208353,GSE209911,GSE210150,GSE213559,GSE227541,GSE244672,GSE242667,GSE235075,GSE203070,GSE226653,GSE230773,GSE223426,GSE222862,GSE234446,GSE193382,GSE195803,GSE195804,GSE196226,GSE198630,GSE201646,GSE208711,GSE210080,GSE211118,GSE212201,GSE215335,GSE217132,GSE221871,GSE143365,GSE143957,GSE145249,GSE148171,GSE150807,GSE151083,GSE159531,GSE160336,GSE160990,GSE195696,GSE200462,GSE201174,GSE202724,GSE206374,GSE210336,GSE212248,GSE142221,GSE142394,GSE151243,GSE152705,GSE155832,GSE160761,GSE160917,GSE202345,GSE210070,GSE200291 \
   --models GB1
 ```
 
-No repository login or API token is required. Downloads are cached under `inputs/GEO_BULK/`, outside both Git repositories. Add `--offline` to prohibit downloads after the cache has been populated.
+Or pass `--datasets all` to run every enabled dataset. No repository login or API
+token is required. Downloads are cached under `inputs/GEO_BULK/`, outside both Git
+repositories. Add `--offline` to prohibit downloads after the cache has been
+populated. The configured `auto` differential-expression backend uses an available
+R backend when present and otherwise records a fallback to the dependency-light
+approximate backend; use `--backend lightweight` only for an explicit smoke run.
 
-The configured `auto` differential-expression backend uses an available R backend when present and otherwise records a fallback to the dependency-light approximate backend. Use `--backend lightweight` only for an explicit smoke run.
+## Cluster and Apptainer submission
+
+The submit scripts follow the branch-standard pattern (see the GTEx, HuBMAP,
+LINCS_L1000, and MoTrPAC libraries). They build an explicit worklist TSV over the
+enabled `(dataset_id, model_id)` pairs and submit one array task per row; no code
+edits are required to filter or rerun.
+
+```bash
+# One array over all enabled datasets:
+WORK_ROOT="$PWD" \
+  geneset-extractor-dev/run/submit_geo_bulk_models_cluster.sh --submit
+
+# Apptainer-backed array (requires APPTAINER_IMAGE):
+WORK_ROOT="$PWD" APPTAINER_IMAGE=/path/to/image.sif \
+  geneset-extractor-dev/run/submit_geo_bulk_models_cluster_apptainer.sh --submit
+
+# Filter to specific datasets or models:
+geneset-extractor-dev/run/submit_geo_bulk_models_cluster.sh --submit \
+  --dataset_id GSE152418,GSE114765 --model_id GB1
+```
+
+Output root, log root, and worklist paths are controlled by `GEO_BULK_OUT_ROOT`,
+`QSUB_LOG_ROOT`, and `GEO_BULK_WORKLIST`.
+
+## Refresh-only and sidecar-only reruns
+
+Metadata, provenance, GMT descriptions, publish-facing naming, and local-path
+sanitization are regenerated for existing outputs without recomputing differential
+expression:
+
+```bash
+# Refresh metadata/provenance/GMT for existing outputs:
+geneset-extractor-dev/run/submit_geo_bulk_models_cluster.sh --submit \
+  --refresh_metadata_and_provenance
+
+# Regenerate geneset.model.json sidecars only:
+geneset-extractor-dev/run/submit_geo_bulk_models_cluster.sh --submit \
+  --write_model_only
+```
+
+The same `--refresh_metadata_and_provenance` and `--write_model_only` modes are
+available directly on `GEO_BULK/src/run_geo_bulk_model.py` for a single dataset.
+Set `PROVENANCE_MIRROR_LOCAL_PREFIX` / `PROVENANCE_MIRROR_REMOTE_PREFIX` to rewrite
+local output paths to publish-safe locations during refresh.
 
 See `planning/pipeline_inputs.md` for input and output details.

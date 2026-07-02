@@ -1,2 +1,2 @@
 model_id	description_template
-GB1	Public GEO bulk RNA-seq differential-expression gene set using model {model.model_id}; source study and comparison are recorded in geneset.model.json, with raw GEO files, MINiML metadata, gene annotation, commands, and parameters retained in provenance.
+GB1	Public GEO bulk RNA-seq differential-expression gene set for {model.dataset_id} using model {model.model_id}: differential expression for {model.naming.comparison_label_human}, derived from the GEO count matrix, MINiML sample metadata, and GEO gene annotation, with ranked extraction from DEG results.

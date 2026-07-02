@@ -24,7 +24,7 @@ DIRECTORY_ARG_PLACEHOLDERS = {
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEV_REPO_ROOT = WORKSPACE_ROOT / "geneset-extractor-dev"
-KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000")
+KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "GEO_BULK")
 
 
 def parse_args() -> argparse.Namespace:
@@ -290,6 +290,12 @@ def hubmap_row_description(model_payload: dict[str, object], base_description: s
     )
 
 
+def geo_bulk_row_description(model_payload: dict[str, object], base_description: str, direction: str) -> str:
+    body = strip_trailing_period(base_description)
+    prefix = "Up-regulated" if direction == "up" else "Down-regulated"
+    return f"{prefix} genes from the {body}."
+
+
 def render_gmt_row_description(set_name: str, model_payload: dict[str, object], template: str) -> str:
     stem, direction = split_gmt_set_name(set_name)
     base_description = expand_description_template(template, model_payload, set_name)
@@ -302,6 +308,8 @@ def render_gmt_row_description(set_name: str, model_payload: dict[str, object], 
         return lincs_row_description(model_payload, base_description, direction, stem)
     if library == "HuBMAP":
         return hubmap_row_description(model_payload, base_description, stem)
+    if library == "GEO_BULK" and direction:
+        return geo_bulk_row_description(model_payload, base_description, direction)
     return base_description
 
 
@@ -356,6 +364,75 @@ def rewrite_gmt_descriptions(
                 changed = True
         if changed:
             write_gmt_rows(gmt_path, rows)
+
+
+def _geo_bulk_direction(set_name: str) -> str | None:
+    _, direction = split_gmt_set_name(set_name)
+    if direction:
+        return direction
+    lowered = set_name.lower()
+    if lowered.endswith("pos"):
+        return "up"
+    if lowered.endswith("neg"):
+        return "dn"
+    return None
+
+
+def normalize_geo_bulk_set_names(model_dir: Path, metadata_paths: list[Path]) -> dict[str, str]:
+    """Rename GEO_BULK GMT sets to the publish-facing pattern from the sidecar.
+
+    Converter output is shaped like ``<signature>__condition=..._pos|neg``. This
+    rewrites the GMT first column (and matching names in geneset.meta.json /
+    geneset.provenance.json) to ``<naming.signature_name>_up|dn`` so names are
+    library-facing and direction-aware. GEO_BULK-gated; no-op for other libraries.
+    """
+    name_map: dict[str, str] = {}
+    for gmt_path in discover_gmt_paths(model_dir):
+        sidecar_path = gmt_path.with_name("geneset.model.json")
+        if not sidecar_path.exists():
+            continue
+        try:
+            payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(payload, dict) or str(payload.get("library", "")).strip() != "GEO_BULK":
+            continue
+        naming = payload.get("naming", {}) if isinstance(payload.get("naming"), dict) else {}
+        signature = str(naming.get("signature_name", "")).strip()
+        if not signature:
+            continue
+        rows = parse_gmt_rows(gmt_path)
+        local_map: dict[str, str] = {}
+        for row in rows:
+            if not row or not row[0]:
+                continue
+            direction = _geo_bulk_direction(row[0])
+            if direction is None:
+                continue
+            new_name = f"{signature}_{direction}"
+            if new_name != row[0]:
+                local_map[row[0]] = new_name
+        if not local_map:
+            continue
+        changed = False
+        for row in rows:
+            if row and row[0] in local_map:
+                row[0] = local_map[row[0]]
+                changed = True
+        if changed:
+            write_gmt_rows(gmt_path, rows)
+        name_map.update(local_map)
+
+    if name_map:
+        ordered = dict(sorted(name_map.items(), key=lambda item: len(item[0]), reverse=True))
+        for metadata_path in metadata_paths:
+            for target in (metadata_path, metadata_path.with_name("geneset.provenance.json")):
+                if not target.exists():
+                    continue
+                payload = json.loads(target.read_text(encoding="utf-8"))
+                payload = rewrite_json_value(payload, ordered)
+                target.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return name_map
 
 
 def read_manifest_meta_paths(manifest_path: Path, extractor_dir: Path) -> list[Path]:
@@ -742,6 +819,11 @@ def regenerate_model_sidecars(
     if library_name == "LINCS_L1000":
         regenerate_lincs_model_sidecars(args, model_dir)
         return
+    if library_name == "GEO_BULK":
+        # GEO_BULK model sidecars are written from dataset config by the GEO_BULK
+        # wrapper (run_geo_bulk_model.py) or its standalone sidecar writer, so they
+        # are already present on disk before refresh; nothing to regenerate here.
+        return
     raise SystemExit(f"Unsupported library for standalone model-sidecar regeneration: {library_name}")
 
 
@@ -1023,6 +1105,8 @@ def main() -> int:
         metadata_paths=metadata_paths,
         env=env,
     )
+
+    normalize_geo_bulk_set_names(model_dir, metadata_paths)
 
     for metadata_path in metadata_paths:
         ensure_model_sidecar(metadata_path, args.model_id)

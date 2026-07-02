@@ -13,6 +13,7 @@ import time
 from urllib.request import Request, urlopen
 
 from geo_bulk_selection_io import (
+    build_model_sidecar,
     default_dataset_list_path,
     default_description_templates_path,
     default_model_manifest_path,
@@ -35,6 +36,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--backend")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--offline", action="store_true")
+    parser.add_argument("--provenance_mirror_local_prefix")
+    parser.add_argument("--provenance_mirror_remote_prefix")
+    parser.add_argument(
+        "--write_model_only",
+        action="store_true",
+        help="Regenerate geneset.model.json sidecars from config for existing outputs and exit.",
+    )
+    parser.add_argument(
+        "--refresh_metadata_and_provenance",
+        dest="refresh_only",
+        action="store_true",
+        help="Regenerate sidecars, refresh metadata/provenance/GMT, and re-promote canonical "
+        "artifacts for existing outputs without rerunning download or differential expression.",
+    )
     return parser
 
 
@@ -125,6 +140,97 @@ def promote_single_comparison_artifacts(extractor_dir: Path) -> Path:
     return comparison_dir
 
 
+def finalize_outputs(
+    *,
+    args: argparse.Namespace,
+    dataset: dict[str, str],
+    model: dict[str, str],
+    model_dir: Path,
+    extractor_dir: Path,
+    dig_dir: Path,
+    python_bin: str,
+    env: dict[str, str],
+    log_path: Path,
+    resolved_backend: str,
+) -> int:
+    """Write model sidecars, refresh metadata/provenance/GMT, and promote canonical artifacts.
+
+    Shared by full runs and by --write_model_only / --refresh_metadata_and_provenance reruns
+    so that alignment can be applied to existing outputs without recomputing differential
+    expression.
+    """
+    backend = args.backend or model["workflow_backend"]
+    sidecar_payload = build_model_sidecar(
+        dataset=dataset,
+        model=model,
+        dataset_id=args.dataset_id,
+        model_id=args.model_id,
+        requested_backend=backend,
+        resolved_backend=resolved_backend,
+    )
+    n_extractor_groups = write_model_sidecars(extractor_dir, sidecar_payload)
+    if args.write_model_only:
+        return 0
+    n_gmt_sets = write_signature_summary(extractor_dir)
+
+    out_root = Path(args.out_root).resolve()
+    mirror_local_prefix = args.provenance_mirror_local_prefix or str(out_root)
+    mirror_remote_prefix = args.provenance_mirror_remote_prefix or out_root.name
+    refresh_script = Path(__file__).resolve().parents[2] / "src" / "refresh_model_metadata_and_provenance.py"
+    refresh_command = [
+        python_bin,
+        str(refresh_script),
+        "--model_id",
+        args.model_id,
+        "--model_dir",
+        str(model_dir),
+        "--description_template_tsv",
+        str(Path(args.description_templates).resolve()),
+        "--python_bin",
+        python_bin,
+        "--dig_dir",
+        str(dig_dir),
+        "--provenance_mirror_local_prefix",
+        mirror_local_prefix,
+        "--provenance_mirror_remote_prefix",
+        mirror_remote_prefix,
+    ]
+    run_command(refresh_command, cwd=dig_dir, env=env, log_path=log_path)
+    canonical_comparison_dir = promote_single_comparison_artifacts(extractor_dir)
+    (model_dir / "run_summary.json").write_text(
+        json.dumps(
+            {
+                "dataset_id": args.dataset_id,
+                "model_id": args.model_id,
+                "requested_backend": backend,
+                "resolved_backend": resolved_backend,
+                "n_extractor_groups": n_extractor_groups,
+                "n_gmt_sets": n_gmt_sets,
+                "extractor_dir": str(extractor_dir),
+                "canonical_comparison_dir": str(canonical_comparison_dir),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return 0
+
+
+def resolve_existing_backend(model_dir: Path, de_dir: Path, fallback: str) -> str:
+    for candidate in (model_dir / "run_summary.json", de_dir / "prepare_summary.json"):
+        if candidate.exists():
+            try:
+                payload = json.loads(candidate.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            value = payload.get("resolved_backend")
+            if value:
+                return str(value)
+    return fallback
+
+
 def main() -> int:
     args = build_parser().parse_args()
     dataset = row_map(read_tsv(Path(args.dataset_list)), "dataset_id").get(args.dataset_id)
@@ -141,6 +247,31 @@ def main() -> int:
     prepared_dir = workflow_dir / "prepared"
     de_dir = workflow_dir / "de"
     extractor_dir = model_dir / "extractor"
+    python_bin = str(Path(args.python_bin).resolve())
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(dig_dir / "src")
+    log_path = model_dir / "run.log"
+    backend = args.backend or model["workflow_backend"]
+
+    if args.write_model_only or args.refresh_only:
+        if not extractor_dir.exists():
+            raise SystemExit(
+                f"--refresh/--write_model_only require existing outputs; missing {extractor_dir}"
+            )
+        resolved_backend = resolve_existing_backend(model_dir, de_dir, backend)
+        return finalize_outputs(
+            args=args,
+            dataset=dataset,
+            model=model,
+            model_dir=model_dir,
+            extractor_dir=extractor_dir,
+            dig_dir=dig_dir,
+            python_bin=python_bin,
+            env=env,
+            log_path=log_path,
+            resolved_backend=resolved_backend,
+        )
+
     if model_dir.exists() and any(model_dir.iterdir()):
         if not args.overwrite:
             raise SystemExit(f"Output exists; pass --overwrite to replace it: {model_dir}")
@@ -158,10 +289,6 @@ def main() -> int:
         dataset["annotation_url"], input_dir / dataset["annotation_filename"], offline=args.offline
     )
 
-    python_bin = str(Path(args.python_bin).resolve())
-    env = dict(os.environ)
-    env["PYTHONPATH"] = str(dig_dir / "src")
-    log_path = model_dir / "run.log"
     prepare_command = [
         python_bin,
         "-m",
@@ -203,7 +330,6 @@ def main() -> int:
         "--landing_page_url",
         dataset["landing_page_url"],
     ]
-    backend = args.backend or model["workflow_backend"]
     de_command = [
         python_bin,
         "-m",
@@ -282,61 +408,18 @@ def main() -> int:
     run_command(de_command, cwd=dig_dir, env=env, log_path=log_path)
     de_summary = json.loads((de_dir / "prepare_summary.json").read_text(encoding="utf-8"))
     resolved_backend = str(de_summary.get("resolved_backend") or backend)
-    sidecar_payload = {
-        "model_id": args.model_id,
-        "model_family": "bulk_rna_de",
-        "dataset_id": args.dataset_id,
-        "source_repository": "NCBI GEO",
-        "landing_page_url": dataset["landing_page_url"],
-        "comparison": {
-            "group_characteristic": dataset["group_characteristic"],
-            "condition_a_values": dataset["condition_a_values"].split(","),
-            "condition_b_values": dataset["condition_b_values"].split(","),
-            "condition_a_label": dataset["condition_a_label"],
-            "condition_b_label": dataset["condition_b_label"],
-            "covariates": [value.strip() for value in covariates.split(",") if value.strip()],
-        },
-        "parameters": {**model, "requested_backend": backend, "resolved_backend": resolved_backend},
-    }
-    n_extractor_groups = write_model_sidecars(extractor_dir, sidecar_payload)
-    n_gmt_sets = write_signature_summary(extractor_dir)
-
-    refresh_script = Path(__file__).resolve().parents[2] / "src" / "refresh_model_metadata_and_provenance.py"
-    refresh_command = [
-        python_bin,
-        str(refresh_script),
-        "--model_id",
-        args.model_id,
-        "--model_dir",
-        str(model_dir),
-        "--description_template_tsv",
-        str(Path(args.description_templates).resolve()),
-        "--python_bin",
-        python_bin,
-        "--dig_dir",
-        str(dig_dir),
-    ]
-    run_command(refresh_command, cwd=dig_dir, env=env, log_path=log_path)
-    canonical_comparison_dir = promote_single_comparison_artifacts(extractor_dir)
-    (model_dir / "run_summary.json").write_text(
-        json.dumps(
-            {
-                "dataset_id": args.dataset_id,
-                "model_id": args.model_id,
-                "requested_backend": backend,
-                "resolved_backend": resolved_backend,
-                "n_extractor_groups": n_extractor_groups,
-                "n_gmt_sets": n_gmt_sets,
-                "extractor_dir": str(extractor_dir),
-                "canonical_comparison_dir": str(canonical_comparison_dir),
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
+    return finalize_outputs(
+        args=args,
+        dataset=dataset,
+        model=model,
+        model_dir=model_dir,
+        extractor_dir=extractor_dir,
+        dig_dir=dig_dir,
+        python_bin=python_bin,
+        env=env,
+        log_path=log_path,
+        resolved_backend=resolved_backend,
     )
-    return 0
 
 
 if __name__ == "__main__":
