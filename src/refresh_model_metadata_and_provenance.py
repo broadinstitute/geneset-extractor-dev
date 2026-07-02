@@ -683,7 +683,7 @@ def rewrite_gtex_sidecars_for_metadata_paths(
     if group == "AC":
         with prepend_sys_path(DEV_REPO_ROOT / "GTEx" / "src"):
             module = importlib.import_module("run_continuous_age_model")
-            settings_by_model = module.load_model_settings(
+            settings_by_model = module.load_tissue_model_settings(
                 DEV_REPO_ROOT / "GTEx" / "config" / "continuous_age_model_manifest.tsv"
             )
             settings = settings_by_model[args.model_id]
