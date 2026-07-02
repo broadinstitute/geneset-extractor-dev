@@ -208,7 +208,7 @@ prepare_common() {
   mkdir -p "${WORK_ROOT}" "${QSUB_LOG_ROOT}"
   require_dir "${DIG_DIR}"
 
-  if [[ -z "${GENESET_EXTRACTORS_IN_APPTAINER:-}" ]]; then
+  if [[ ${SUBMIT_MODE} -eq 1 && -z "${GENESET_EXTRACTORS_IN_APPTAINER:-}" ]]; then
     require_var APPTAINER_IMAGE
     require_file "${APPTAINER_IMAGE}"
   fi

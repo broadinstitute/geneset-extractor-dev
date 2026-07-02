@@ -69,14 +69,6 @@ Notes:
 EOF
 }
 
-require_var() {
-  local name="$1"
-  if [[ -z "${!name:-}" ]]; then
-    echo "Missing required environment variable: ${name}" >&2
-    exit 1
-  fi
-}
-
 require_file() {
   local path="$1"
   if [[ ! -f "${path}" ]]; then
