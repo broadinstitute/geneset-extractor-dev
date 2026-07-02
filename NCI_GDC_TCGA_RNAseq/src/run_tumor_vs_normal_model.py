@@ -43,6 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gtf")
     parser.add_argument("--provenance_mirror_local_prefix")
     parser.add_argument("--provenance_mirror_remote_prefix")
+    parser.add_argument("--upstream_provenance_graph_json")
     parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--model_manifest", default=str(default_model_manifest_path()))
     parser.add_argument("--write_commands_only", action="store_true")
@@ -198,7 +199,7 @@ def write_grouped_model_sidecars(*, extractor_out: Path, **payload_kwargs) -> No
         write_json(sidecar_path, build_model_sidecar_payload(comparison_label=str(row.get("label", "")).strip(), **payload_kwargs))
 
 
-def build_workflow_cmd(*, python_bin, workflow_out, organism, genome_build, counts_tsv, project_metadata_tsv, group_column, settings, provenance_mirror_local_prefix, provenance_mirror_remote_prefix) -> list[str]:
+def build_workflow_cmd(*, python_bin, workflow_out, organism, genome_build, counts_tsv, project_metadata_tsv, group_column, settings, provenance_mirror_local_prefix, provenance_mirror_remote_prefix, upstream_provenance_graph_json=None) -> list[str]:
     cmd = [
         python_bin, "-m", "geneset_extractors.cli", "workflows", "rna_de_prepare",
         "--modality", "bulk",
@@ -223,6 +224,8 @@ def build_workflow_cmd(*, python_bin, workflow_out, organism, genome_build, coun
     ]
     if settings["workflow_covariates"] not in {"none", "NA", ""}:
         cmd += ["--covariates", settings["workflow_covariates"]]
+    if upstream_provenance_graph_json:
+        cmd += ["--upstream_provenance_graph_json", str(upstream_provenance_graph_json)]
     if provenance_mirror_local_prefix:
         cmd += ["--provenance_mirror_local_prefix", provenance_mirror_local_prefix]
     if provenance_mirror_remote_prefix:
@@ -390,6 +393,7 @@ def main() -> int:
         counts_tsv=counts_tsv, project_metadata_tsv=project_metadata_tsv, group_column=args.group_column, settings=settings,
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
+        upstream_provenance_graph_json=args.upstream_provenance_graph_json,
     )
     deg_tsv_for_extractor = workflow_out / "deg_long.tsv"
     extractor_cmd = build_extractor_cmd(

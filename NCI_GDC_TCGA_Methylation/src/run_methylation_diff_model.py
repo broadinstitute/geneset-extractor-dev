@@ -41,6 +41,7 @@ def parse_args():
     p.add_argument("--python_bin", default=sys.executable or "python3")
     p.add_argument("--organism", default="human", choices=["human", "mouse"])
     p.add_argument("--genome_build", default="hg38")
+    p.add_argument("--upstream_provenance_graph_json")
     p.add_argument("--dig_dir", required=True)
     p.add_argument("--model_manifest", default=str(default_model_manifest_path()))
     p.add_argument("--write_commands_only", action="store_true")
@@ -137,12 +138,15 @@ def build_model_sidecar_payload(*, model_id, tumor_type_id, tumor_type_label, pr
     }
 
 
-def build_workflow_cmd(*, python_bin, beta_project, sample_metadata_tsv, workflow_out, organism, genome_build):
-    return [python_bin, "-m", "geneset_extractors.cli", "workflows", "methylation_diff_prepare",
+def build_workflow_cmd(*, python_bin, beta_project, sample_metadata_tsv, workflow_out, organism, genome_build, upstream_provenance_graph_json=None):
+    cmd = [python_bin, "-m", "geneset_extractors.cli", "workflows", "methylation_diff_prepare",
             "--beta_matrix_tsv", str(beta_project), "--sample_metadata_tsv", str(sample_metadata_tsv),
             "--sample_id_column", "sample_id", "--group_column", "sample_type",
             "--comparison_mode", "condition_a_vs_b", "--condition_a", TUMOR, "--condition_b", NORMAL,
             "--out_dir", str(workflow_out), "--organism", organism, "--genome_build", genome_build]
+    if upstream_provenance_graph_json:
+        cmd += ["--upstream_provenance_graph_json", str(upstream_provenance_graph_json)]
+    return cmd
 
 
 def build_extractor_cmd(*, python_bin, cpg_tsv, extractor_out, organism, genome_build, gtf, probe_manifest_tsv, settings):
@@ -219,9 +223,10 @@ def main() -> int:
     if n_t < 1 or n_n < 1:
         raise SystemExit(f"{args.project_id}: insufficient samples (tumor={n_t}, normal={n_n})")
 
-    workflow_cmd = build_workflow_cmd(python_bin=args.python_bin, beta_project=beta_project,
+    workflow_cmd = build_workflow_cmd(python_bin=args.python_bin, beta_project=Path(args.beta_matrix_tsv).resolve(),
                                       sample_metadata_tsv=Path(args.sample_metadata_tsv).resolve(),
-                                      workflow_out=workflow_out, organism=args.organism, genome_build=args.genome_build)
+                                      workflow_out=workflow_out, organism=args.organism, genome_build=args.genome_build,
+                                      upstream_provenance_graph_json=args.upstream_provenance_graph_json)
     cpg_tsv = workflow_out / "cpg_diff.tsv"
     extractor_cmd = build_extractor_cmd(python_bin=args.python_bin, cpg_tsv=cpg_tsv, extractor_out=extractor_out,
                                         organism=args.organism, genome_build=args.genome_build, gtf=Path(args.gtf).resolve(),
