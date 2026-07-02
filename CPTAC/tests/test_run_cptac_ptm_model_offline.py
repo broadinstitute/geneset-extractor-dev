@@ -189,3 +189,62 @@ def test_write_model_sidecars_full_schema(tmp_path):
     assert payloads["subtract"]["naming"]["variant_label"] == "ProteinAdjusted"
     assert payloads["none"]["naming"]["signature_name"] == "CPTAC_ClearCellRCC_Unadjusted"
     assert payloads["subtract"]["naming"]["signature_name"] == "CPTAC_ClearCellRCC_ProteinAdjusted"
+
+
+def test_run_model_write_model_only_rewrites_existing_sidecars(tmp_path):
+    out_root = tmp_path / "cptac_outputs"
+    extractor_dir = out_root / "genesets" / "ccrcc" / "models" / "PT1" / "extractor"
+    variant_dirs = {"none": extractor_dir / "none", "subtract": extractor_dir / "subtract"}
+    for d in variant_dirs.values():
+        d.mkdir(parents=True)
+    _write_manifest(
+        extractor_dir,
+        [
+            {
+                "variant_id": f"protein_adjustment={adjustment}__gene_topk_sites=3",
+                "meta_path": f"{d.name}/geneset.meta.json",
+            }
+            for adjustment, d in variant_dirs.items()
+        ],
+    )
+
+    model_out = runner.run_model(
+        dig_dir="/nonexistent/dig-dir-not-touched-in-write-model-only-mode",
+        cohort_id="ccrcc",
+        model_id="PT1",
+        out_root=out_root,
+        config_dir=CONFIG,
+        write_model_only=True,
+    )
+
+    assert model_out == extractor_dir.parent
+    # Skipped fetch/prepare/overlay/extract: no workflow dir, provenance overlay, or logs.
+    assert not (model_out / "workflow").exists()
+    assert not (model_out / "provenance_overlay.json").exists()
+    assert not (model_out / "run.log").exists()
+
+    for adjustment, d in variant_dirs.items():
+        sidecar = d / "geneset.model.json"
+        assert sidecar.exists()
+        payload = json.loads(sidecar.read_text())
+        assert payload["model_id"] == "PT1"
+        assert payload["model_group"] == "PT"
+        assert payload["inputs"]["cohort_id"] == "ccrcc"
+        assert payload["parameters"]["protein_adjustment"] == adjustment
+
+
+def test_run_model_write_model_only_noop_when_extractor_dir_absent(tmp_path):
+    out_root = tmp_path / "cptac_outputs"
+
+    model_out = runner.run_model(
+        dig_dir="/nonexistent/dig-dir-not-touched-in-write-model-only-mode",
+        cohort_id="ccrcc",
+        model_id="PT1",
+        out_root=out_root,
+        config_dir=CONFIG,
+        write_model_only=True,
+    )
+
+    # No extractor/ output ever existed for this model -> clean no-op, nothing created.
+    assert not (model_out / "extractor").exists()
+    assert not model_out.exists()

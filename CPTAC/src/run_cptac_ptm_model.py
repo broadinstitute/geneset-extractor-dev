@@ -166,6 +166,7 @@ def run_model(
     source_dir: str | Path | None = None,
     api_cache_json: str | Path | None = None,
     python_bin: str = "python",
+    write_model_only: bool = False,
 ) -> Path:
     dig_dir = Path(dig_dir)
     config_dir = Path(config_dir) if config_dir else sio.default_config_dir()
@@ -179,6 +180,24 @@ def run_model(
     fetch_dir = cohort_out / "fetch"
     workflow_dir = model_out / "workflow"
     extractor_dir = model_out / "extractor"
+
+    if write_model_only:
+        # Sidecar-only mode: skip fetch/prepare/overlay/extract entirely and (re)write
+        # geneset.model.json against whatever variants already exist under extractor/.
+        # write_model_sidecars() no-ops cleanly (returns without writing anything) when
+        # extractor/manifest.tsv is absent, so this is safe to call even before a real
+        # run has ever populated extractor/.
+        write_model_sidecars(
+            extractor_dir=extractor_dir,
+            model_id=model_id,
+            cohort_id=cohort_id,
+            cohort_label=study["cohort_label"],
+            phospho_pdc_study_id=study["phospho_pdc_study_id"],
+            proteome_pdc_study_id=study["proteome_pdc_study_id"],
+            model=model,
+        )
+        return model_out
+
     model_out.mkdir(parents=True, exist_ok=True)
     log_lines: list[str] = []
 
@@ -290,6 +309,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--source_dir")
     p.add_argument("--api_cache_json")
     p.add_argument("--python_bin", default="python")
+    p.add_argument(
+        "--write_model_only",
+        action="store_true",
+        help="Skip fetch/prepare/overlay/extract; only (re)write geneset.model.json "
+        "sidecars against an existing extractor/ output.",
+    )
     args = p.parse_args(argv)
     model_out = run_model(
         dig_dir=args.dig_dir,
@@ -301,6 +326,7 @@ def main(argv: list[str] | None = None) -> int:
         source_dir=args.source_dir,
         api_cache_json=args.api_cache_json,
         python_bin=args.python_bin,
+        write_model_only=args.write_model_only,
     )
     print(f"model_out={model_out}")
     return 0
