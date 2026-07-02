@@ -1,0 +1,2 @@
+model_id	workflow_backend	workflow_de_mode	extractor_top_k	extractor_padj_max	extractor_min_abs_logfc	extractor_gmt_min_genes	extractor_gmt_max_genes
+GB1	auto	modern	250	0.05	0.5	5	250
