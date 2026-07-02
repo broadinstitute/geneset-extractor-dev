@@ -18,8 +18,10 @@ import os
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 from glob import glob
 from pathlib import Path
 
@@ -408,6 +410,20 @@ def main() -> int:
 
     env = dict(os.environ)
     env["PYTHONPATH"] = str(dig_dir / "src")
+
+    # Create a shim for `geneset-extractors` if not installed as a console script.
+    # DIG-generated bash scripts call it as a bare command; gsx310 only has it as
+    # `python -m geneset_extractors.cli`.
+    _shim_dir = None
+    if not shutil.which("geneset-extractors", path=env.get("PATH", "")):
+        _shim_dir = Path(tempfile.mkdtemp(prefix="ge_shim_"))
+        shim = _shim_dir / "geneset-extractors"
+        shim.write_text(
+            f"#!/usr/bin/env bash\nexec {args.python_bin} -m geneset_extractors.cli \"$@\"\n"
+        )
+        shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        env["PATH"] = f"{_shim_dir}:{env.get('PATH', '')}"
+
     model_log = model_out / "run.log"
 
     # Stage 1: scrna_cnmf_prepare
