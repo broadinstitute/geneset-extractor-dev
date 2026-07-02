@@ -1,3 +1,4 @@
+import csv
 import json
 import shutil
 import sys
@@ -56,6 +57,25 @@ def test_run_model_offline_end_to_end(tmp_path):
     for prov in provs:
         assert (prov.parent / "geneset.tsv").exists()
         assert (prov.parent / "geneset.meta.json").exists()
+
+    # Full-schema geneset.model.json sidecar alongside each variant.
+    model_jsons = list(Path(model_dir).rglob("geneset.model.json"))
+    assert model_jsons, "no geneset.model.json produced"
+    variant_labels = set()
+    for path in model_jsons:
+        payload = json.loads(path.read_text())
+        assert payload["library"] == "CPTAC"
+        assert payload["model_group"] == "PT"
+        assert payload["workflow_name"] == "ptm_prepare_public"
+        assert payload["extractor_name"] == "ptm_site_matrix"
+        assert isinstance(payload["parameters"], dict)
+        assert isinstance(payload["inputs"], dict)
+        assert isinstance(payload["naming"], dict)
+        assert payload["inputs"]["cohort_id"] == "ccrcc"
+        assert payload["naming"]["variant_label"] in {"ProteinAdjusted", "Unadjusted"}
+        variant_labels.add(payload["naming"]["variant_label"])
+    # compare_if_protein + a matched protein matrix should emit both variants.
+    assert variant_labels == {"ProteinAdjusted", "Unadjusted"}
     # The ptm_matrix.tsv File node carries the PDC phosphosite DRS id + PDC dcc_url.
     graph = json.loads(provs[0].read_text())
     graph = list(graph.values())[0] if "nodes" not in graph else graph
@@ -65,3 +85,81 @@ def test_run_model_offline_end_to_end(tmp_path):
     assert c["persistent_id"] == "11111111-1111-1111-1111-111111111111"
     assert c["local_id"] == "drs://dg.4DFC/11111111-1111-1111-1111-111111111111"
     assert file_nodes[0]["dcc_url"] == "https://pdc.cancer.gov/pdc/study/PDC000128"
+
+
+def test_cohort_token():
+    assert runner.cohort_token("Clear Cell RCC") == "ClearCellRCC"
+    assert runner.cohort_token("Lung SCC") == "LungSCC"
+    assert runner.cohort_token("Breast (Prospective)") == "Breast(Prospective)"
+
+
+def _write_manifest(extractor_dir: Path, rows: list[dict[str, str]]) -> None:
+    fieldnames = ["variant_id", "meta_path"]
+    with (extractor_dir / "manifest.tsv").open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(fh, delimiter="\t", fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+
+def test_write_model_sidecars_full_schema(tmp_path):
+    extractor_dir = tmp_path / "extractor"
+    variant_dirs = {"none": extractor_dir / "none", "subtract": extractor_dir / "subtract"}
+    for d in variant_dirs.values():
+        d.mkdir(parents=True)
+    _write_manifest(
+        extractor_dir,
+        [
+            {
+                "variant_id": f"protein_adjustment={adjustment}__gene_topk_sites=3",
+                "meta_path": f"{d.name}/geneset.meta.json",
+            }
+            for adjustment, d in variant_dirs.items()
+        ],
+    )
+    model = {
+        "prepare_ptm_type": "phospho",
+        "extractor_study_contrast": "condition_a_vs_b",
+        "extractor_condition_a": "case",
+        "extractor_condition_b": "control",
+        "extractor_gene_aggregation": "signed_topk_mean",
+        "extractor_select": "top_k",
+        "extractor_top_k": "200",
+    }
+
+    runner.write_model_sidecars(
+        extractor_dir=extractor_dir,
+        model_id="PT1",
+        cohort_id="ccrcc",
+        cohort_label="Clear Cell RCC",
+        phospho_pdc_study_id="PDC000128",
+        proteome_pdc_study_id="PDC000127",
+        model=model,
+    )
+
+    payloads = {}
+    for adjustment, d in variant_dirs.items():
+        sidecar = d / "geneset.model.json"
+        assert sidecar.exists()
+        payload = json.loads(sidecar.read_text())
+        payloads[adjustment] = payload
+        assert payload["schema_version"] == "1"
+        assert payload["library"] == "CPTAC"
+        assert payload["model_id"] == "PT1"
+        assert payload["model_group"] == "PT"
+        assert payload["workflow_name"] == "ptm_prepare_public"
+        assert payload["extractor_name"] == "ptm_site_matrix"
+        assert isinstance(payload["parameters"], dict)
+        assert isinstance(payload["inputs"], dict)
+        assert isinstance(payload["naming"], dict)
+        assert payload["parameters"]["gene_topk_sites"] == 3
+        assert payload["parameters"]["protein_adjustment"] == adjustment
+        assert payload["inputs"]["cohort_id"] == "ccrcc"
+        assert payload["inputs"]["phospho_pdc_study_id"] == "PDC000128"
+        assert payload["inputs"]["proteome_pdc_study_id"] == "PDC000127"
+        assert payload["naming"]["variant_label"] in {"ProteinAdjusted", "Unadjusted"}
+
+    assert payloads["none"]["naming"]["variant_label"] == "Unadjusted"
+    assert payloads["subtract"]["naming"]["variant_label"] == "ProteinAdjusted"
+    assert payloads["none"]["naming"]["signature_name"] == "CPTAC_ClearCellRCC_Unadjusted"
+    assert payloads["subtract"]["naming"]["signature_name"] == "CPTAC_ClearCellRCC_ProteinAdjusted"

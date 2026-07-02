@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -34,42 +35,123 @@ def _run(cmd: list[str], env: dict, dig_dir: Path, log_lines: list[str]) -> None
         raise subprocess.CalledProcessError(completed.returncode, cmd, output=completed.stdout)
 
 
+_VARIANT_LABELS = {"none": "Unadjusted", "subtract": "ProteinAdjusted"}
+_COHORT_TOKEN_SPLIT_RE = re.compile(r"[\s-]+")
+_COMPARISON_STYLE = "signed_two_group"
+_COMPARISON_LABEL = "tumor-versus-adjacent-normal"
+_GENE_SET_PATTERN = "CPTAC_<Cohort>_<Variant>_{up,dn}"
+
+
+def cohort_token(label: str) -> str:
+    """Compact cohort token used in signature/gene-set names, e.g. ``"Clear Cell RCC"``
+    -> ``"ClearCellRCC"``.
+
+    Splits on whitespace/hyphen and upper-cases only the first character of each word
+    (the remainder of each word is left as-is, so an already-uppercase acronym like
+    "RCC" is not lower-cased). Words are then joined with no separator.
+
+    Reused verbatim by the DIG converter's ``--signature_name`` wiring so it must stay
+    a plain, dependency-free module-level function here.
+    """
+    words = [w for w in _COHORT_TOKEN_SPLIT_RE.split(str(label).strip()) if w]
+    return "".join(w[:1].upper() + w[1:] for w in words)
+
+
+def _variant_label(protein_adjustment: str) -> str:
+    """Map a CDAP protein-adjustment token to the publish-style variant label.
+
+    MUST match `_PUBLISH_VARIANT_LABELS` in the DIG `ptm_site_matrix` converter
+    byte-for-byte so GMT signature names and this sidecar's `naming.variant_label`
+    line up: `none` -> `Unadjusted`, `subtract` -> `ProteinAdjusted`.
+    """
+    token = str(protein_adjustment).strip()
+    return _VARIANT_LABELS.get(token, token.capitalize() or token)
+
+
+def _parse_variant_id(variant_id: str) -> dict[str, str]:
+    """Parse a `key=value__key=value` variant_id (e.g. `protein_adjustment=none__gene_topk_sites=3`)."""
+    parsed: dict[str, str] = {}
+    for bit in str(variant_id).split("__"):
+        if "=" not in bit:
+            continue
+        key, _, value = bit.partition("=")
+        parsed[key.strip()] = value.strip()
+    return parsed
+
+
 def write_model_sidecars(
     *,
     extractor_dir: Path,
     model_id: str,
+    cohort_id: str,
     cohort_label: str,
     phospho_pdc_study_id: str,
     proteome_pdc_study_id: str,
+    model: dict[str, str],
 ) -> None:
-    """Emit one geneset.model.json per variant carrying the description-template vars.
+    """Emit one full-schema geneset.model.json per variant.
 
     The shared refresh tool (`refresh_model_metadata_and_provenance.py`) renders model
     descriptions from `config/model_description_templates.tsv`, resolving `{model.<var>}`
-    placeholders against this sidecar. Writing it here keeps CPTAC on the shared metadata
-    tooling instead of a bespoke description pathway.
+    placeholders (and flattened `inputs{}`/`naming{}` keys) against this sidecar. Writing
+    the full branch-standard schema here keeps CPTAC on the shared metadata tooling
+    instead of a bespoke description pathway.
     """
     manifest = extractor_dir / "manifest.tsv"
     if not manifest.exists():
         return
+    pflags = sio.prepare_flags(model)
+    eflags = sio.extractor_flags(model)
+    ptm_type = pflags.get("ptm_type", "phospho")
     for row in sio.read_tsv(manifest):
         meta_rel = (row.get("meta_path") or "").strip()
         if not meta_rel:
             continue
+        variant_bits = _parse_variant_id((row.get("variant_id") or "").strip())
+        protein_adjustment = variant_bits.get("protein_adjustment", "none")
+        gene_topk_sites = int(variant_bits.get("gene_topk_sites", eflags.get("gene_topk_sites", "3")))
+        variant_label = _variant_label(protein_adjustment)
+        signature_name = f"CPTAC_{cohort_token(cohort_label)}_{variant_label}"
+
+        payload = {
+            "schema_version": "1",
+            "library": "CPTAC",
+            "model_id": model_id,
+            "model_group": "PT",
+            "model_label": f"tumor_vs_adjacent_normal_{ptm_type}",
+            "workflow_name": "ptm_prepare_public",
+            "extractor_name": "ptm_site_matrix",
+            "parameters": {
+                "ptm_type": ptm_type,
+                "study_contrast": eflags.get("study_contrast", "condition_a_vs_b"),
+                "condition_a": eflags.get("condition_a", "case"),
+                "condition_b": eflags.get("condition_b", "control"),
+                "protein_adjustment": protein_adjustment,
+                "gene_topk_sites": gene_topk_sites,
+                "gene_aggregation": eflags.get("gene_aggregation", "signed_topk_mean"),
+                "site_select": eflags.get("select", "top_k"),
+                "site_top_k": int(eflags.get("top_k", "200")),
+                "score_mode": eflags.get("score_mode", "auto"),
+            },
+            "inputs": {
+                "cohort_id": cohort_id,
+                "cohort_label": cohort_label,
+                "phospho_pdc_study_id": phospho_pdc_study_id,
+                "proteome_pdc_study_id": proteome_pdc_study_id,
+                "organism": "human",
+                "genome_build": "hg38",
+            },
+            "naming": {
+                "signature_name": signature_name,
+                "variant_label": variant_label,
+                "comparison_style": _COMPARISON_STYLE,
+                "comparison_label": _COMPARISON_LABEL,
+                "gene_set_pattern": _GENE_SET_PATTERN,
+            },
+        }
         sidecar = (extractor_dir / meta_rel).parent / "geneset.model.json"
         sidecar.write_text(
-            json.dumps(
-                {
-                    "model_id": model_id,
-                    "cohort_label": cohort_label,
-                    "variant_id": (row.get("variant_id") or "").strip(),
-                    "phospho_pdc_study_id": phospho_pdc_study_id,
-                    "proteome_pdc_study_id": proteome_pdc_study_id,
-                },
-                indent=2,
-                sort_keys=True,
-            )
-            + "\n",
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
 
@@ -178,9 +260,11 @@ def run_model(
         write_model_sidecars(
             extractor_dir=extractor_dir,
             model_id=model_id,
+            cohort_id=cohort_id,
             cohort_label=study["cohort_label"],
             phospho_pdc_study_id=study["phospho_pdc_study_id"],
             proteome_pdc_study_id=study["proteome_pdc_study_id"],
+            model=model,
         )
 
         return model_out
