@@ -937,12 +937,55 @@ def sanitize_command_directory_args(command: object) -> object:
     return command
 
 
+PYTHON_INTERPRETER_BASENAME_RE = re.compile(r"^python[0-9]*(?:\.[0-9]+)*$")
+
+
+def sanitize_interpreter_path(command: object) -> object:
+    """Replace an absolute (or bare) Python interpreter token with the generic `python`.
+
+    The DIG CLI records `sys.executable` when it runs, so the recorded interpreter
+    path (e.g. `/home/user/.pyenv/versions/3.12.4/bin/python`) varies per machine and
+    can't be genericized with a fixed string replacement the way the DIG checkout
+    directory and `cli.py` module path are. This only ever touches the token in
+    *interpreter position* -- index 0 of a `command_argv` list, or the leading token
+    of a `command`/`observed_command` string -- so it can't rewrite unrelated data
+    paths that merely happen to contain "python" elsewhere in the arguments.
+    """
+
+    def is_interpreter_token(token: str) -> bool:
+        basename = token.rsplit("/", 1)[-1]
+        return bool(PYTHON_INTERPRETER_BASENAME_RE.match(basename))
+
+    if isinstance(command, str):
+        try:
+            tokens = shlex.split(command)
+        except ValueError:
+            return command
+        if not tokens:
+            return command
+        if is_interpreter_token(tokens[0]):
+            tokens[0] = "python"
+            return shlex.join(tokens)
+        return command
+    if isinstance(command, list):
+        if not command or not isinstance(command[0], str):
+            return command
+        if not is_interpreter_token(command[0]):
+            return command
+        sanitized = list(command)
+        sanitized[0] = "python"
+        return sanitized
+    return command
+
+
 def sanitize_directory_args_in_json(value: object) -> object:
     if isinstance(value, dict):
         rewritten: dict[str, object] = {}
         for key, inner in value.items():
             if key in {"command", "observed_command"}:
-                rewritten[key] = sanitize_command_directory_args(inner)
+                rewritten[key] = sanitize_interpreter_path(sanitize_command_directory_args(inner))
+            elif key == "command_argv":
+                rewritten[key] = sanitize_interpreter_path(inner)
             else:
                 rewritten[key] = sanitize_directory_args_in_json(inner)
         return rewritten
