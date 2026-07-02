@@ -112,6 +112,11 @@ def write_gmt_rows(path: Path, rows: list[list[str]]) -> None:
     )
 
 
+def write_json(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
+
+
 def split_gmt_set_name(set_name: str) -> tuple[str, str | None]:
     lower_name = set_name.lower()
     for suffix, direction in (("_up", "up"), ("_dn", "dn"), ("_down", "dn")):
