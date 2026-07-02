@@ -24,7 +24,7 @@ DIRECTORY_ARG_PLACEHOLDERS = {
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEV_REPO_ROOT = WORKSPACE_ROOT / "geneset-extractor-dev"
-KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000")
+KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "PsychENCODE")
 
 
 def parse_args() -> argparse.Namespace:
@@ -290,6 +290,35 @@ def hubmap_row_description(model_payload: dict[str, object], base_description: s
     )
 
 
+PSYCHENCODE_DISORDER_NAMES = {
+    "ASD": "autism spectrum disorder",
+    "BD": "bipolar disorder",
+    "SCZ": "schizophrenia",
+}
+
+
+def psychencode_row_description(model_payload: dict[str, object], direction: str | None, stem: str) -> str:
+    model_id = str(model_payload.get("model_id", "")).strip()
+    naming = model_payload.get("naming", {}) if isinstance(model_payload.get("naming"), dict) else {}
+    comparison_style = str(naming.get("comparison_style", "")).strip()
+    term_prefix = str(naming.get("term_prefix", "PsychENCODE")).strip() or "PsychENCODE"
+    term = extract_term_after_prefix(stem, f"{term_prefix}_")
+    if comparison_style == "signed_term" and direction:
+        disorder = PSYCHENCODE_DISORDER_NAMES.get(term, term.replace("_", " "))
+        gene_set_kind = "up-gene set" if direction == "up" else "down-gene set"
+        regulated = "upregulated" if direction == "up" else "downregulated"
+        return (
+            f"PsychENCODE disorder differential-expression {gene_set_kind} for {disorder} "
+            f"using model {model_id}: genes {regulated} in the released cross-disorder DEX table "
+            f"from Gandal et al. 2018."
+        )
+    return (
+        f"PsychENCODE co-expression module gene set for module {term} using model {model_id}: "
+        f"unsigned module membership set from the released cross-disorder WGCNA module table "
+        f"from Gandal et al. 2018."
+    )
+
+
 def render_gmt_row_description(set_name: str, model_payload: dict[str, object], template: str) -> str:
     stem, direction = split_gmt_set_name(set_name)
     base_description = expand_description_template(template, model_payload, set_name)
@@ -302,6 +331,8 @@ def render_gmt_row_description(set_name: str, model_payload: dict[str, object], 
         return lincs_row_description(model_payload, base_description, direction, stem)
     if library == "HuBMAP":
         return hubmap_row_description(model_payload, base_description, stem)
+    if library == "PsychENCODE":
+        return psychencode_row_description(model_payload, direction, stem)
     return base_description
 
 
@@ -495,6 +526,8 @@ def infer_library_name(
                 return "HuBMAP"
             if name.startswith("LINCS_L1000_"):
                 return "LINCS_L1000"
+            if name.startswith("PsychENCODE_"):
+                return "PsychENCODE"
     raise SystemExit("Unable to infer library for model refresh. Provide --description_template_tsv from a library config.")
 
 
@@ -719,6 +752,17 @@ def regenerate_lincs_model_sidecars(args: argparse.Namespace, model_dir: Path) -
         )
 
 
+def regenerate_psychencode_model_sidecars(args: argparse.Namespace, model_dir: Path) -> None:
+    with prepend_sys_path(DEV_REPO_ROOT / "PsychENCODE" / "src"):
+        module = importlib.import_module("run_psychencode_hz_model")
+        settings_by_model = module.load_model_settings(DEV_REPO_ROOT / "PsychENCODE" / "config" / "model_manifest.tsv")
+        module.write_model_sidecar(
+            path=model_dir / "extractor" / "geneset.model.json",
+            model_id=args.model_id,
+            settings=settings_by_model[args.model_id],
+        )
+
+
 def regenerate_model_sidecars(
     *,
     args: argparse.Namespace,
@@ -741,6 +785,9 @@ def regenerate_model_sidecars(
         return
     if library_name == "LINCS_L1000":
         regenerate_lincs_model_sidecars(args, model_dir)
+        return
+    if library_name == "PsychENCODE":
+        regenerate_psychencode_model_sidecars(args, model_dir)
         return
     raise SystemExit(f"Unsupported library for standalone model-sidecar regeneration: {library_name}")
 

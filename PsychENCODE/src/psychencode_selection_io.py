@@ -17,7 +17,7 @@ def config_root() -> Path:
 
 
 def default_out_root() -> Path:
-    return Path.cwd() / "psychencode_outputs"
+    return Path.cwd() / "psychencode_all_models"
 
 
 def default_model_list_path() -> Path:

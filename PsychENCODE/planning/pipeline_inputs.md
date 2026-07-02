@@ -54,14 +54,14 @@ both id types ship in the same files (Ensembl + HGNC symbol).
 
 ## Output behavior
 
-If `--out_root` is omitted, outputs go under:
+If `--out_root` is omitted, outputs go under the branch-standard `<library>_all_models` run root:
 
-- `./psychencode_outputs/`
+- `./psychencode_all_models/`
 
 The all-signatures output tree is:
 
-- `psychencode_outputs/genesets/all_signatures/models/HZ1/`
-- `psychencode_outputs/genesets/all_signatures/models/HZ2/`
+- `psychencode_all_models/genesets/all_signatures/models/HZ1/`
+- `psychencode_all_models/genesets/all_signatures/models/HZ2/`
 
 The authoritative GMT output for each model is:
 
@@ -90,6 +90,23 @@ Optional provenance mirror inputs supported by the build entrypoint:
 
 - `--provenance_mirror_local_prefix`
 - `--provenance_mirror_remote_prefix`
+
+## Cluster / Apptainer submit + refresh (branch-standard operational contract)
+
+Mirrors the LINCS_L1000 / HuBMAP submit contract:
+
+- `run/submit_psychencode_models_cluster.sh` and `run/submit_psychencode_models_cluster_apptainer.sh`
+  — config-driven worklist over `config/model_list.tsv`; modes `--submit`,
+  `--submit --write_model_only`, `--submit --refresh_metadata_and_provenance`; filters `--model_group HZ`
+  and `--model_id HZ1[,HZ2]`. Per-model input via `PSYCHENCODE_DEX_CSV` (HZ1) / `PSYCHENCODE_MODULES_CSV` (HZ2).
+- `run/write_psychencode_model_json_apptainer.sh` — thin `run_psychencode_hz_model.py --write_model_only` wrapper.
+- Refresh uses the shared `run/refresh_model_metadata_and_provenance.sh`; PsychENCODE is registered in
+  `src/refresh_model_metadata_and_provenance.py` (`KNOWN_LIBRARIES`, `regenerate_psychencode_model_sidecars`,
+  `psychencode_row_description`). Refresh regenerates `geneset.model.json`, patches metadata descriptions,
+  populates the GMT second column (row-specific, from `model_description_templates.tsv` + `model.json` naming
+  context), rewrites provenance to publish-safe URIs (`--provenance_mirror_*` + `--local_input_source_map_tsv`),
+  and preserves `geneset.meta.json.orig` / `geneset.provenance.json.orig` / `genesets.gmt.orig`.
+- Publishing uses the shared `run/publish_library_to_s3.sh` (no PsychENCODE-specific handling).
 
 ## Deferred
 

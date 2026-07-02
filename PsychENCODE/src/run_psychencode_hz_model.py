@@ -129,6 +129,8 @@ def model_config(model_id: str) -> dict[str, str]:
             "model_label": "disorder_dex",
             "comparison_style": "signed_term",
             "gene_set_pattern": "PsychENCODE_<disorder>_up|dn",
+            "source_file": "DER-13_Disorder_DEX_Genes.csv",
+            "source_label": "PsychENCODE released cross-disorder differential-expression gene table",
         }
     if model_id == "HZ2":
         return {
@@ -138,6 +140,8 @@ def model_config(model_id: str) -> dict[str, str]:
             "model_label": "coexpression_modules",
             "comparison_style": "unsigned_term",
             "gene_set_pattern": "PsychENCODE_<module>",
+            "source_file": "DER-16_Disorder_Gene_Modules.csv",
+            "source_label": "PsychENCODE released cross-disorder WGCNA co-expression module table",
         }
     raise SystemExit(f"Unsupported PsychENCODE HZ model_id: {model_id}")
 
@@ -147,9 +151,12 @@ def write_model_sidecar(
     path: Path,
     model_id: str,
     settings: dict[str, str],
-    config: dict[str, str],
-    term_prefix: str,
 ) -> None:
+    """Write geneset.model.json. Callable from the shared refresh flow with just
+    (path, model_id, settings); workflow/extractor wiring and term prefix are derived
+    internally so refresh can regenerate the sidecar without the full run context."""
+    config = model_config(model_id)
+    term_prefix = manifest_value(settings, "term_prefix", "PsychENCODE")
     payload = {
         "schema_version": "1",
         "library": "PsychENCODE",
@@ -166,10 +173,15 @@ def write_model_sidecar(
         "inputs": {
             "organism": ORGANISM,
             "genome_build": GENOME_BUILD,
+            "source_file": config["source_file"],
+            "source_label": config["source_label"],
+            "source_resource": "resource.psychencode.org",
+            "source_doi": "10.1126/science.aat8127",
         },
         "naming": {
             "comparison_style": config["comparison_style"],
             "gene_set_pattern": config["gene_set_pattern"],
+            "term_prefix": term_prefix,
         },
     }
     write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
@@ -431,8 +443,6 @@ def main() -> int:
             path=extractor_out / "geneset.model.json",
             model_id=args.model_id,
             settings=settings,
-            config=config,
-            term_prefix=term_prefix,
         )
         return 0
     if args.write_commands_only:
@@ -445,8 +455,6 @@ def main() -> int:
         path=extractor_out / "geneset.model.json",
         model_id=args.model_id,
         settings=settings,
-        config=config,
-        term_prefix=term_prefix,
     )
     run_command(provenance_cmd, cwd=dig_dir, env=env, log_path=model_log)
 
