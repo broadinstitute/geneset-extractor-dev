@@ -336,15 +336,7 @@ run_inner_worker() {
   local src_root
   src_root="${REPO_ROOT}/geneset-extractor-dev/LINCS_L1000/src"
   local cmd expression_tsv
-  if [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
-    cmd=(
-      bash "${REPO_ROOT}/geneset-extractor-dev/run/refresh_model_metadata_and_provenance.sh"
-      --model_id "${model_id}"
-      --model_dir "${LINCS_OUT_ROOT}/genesets/all_signatures/models/${model_id}"
-      --description_template_tsv "${DESCRIPTION_TEMPLATE_TSV}"
-      --python_bin "${PYTHON_BIN}"
-    )
-  elif [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then
+  build_model_only_cmd() {
     expression_tsv="$(expression_tsv_for_model "${model_id}")" || {
       echo "Unsupported LINCS_L1000 model for model-only mode: ${model_id}" >&2
       exit 1
@@ -360,6 +352,17 @@ run_inner_worker() {
       "--mapping_file" "${LINCS_MAPPING_FILE}"
       "--model_manifest" "${LINCS_MODEL_MANIFEST}"
       "--write_model_only"
+    )
+  }
+  if [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then
+    build_model_only_cmd
+  elif [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then
+    cmd=(
+      bash "${REPO_ROOT}/geneset-extractor-dev/run/refresh_model_metadata_and_provenance.sh"
+      --model_id "${model_id}"
+      --model_dir "${LINCS_OUT_ROOT}/genesets/all_signatures/models/${model_id}"
+      --description_template_tsv "${DESCRIPTION_TEMPLATE_TSV}"
+      --python_bin "${PYTHON_BIN}"
     )
   else
     cmd=(

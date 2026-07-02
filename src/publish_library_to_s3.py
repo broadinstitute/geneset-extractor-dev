@@ -52,8 +52,7 @@ class CandidateFile(object):
 def parse_args():  # type: () -> argparse.Namespace
     parser = argparse.ArgumentParser(
         description=(
-            "Publish one library run output tree plus provenance-resolved rerun inputs to S3 "
-            "without modifying local metadata or provenance files."
+            "Publish one library run output tree to S3 without modifying local metadata or provenance files."
         )
     )
     parser.add_argument(
@@ -67,9 +66,8 @@ def parse_args():  # type: () -> argparse.Namespace
         help="Destination S3 URI that mirrors the local output root.",
     )
     parser.add_argument(
-        "--s3_input_root",
-        required=True,
-        help="Destination S3 URI where provenance-resolved rerun inputs should be published.",
+        "--model_id",
+        help="Optional comma-delimited model identifier list to publish from the library output tree, for example AB1,AC1,HZ1.",
     )
     parser.add_argument(
         "--manifest_out",
@@ -142,10 +140,47 @@ def should_skip_path(path):  # type: (Path) -> bool
     return False
 
 
-def iter_output_candidates(*, local_output_root, s3_output_root, excluded_paths=None):  # type: (**Any) -> List[CandidateFile]
+def parse_model_ids(raw_model_ids):  # type: (Optional[str]) -> List[str]
+    if not raw_model_ids:
+        return []
+    model_ids = []  # type: List[str]
+    seen = set()  # type: Set[str]
+    for part in raw_model_ids.split(","):
+        model_id = part.strip()
+        if not model_id or model_id in seen:
+            continue
+        seen.add(model_id)
+        model_ids.append(model_id)
+    return model_ids
+
+
+def _parts_contain_model_id(parts, model_id):  # type: (Tuple[str, ...], str) -> bool
+    for index in range(len(parts) - 1):
+        if parts[index] == "models" and parts[index + 1] == model_id:
+            return True
+    return False
+
+
+def path_matches_model_filter(path, local_output_root, model_ids):  # type: (Path, Path, List[str]) -> bool
+    if not model_ids:
+        return True
+    try:
+        relative_parts = path.relative_to(local_output_root).parts
+    except ValueError:
+        relative_parts = path.parts
+    for model_id in model_ids:
+        if _parts_contain_model_id(relative_parts, model_id):
+            return True
+        if _parts_contain_model_id(local_output_root.parts, model_id):
+            return True
+    return False
+
+
+def iter_output_candidates(*, local_output_root, s3_output_root, excluded_paths=None, model_ids=None):  # type: (**Any) -> List[CandidateFile]
     candidates = []  # type: List[CandidateFile]
     normalized_s3_root = s3_output_root.rstrip("/")
     excluded_resolved_paths = set(path.resolve() for path in (excluded_paths or []))  # type: Set[Path]
+    model_ids = model_ids or []
     print("scanning_output_tree root={0}".format(local_output_root), flush=True)
     for index, path in enumerate(sorted(local_output_root.rglob("*")), 1):
         if index == 1 or index % 5000 == 0:
@@ -153,6 +188,8 @@ def iter_output_candidates(*, local_output_root, s3_output_root, excluded_paths=
         if should_skip_path(path) or not path.is_file():
             continue
         if path.resolve() in excluded_resolved_paths:
+            continue
+        if not path_matches_model_filter(path, local_output_root, model_ids):
             continue
         relative_path = path.relative_to(local_output_root).as_posix()
         candidates.append(
@@ -170,13 +207,16 @@ def iter_output_candidates(*, local_output_root, s3_output_root, excluded_paths=
     return candidates
 
 
-def iter_provenance_paths(local_output_root):  # type: (Path) -> List[Path]
+def iter_provenance_paths(local_output_root, model_ids=None):  # type: (Path, Optional[List[str]]) -> List[Path]
     paths = []
+    model_ids = model_ids or []
     print("scanning_provenance_files root={0}".format(local_output_root), flush=True)
     for index, path in enumerate(sorted(local_output_root.rglob("geneset.provenance.json")), 1):
         if index == 1 or index % 250 == 0:
             print("scanning_provenance_files found={0}".format(index), flush=True)
         if should_skip_path(path):
+            continue
+        if not path_matches_model_filter(path, local_output_root, model_ids):
             continue
         paths.append(path)
     print("scanning_provenance_files complete found={0}".format(len(paths)), flush=True)
@@ -476,7 +516,7 @@ def main():  # type: () -> int
         raise SystemExit("--force_publish requires --overwrite for non-dry-run uploads.")
     local_output_root = ensure_directory(Path(args.local_output_root), "local output root")
     _bucket, _prefix = parse_s3_uri(args.s3_output_root)
-    _input_bucket, _input_prefix = parse_s3_uri(args.s3_input_root)
+    model_ids = parse_model_ids(args.model_id)
 
     manifest_path = (
         Path(args.manifest_out).expanduser().resolve()
@@ -506,36 +546,26 @@ def main():  # type: () -> int
         local_output_root=local_output_root,
         s3_output_root=args.s3_output_root,
         excluded_paths=publisher_artifact_paths,
+        model_ids=model_ids,
     )
-    provenance_paths = iter_provenance_paths(local_output_root)
-    input_candidates = resolve_input_candidates_from_provenance(
-        local_output_root=local_output_root,
-        output_candidates=output_candidates,
-        provenance_paths=provenance_paths,
-        s3_input_root=args.s3_input_root,
-    )
+    provenance_paths = iter_provenance_paths(local_output_root, model_ids=model_ids)
     log_line(log_path, f"discovered_output_files={len(output_candidates)}")
     log_line(log_path, f"scanned_provenance_files={len(provenance_paths)}")
-    log_line(log_path, f"discovered_input_files={len(input_candidates)}")
     print(
-        "publish_library_to_s3 "
-        "outputs={0} provenance_files={1} inputs={2}".format(
+        "publish_library_to_s3 outputs={0} provenance_files={1}".format(
             len(output_candidates),
             len(provenance_paths),
-            len(input_candidates),
         ),
         flush=True,
     )
 
-    candidates = output_candidates + input_candidates
+    candidates = output_candidates
     manifest_rows = []  # type: List[Dict[str, Any]]
     uploaded_count = 0
     skipped_existing_count = 0
     failed_count = 0
     output_bucket, output_prefix = parse_s3_uri(args.s3_output_root)
-    input_bucket, input_prefix = parse_s3_uri(args.s3_input_root)
     output_existing_keys = set()  # type: Set[str]
-    input_existing_keys = set()  # type: Set[str]
     if args.force_publish:
         print("force_publish=true", flush=True)
     else:
@@ -547,15 +577,6 @@ def main():  # type: () -> int
         )
         if output_list_error:
             raise SystemExit("Unable to list existing S3 output objects: {0}".format(output_list_error))
-
-        print("listing_s3 input_prefix={0}".format(args.s3_input_root), flush=True)
-        input_existing_keys, input_list_error = list_s3_keys_under_prefix(
-            aws_cli_bin=args.aws_cli_bin,
-            s3_uri_root=args.s3_input_root,
-            log_path=log_path,
-        )
-        if input_list_error:
-            raise SystemExit("Unable to list existing S3 input objects: {0}".format(input_list_error))
 
     total_candidates = len(candidates)
     for index, candidate in enumerate(candidates, 1):
@@ -584,10 +605,7 @@ def main():  # type: () -> int
             exists = False
         else:
             candidate_bucket, candidate_key = parse_s3_uri(candidate.s3_uri)
-            if candidate.category == "output":
-                exists = candidate_bucket == output_bucket and candidate_key in output_existing_keys
-            else:
-                exists = candidate_bucket == input_bucket and candidate_key in input_existing_keys
+            exists = candidate_bucket == output_bucket and candidate_key in output_existing_keys
         if exists and not args.overwrite:
             row["status"] = "skipped_existing"
             skipped_existing_count += 1
@@ -635,13 +653,13 @@ def main():  # type: () -> int
     summary_payload = {
         "local_output_root": str(local_output_root),
         "s3_output_root": args.s3_output_root,
-        "s3_input_root": args.s3_input_root,
+        "model_id": args.model_id,
+        "model_ids": model_ids,
         "dry_run": bool(args.dry_run),
         "overwrite": bool(args.overwrite),
         "force_publish": bool(args.force_publish),
         "n_output_candidates": len(output_candidates),
         "n_provenance_files": len(provenance_paths),
-        "n_input_candidates": len(input_candidates),
         "n_uploaded": uploaded_count,
         "n_skipped_existing": skipped_existing_count,
         "n_failed": failed_count,
@@ -655,7 +673,6 @@ def main():  # type: () -> int
         "summary "
         f"n_output_candidates={len(output_candidates)} "
         f"n_provenance_files={len(provenance_paths)} "
-        f"n_input_candidates={len(input_candidates)} "
         f"n_uploaded={uploaded_count} "
         f"n_skipped_existing={skipped_existing_count} "
         f"n_failed={failed_count}",

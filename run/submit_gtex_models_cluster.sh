@@ -427,9 +427,9 @@ run_task() {
 
   echo "GTEx task ${task_id}: tissue=${tissue_id} group=${model_group} model=${model_id}"
 
-  if [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then
-    local cmd models_root runner
-    models_root="${GTEX_OUT_ROOT}/genesets/${tissue_id}/models"
+  local cmd models_root runner
+  models_root="${GTEX_OUT_ROOT}/genesets/${tissue_id}/models"
+  build_model_only_cmd() {
     case "${model_group}" in
       AB)
         runner="${REPO_ROOT}/geneset-extractor-dev/GTEx/src/run_age_binned_model.py"
@@ -485,6 +485,10 @@ run_task() {
         exit 1
         ;;
     esac
+  }
+
+  if [[ ${WRITE_MODEL_ONLY} -eq 1 ]]; then
+    build_model_only_cmd
     echo "+ ${cmd[*]}"
     "${cmd[@]}"
     return

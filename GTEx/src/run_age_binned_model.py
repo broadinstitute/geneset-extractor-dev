@@ -511,15 +511,24 @@ def main() -> int:
     model_log = model_out / "run.log"
 
     if args.write_model_only:
-        write_json(
-            extractor_out / "geneset.model.json",
-            build_model_sidecar_payload(
+        if (extractor_out / "manifest.tsv").exists():
+            write_grouped_model_sidecars(
+                extractor_out=extractor_out,
                 model_id=args.model_id,
                 tissue_id=tissue_id,
                 tissue_label=tissue_label,
                 settings=settings,
-            ),
-        )
+            )
+        else:
+            write_json(
+                extractor_out / "geneset.model.json",
+                build_model_sidecar_payload(
+                    model_id=args.model_id,
+                    tissue_id=tissue_id,
+                    tissue_label=tissue_label,
+                    settings=settings,
+                ),
+            )
         return 0
 
     if not args.expression_gct or not args.sample_attributes_tsv or not args.subject_phenotypes_tsv:

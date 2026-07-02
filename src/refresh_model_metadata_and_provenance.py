@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import argparse
 import csv
+import importlib
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
 import shutil
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -18,6 +21,10 @@ DIRECTORY_ARG_PLACEHOLDERS = {
     "--raw_counts_dir": "/path/to/raw_counts_dir",
     "--dea_dir": "/path/to/dea_dir",
 }
+
+WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
+DEV_REPO_ROOT = WORKSPACE_ROOT / "geneset-extractor-dev"
+KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000")
 
 
 def parse_args() -> argparse.Namespace:
@@ -77,11 +84,278 @@ def read_input_source_map(path: Path) -> dict[str, str]:
             if not local_path or not source_uri:
                 raise SystemExit("source map TSV rows must provide both local_path and source_uri")
             if local_path in mapping:
-                raise SystemExit(f"Duplicate local_path in source map TSV: {local_path}")
+                if mapping[local_path] != source_uri:
+                    raise SystemExit(
+                        f"Conflicting source_uri values for duplicate local_path in source map TSV: {local_path}"
+                    )
+                continue
             mapping[local_path] = source_uri
     if not mapping:
         raise SystemExit(f"No source map rows found in {path}")
     return dict(sorted(mapping.items(), key=lambda item: len(item[0]), reverse=True))
+
+
+def parse_gmt_rows(path: Path) -> list[list[str]]:
+    rows: list[list[str]] = []
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        for line in handle:
+            rows.append(line.rstrip("\n").split("\t"))
+    return rows
+
+
+def write_gmt_rows(path: Path, rows: list[list[str]]) -> None:
+    path.write_text(
+        "\n".join("\t".join(row) for row in rows) + ("\n" if rows else ""),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
+def split_gmt_set_name(set_name: str) -> tuple[str, str | None]:
+    lower_name = set_name.lower()
+    for suffix, direction in (("_up", "up"), ("_dn", "dn"), ("_down", "dn")):
+        if lower_name.endswith(suffix):
+            return set_name[: -len(suffix)], direction
+    return set_name, None
+
+
+def strip_trailing_period(text: str) -> str:
+    return str(text).strip().rstrip(".")
+
+
+def replace_header_gene_set_kind(header: str, direction: str | None) -> str:
+    if not direction:
+        return header
+    label = "up-gene set" if direction == "up" else "down-gene set"
+    for needle in (" gene-set library ", " gene set ", " gene-set library", " gene set"):
+        if needle in header:
+            return header.replace(needle, f" {label} ", 1).rstrip()
+    return f"{header} {label}".strip()
+
+
+def model_lookup_context(model_payload: dict[str, object], set_name: str) -> dict[str, object]:
+    naming = model_payload.get("naming", {}) if isinstance(model_payload.get("naming"), dict) else {}
+    inputs = model_payload.get("inputs", {}) if isinstance(model_payload.get("inputs"), dict) else {}
+    stem, direction = split_gmt_set_name(set_name)
+    context: dict[str, object] = {
+        "model": model_payload,
+        "set_name": set_name,
+        "set_stem": stem,
+        "direction": direction or "",
+    }
+    for key, value in naming.items():
+        context.setdefault(str(key), value)
+    for key, value in inputs.items():
+        context.setdefault(str(key), value)
+    if not context.get("comparison_label"):
+        library = str(model_payload.get("library", "")).strip()
+        model_group = str(model_payload.get("model_group", "")).strip()
+        if library == "MoTrPAC":
+            if stem.startswith("MoTrPAC_"):
+                comparison_label = stem[len("MoTrPAC_") :]
+            else:
+                comparison_label = stem
+            if model_group == "TR" and comparison_label.endswith("_TrainingVsControl"):
+                comparison_label = comparison_label[: -len("_TrainingVsControl")] + " training-versus-control"
+            context["comparison_label"] = comparison_label.replace("_", " ")
+    return context
+
+
+TEMPLATE_VAR_PATTERN = re.compile(r"\{([^{}]+)\}")
+
+
+def resolve_template_value(context: dict[str, object], path: str) -> str:
+    current: object = context
+    for part in path.split("."):
+        if isinstance(current, dict) and part in current:
+            current = current[part]
+        else:
+            return ""
+    if current is None:
+        return ""
+    return str(current)
+
+
+def expand_description_template(template: str, model_payload: dict[str, object], set_name: str) -> str:
+    context = model_lookup_context(model_payload, set_name)
+    return TEMPLATE_VAR_PATTERN.sub(lambda match: resolve_template_value(context, match.group(1).strip()), template)
+
+
+def split_description(description: str) -> tuple[str, str]:
+    text = str(description).strip()
+    if ": " in text:
+        head, tail = text.split(": ", 1)
+        return head.strip(), strip_trailing_period(tail)
+    return strip_trailing_period(text), ""
+
+
+def extract_term_after_prefix(stem: str, prefix: str) -> str:
+    if stem.startswith(prefix):
+        return stem[len(prefix) :]
+    return stem
+
+
+def gtex_row_description(model_payload: dict[str, object], base_description: str, direction: str, stem: str) -> str:
+    header, body = split_description(base_description)
+    header = replace_header_gene_set_kind(header, direction)
+    naming = model_payload.get("naming", {}) if isinstance(model_payload.get("naming"), dict) else {}
+    comparison_style = str(naming.get("comparison_style", "")).strip()
+    if comparison_style == "age_pair":
+        comparison_age = str(naming.get("comparison_age_label", "")).strip()
+        reference_age = str(naming.get("reference_age_label", "")).strip()
+        higher_lower = "higher" if direction == "up" else "lower"
+        match = re.match(
+            r"(?P<method>.+?) in (?P<comparison>.+?) relative to (?P<reference>.+?),(?P<rest>.*)$",
+            body,
+        )
+        if match:
+            method = strip_trailing_period(match.group("method"))
+            rest = strip_trailing_period(match.group("rest"))
+            clause = f"genes with {higher_lower} expression in {comparison_age} relative to {reference_age}, identified by {method}"
+            if rest:
+                clause += f", {rest}"
+            return f"{header}: {clause}."
+        return f"{header}: genes with {higher_lower} expression in {comparison_age} relative to {reference_age}, identified by {body}."
+    association = "positive" if direction == "up" else "negative"
+    return f"{header}: genes with {association} association with increasing age, identified by {body}."
+
+
+def motrpac_tw_condition_phrase(stem: str) -> str:
+    label = extract_term_after_prefix(stem, "MoTrPAC_")
+    parts = [part for part in label.split("_") if part]
+    if len(parts) >= 3 and parts[-2].lower() in {"female", "male"}:
+        return f"at {parts[-1]} in {parts[-2].lower()} trained animals relative to matched controls"
+    if len(parts) >= 2:
+        return f"at {parts[-1]} in trained animals relative to matched controls"
+    return f"for {label.replace('_', ' ')} relative to matched controls"
+
+
+def normalize_library_body(body: str) -> str:
+    stripped = strip_trailing_period(body)
+    lowered = stripped.lower()
+    if lowered.startswith("library built "):
+        return stripped[len("library ") :]
+    return stripped
+
+
+def motrpac_row_description(model_payload: dict[str, object], base_description: str, direction: str, stem: str) -> str:
+    header, body = split_description(base_description)
+    model_group = str(model_payload.get("model_group", "")).strip()
+    if model_group in {"TR", "TW"}:
+        header = replace_header_gene_set_kind(header, direction)
+        higher_lower = "higher" if direction == "up" else "lower"
+        if model_group == "TR":
+            clause = f"genes with {higher_lower} expression in trained animals relative to controls, identified by {body}"
+        else:
+            clause = f"genes with {higher_lower} expression {motrpac_tw_condition_phrase(stem)}, identified by {body}"
+        return f"{header}: {clause}."
+    label = extract_term_after_prefix(stem, "MoTrPAC_").replace("_", " ")
+    polarity = "positive" if direction == "up" else "negative"
+    model_id = str(model_payload.get("model_id", "")).strip()
+    normalized = normalize_library_body(body)
+    return (
+        f"MoTrPAC rat endurance-training aggregated {'up-gene set' if direction == 'up' else 'down-gene set'} "
+        f"for {label} using model {model_id}: genes with {polarity} aggregated training-response signal for {label}, "
+        f"derived from {normalized}."
+    )
+
+
+def lincs_row_description(model_payload: dict[str, object], base_description: str, direction: str, stem: str) -> str:
+    _header, body = split_description(base_description)
+    model_id = str(model_payload.get("model_id", "")).strip()
+    term_prefix = ""
+    parameters = model_payload.get("parameters", {}) if isinstance(model_payload.get("parameters"), dict) else {}
+    term_prefix = str(parameters.get("term_prefix", "")).strip()
+    term = extract_term_after_prefix(stem, f"{term_prefix}_").replace("_", " ")
+    if model_id == "HZ1":
+        return (
+            f"LINCS L1000 chemical perturbation {'up-gene set' if direction == 'up' else 'down-gene set'} "
+            f"for {term} using model {model_id}: genes {'increased' if direction == 'up' else 'decreased'} "
+            f"after chemical perturbation by {term}, derived from {normalize_library_body(body)}."
+        )
+    return (
+        f"LINCS L1000 CRISPR knockout {'up-gene set' if direction == 'up' else 'down-gene set'} "
+        f"for {term} using model {model_id}: genes {'increased' if direction == 'up' else 'decreased'} "
+        f"after CRISPR knockout of {term}, derived from {normalize_library_body(body)}."
+    )
+
+
+def hubmap_row_description(model_payload: dict[str, object], base_description: str, stem: str) -> str:
+    _header, body = split_description(base_description)
+    model_id = str(model_payload.get("model_id", "")).strip()
+    term = extract_term_after_prefix(stem, "HuBMAP_").replace("_", " ")
+    return (
+        f"HuBMAP ASCT+B marker gene set for {term} using model {model_id}: "
+        f"marker genes for {term}, derived from {normalize_library_body(body)}."
+    )
+
+
+def render_gmt_row_description(set_name: str, model_payload: dict[str, object], template: str) -> str:
+    stem, direction = split_gmt_set_name(set_name)
+    base_description = expand_description_template(template, model_payload, set_name)
+    library = str(model_payload.get("library", "")).strip()
+    if library == "GTEx" and direction:
+        return gtex_row_description(model_payload, base_description, direction, stem)
+    if library == "MoTrPAC" and direction:
+        return motrpac_row_description(model_payload, base_description, direction, stem)
+    if library == "LINCS_L1000" and direction:
+        return lincs_row_description(model_payload, base_description, direction, stem)
+    if library == "HuBMAP":
+        return hubmap_row_description(model_payload, base_description, stem)
+    return base_description
+
+
+def discover_gmt_paths(model_dir: Path) -> list[Path]:
+    return sorted((model_dir / "extractor").rglob("genesets.gmt"))
+
+
+def rewrite_gmt_descriptions(
+    *,
+    model_dir: Path,
+    template_map: dict[str, str],
+) -> None:
+    gmt_paths = discover_gmt_paths(model_dir)
+    if not gmt_paths:
+        return
+    set_name_to_payload: dict[str, dict[str, object]] = {}
+    for gmt_path in sorted(gmt_paths, key=lambda path: len(path.parts), reverse=True):
+        sidecar_path = gmt_path.with_name("geneset.model.json")
+        if not sidecar_path.exists():
+            continue
+        model_payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
+        if not isinstance(model_payload, dict):
+            continue
+        for row in parse_gmt_rows(gmt_path):
+            if row and row[0] and row[0] not in set_name_to_payload:
+                set_name_to_payload[row[0]] = model_payload
+
+    for gmt_path in gmt_paths:
+        sidecar_path = gmt_path.with_name("geneset.model.json")
+        fallback_payload: dict[str, object] | None = None
+        if sidecar_path.exists():
+            payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                fallback_payload = payload
+        rows = parse_gmt_rows(gmt_path)
+        changed = False
+        for row in rows:
+            if len(row) < 3 or not row[0]:
+                continue
+            model_payload = set_name_to_payload.get(row[0], fallback_payload)
+            if not model_payload:
+                continue
+            model_id = str(model_payload.get("model_id", "")).strip()
+            template = template_map.get(model_id, "")
+            if not template:
+                continue
+            while len(row) < 3:
+                row.append("")
+            description = render_gmt_row_description(row[0], model_payload, template)
+            if row[1] != description:
+                row[1] = description
+                changed = True
+        if changed:
+            write_gmt_rows(gmt_path, rows)
 
 
 def read_manifest_meta_paths(manifest_path: Path, extractor_dir: Path) -> list[Path]:
@@ -151,9 +425,324 @@ def restore_from_originals(metadata_paths: list[Path]) -> None:
                 shutil.copy2(orig_path, path)
 
 
+def snapshot_gmt_originals(model_dir: Path) -> None:
+    for gmt_path in discover_gmt_paths(model_dir):
+        write_orig_once(gmt_path)
+
+
+def restore_gmt_from_originals(model_dir: Path) -> None:
+    for gmt_path in discover_gmt_paths(model_dir):
+        orig_path = Path(f"{gmt_path}.orig")
+        if orig_path.exists():
+            shutil.copy2(orig_path, gmt_path)
+
+
 def run_command(cmd: list[str], *, cwd: Path, env: dict[str, str]) -> None:
     print("$ " + shell_join(cmd), flush=True)
     subprocess.run(cmd, cwd=str(cwd), env=env, check=True)
+
+
+@contextmanager
+def prepend_sys_path(path: Path):
+    path_text = str(path)
+    sys.path.insert(0, path_text)
+    try:
+        yield
+    finally:
+        try:
+            sys.path.remove(path_text)
+        except ValueError:
+            pass
+
+
+def read_tsv_rows(path: Path) -> list[dict[str, str]]:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))
+
+
+def resolve_tsv_value(path: Path, *, key_field: str, key_value: str, value_field: str) -> str:
+    for row in read_tsv_rows(path):
+        if str(row.get(key_field, "")).strip() == key_value:
+            return str(row.get(value_field, "")).strip()
+    return ""
+
+
+def infer_library_name(
+    *,
+    description_template_tsv: str | None,
+    metadata_paths: list[Path],
+) -> str:
+    if description_template_tsv:
+        template_path = Path(description_template_tsv).resolve()
+        for part in template_path.parts:
+            if part in KNOWN_LIBRARIES:
+                return part
+    for metadata_path in metadata_paths:
+        try:
+            payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        gene_set = payload.get("gene_set", {})
+        if isinstance(gene_set, dict):
+            name = str(gene_set.get("name", "")).strip()
+            if name.startswith("GTEx_"):
+                return "GTEx"
+            if name.startswith("MoTrPAC_"):
+                return "MoTrPAC"
+            if name.startswith("HuBMAP_"):
+                return "HuBMAP"
+            if name.startswith("LINCS_L1000_"):
+                return "LINCS_L1000"
+    raise SystemExit("Unable to infer library for model refresh. Provide --description_template_tsv from a library config.")
+
+
+def gtex_model_group(model_id: str) -> str:
+    if str(model_id).startswith("AB"):
+        return "AB"
+    if str(model_id).startswith("AC"):
+        return "AC"
+    if str(model_id).startswith("HZ"):
+        return "HZ"
+    raise SystemExit(f"Unsupported GTEx model_id for standalone refresh: {model_id}")
+
+
+def regenerate_gtex_model_sidecars(args: argparse.Namespace, model_dir: Path, env: dict[str, str]) -> None:
+    tissue_id = model_dir.parent.parent.name
+    models_root = model_dir.parent
+    tissue_list_tsv = DEV_REPO_ROOT / "GTEx" / "config" / "broad_tissue_list.tsv"
+    tissue_label = (
+        resolve_tsv_value(tissue_list_tsv, key_field="tissue_id", key_value=tissue_id, value_field="tissue_name")
+        or resolve_tsv_value(tissue_list_tsv, key_field="tissue_id", key_value=tissue_id, value_field="tissue_label")
+    )
+    if not tissue_label:
+        raise SystemExit(f"Unable to resolve GTEx tissue label for tissue_id={tissue_id}")
+    group = gtex_model_group(args.model_id)
+    if group == "AB":
+        cmd = [
+            str(Path(args.python_bin).resolve()),
+            str(DEV_REPO_ROOT / "GTEx" / "src" / "run_age_binned_model.py"),
+            "--model_id",
+            args.model_id,
+            "--tissue_id",
+            tissue_id,
+            "--tissue_label",
+            tissue_label,
+            "--run_root",
+            str(models_root),
+            "--python_bin",
+            str(Path(args.python_bin).resolve()),
+            "--dig_dir",
+            str(Path(args.dig_dir).resolve()),
+            "--age_binned_model_manifest",
+            str(DEV_REPO_ROOT / "GTEx" / "config" / "age_binned_model_manifest.tsv"),
+            "--tissue_column",
+            "SMTS",
+            "--tissue_value",
+            tissue_label,
+            "--write_model_only",
+        ]
+    elif group == "AC":
+        cmd = [
+            str(Path(args.python_bin).resolve()),
+            str(DEV_REPO_ROOT / "GTEx" / "src" / "run_continuous_age_model.py"),
+            "--tissue_id",
+            tissue_id,
+            "--tissue_label",
+            tissue_label,
+            "--model_ids",
+            args.model_id,
+            "--run_root",
+            str(models_root),
+            "--python_bin",
+            str(Path(args.python_bin).resolve()),
+            "--rscript_bin",
+            os.environ.get("RSCRIPT_BIN", "Rscript"),
+            "--dig_dir",
+            str(Path(args.dig_dir).resolve()),
+            "--continuous_age_model_manifest",
+            str(DEV_REPO_ROOT / "GTEx" / "config" / "continuous_age_model_manifest.tsv"),
+            "--tissue_column",
+            "SMTS",
+            "--tissue_value",
+            tissue_label,
+            "--write_model_only",
+        ]
+    else:
+        cmd = [
+            str(Path(args.python_bin).resolve()),
+            str(DEV_REPO_ROOT / "GTEx" / "src" / "run_hz_notebook_model.py"),
+            "--model_id",
+            args.model_id,
+            "--tissue_id",
+            tissue_id,
+            "--tissue_label",
+            tissue_label,
+            "--run_root",
+            str(models_root),
+            "--python_bin",
+            str(Path(args.python_bin).resolve()),
+            "--rscript_bin",
+            os.environ.get("RSCRIPT_BIN", "Rscript"),
+            "--dig_dir",
+            str(Path(args.dig_dir).resolve()),
+            "--tissue_column",
+            "SMTS",
+            "--tissue_value",
+            tissue_label,
+            "--write_model_only",
+        ]
+    run_command(cmd, cwd=WORKSPACE_ROOT, env=env)
+
+
+def regenerate_motrpac_model_sidecars(args: argparse.Namespace, model_dir: Path, env: dict[str, str]) -> None:
+    model_list_tsv = DEV_REPO_ROOT / "MoTrPAC" / "config" / "model_list.tsv"
+    model_family = resolve_tsv_value(model_list_tsv, key_field="model_id", key_value=args.model_id, value_field="model_family")
+    if not model_family:
+        raise SystemExit(f"Unable to resolve MoTrPAC model family for model_id={args.model_id}")
+    if model_family in {"training", "timewise"}:
+        tissue_id = model_dir.parent.parent.name
+        tissue_list_tsv = DEV_REPO_ROOT / "MoTrPAC" / "config" / "tissue_list.tsv"
+        tissue_label = resolve_tsv_value(tissue_list_tsv, key_field="tissue_id", key_value=tissue_id, value_field="tissue_label")
+        transcript_tissue_label = resolve_tsv_value(tissue_list_tsv, key_field="tissue_id", key_value=tissue_id, value_field="transcript_tissue_label")
+        if not tissue_label or not transcript_tissue_label:
+            raise SystemExit(f"Unable to resolve MoTrPAC tissue labels for tissue_id={tissue_id}")
+        model_manifest_tsv = DEV_REPO_ROOT / "MoTrPAC" / "config" / "model_manifest.tsv"
+        extractor_dir = model_dir / "extractor"
+        with prepend_sys_path(DEV_REPO_ROOT / "MoTrPAC" / "src"):
+            if model_family == "training":
+                module = importlib.import_module("run_motrpac_training_model")
+                settings_by_model = module.load_model_settings(model_manifest_tsv)
+                module.write_model_sidecar(
+                    path=extractor_dir / "geneset.model.json",
+                    model_id=args.model_id,
+                    tissue_id=tissue_id,
+                    tissue_label=tissue_label,
+                    settings=settings_by_model[args.model_id],
+                )
+                return
+            module = importlib.import_module("run_motrpac_timewise_model")
+            settings_by_model = module.load_model_settings(model_manifest_tsv)
+            settings = settings_by_model[args.model_id]
+            if (extractor_dir / "manifest.tsv").exists():
+                module.write_grouped_model_sidecars(
+                    extractor_out=extractor_dir,
+                    model_id=args.model_id,
+                    tissue_id=tissue_id,
+                    tissue_label=tissue_label,
+                    settings=settings,
+                )
+            else:
+                payload = {
+                    "schema_version": "1",
+                    "library": "MoTrPAC",
+                    "model_id": args.model_id,
+                    "model_group": "TW",
+                    "model_label": "timewise",
+                    "workflow_name": (
+                        "motrpac_timepoint"
+                        if module.manifest_value(settings, "workflow_stratify_scheme", "sex_timepoint") == "timepoint"
+                        else "motrpac_timewise"
+                    ),
+                    "extractor_name": "rna_deg_multi",
+                    "parameters": {
+                        "stratify_scheme": module.manifest_value(settings, "workflow_stratify_scheme", "sex_timepoint"),
+                        "covariates": module.manifest_value(settings, "workflow_covariates", "none"),
+                        "min_samples_per_group": module.manifest_value(settings, "workflow_min_samples_per_group", "5"),
+                        "postprocess_mode": settings["extractor_postprocess_mode"],
+                        "score_mode": settings["extractor_score_mode"],
+                        "select": settings["extractor_select"],
+                    },
+                    "inputs": {
+                        "tissue_id": tissue_id,
+                        "tissue_label": tissue_label or tissue_id,
+                        "organism": "human",
+                        "genome_build": "hg38",
+                    },
+                    "naming": {
+                        "comparison_style": module.manifest_value(settings, "workflow_stratify_scheme", "sex_timepoint"),
+                        "gene_set_pattern": "MoTrPAC_<tissue>_<sex_or_timepoint>_up|dn",
+                    },
+                }
+                module.write_text(
+                    extractor_dir / "geneset.model.json",
+                    json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                )
+        return
+
+    with prepend_sys_path(DEV_REPO_ROOT / "MoTrPAC" / "src"):
+        if model_family == "hz_released_dea":
+            module = importlib.import_module("run_motrpac_hz_released_dea_model")
+            settings_by_model = module.load_model_settings(DEV_REPO_ROOT / "MoTrPAC" / "config" / "model_manifest.tsv")
+            module.write_model_sidecar(
+                path=model_dir / "extractor" / "geneset.model.json",
+                model_id=args.model_id,
+                settings=settings_by_model[args.model_id],
+            )
+            return
+        if model_family == "hz_raw_aggregated":
+            module = importlib.import_module("run_motrpac_hz_raw_aggregated_model")
+            settings_by_model = module.row_map(module.read_tsv(DEV_REPO_ROOT / "MoTrPAC" / "config" / "model_manifest.tsv"), "model_id")
+            module.write_model_sidecar(
+                path=model_dir / "extractor" / "geneset.model.json",
+                model_id=args.model_id,
+                settings=settings_by_model[args.model_id],
+            )
+            return
+    raise SystemExit(f"Unsupported MoTrPAC model family for standalone refresh: {model_family}")
+
+
+def regenerate_hubmap_model_sidecars(args: argparse.Namespace, model_dir: Path) -> None:
+    with prepend_sys_path(DEV_REPO_ROOT / "HuBMAP" / "src"):
+        module = importlib.import_module("run_hubmap_hz_model")
+        settings_by_model = module.load_model_settings(DEV_REPO_ROOT / "HuBMAP" / "config" / "model_manifest.tsv")
+        module.write_model_sidecar(
+            path=model_dir / "extractor" / "geneset.model.json",
+            model_id=args.model_id,
+            settings=settings_by_model[args.model_id],
+        )
+
+
+def regenerate_lincs_model_sidecars(args: argparse.Namespace, model_dir: Path) -> None:
+    with prepend_sys_path(DEV_REPO_ROOT / "LINCS_L1000" / "src"):
+        module = importlib.import_module("run_lincs_l1000_hz_model")
+        settings_by_model = module.load_model_settings(DEV_REPO_ROOT / "LINCS_L1000" / "config" / "model_manifest.tsv")
+        workflow_name = module.model_workflow_info(args.model_id)[1]
+        term_prefix = module.lincs_term_prefix(args.model_id)
+        module.write_model_sidecar(
+            path=model_dir / "extractor" / "geneset.model.json",
+            model_id=args.model_id,
+            settings=settings_by_model[args.model_id],
+            workflow_name=workflow_name,
+            term_prefix=term_prefix,
+        )
+
+
+def regenerate_model_sidecars(
+    *,
+    args: argparse.Namespace,
+    model_dir: Path,
+    metadata_paths: list[Path],
+    env: dict[str, str],
+) -> None:
+    library_name = infer_library_name(
+        description_template_tsv=args.description_template_tsv,
+        metadata_paths=metadata_paths,
+    )
+    if library_name == "GTEx":
+        regenerate_gtex_model_sidecars(args, model_dir, env)
+        return
+    if library_name == "MoTrPAC":
+        regenerate_motrpac_model_sidecars(args, model_dir, env)
+        return
+    if library_name == "HuBMAP":
+        regenerate_hubmap_model_sidecars(args, model_dir)
+        return
+    if library_name == "LINCS_L1000":
+        regenerate_lincs_model_sidecars(args, model_dir)
+        return
+    raise SystemExit(f"Unsupported library for standalone model-sidecar regeneration: {library_name}")
 
 
 def parse_s3_uri(s3_uri: str) -> tuple[str, str]:
@@ -420,12 +1009,20 @@ def main() -> int:
             raise SystemExit(f"Missing source map TSV: {source_map_path}")
         source_map = read_input_source_map(source_map_path)
     snapshot_originals(metadata_paths)
+    snapshot_gmt_originals(model_dir)
     restore_from_originals(metadata_paths)
+    restore_gmt_from_originals(model_dir)
 
     env = dict(os.environ)
     existing_pythonpath = env.get("PYTHONPATH", "").strip()
     dig_pythonpath = str(dig_dir / "src")
     env["PYTHONPATH"] = dig_pythonpath if not existing_pythonpath else f"{dig_pythonpath}{os.pathsep}{existing_pythonpath}"
+    regenerate_model_sidecars(
+        args=args,
+        model_dir=model_dir,
+        metadata_paths=metadata_paths,
+        env=env,
+    )
 
     for metadata_path in metadata_paths:
         ensure_model_sidecar(metadata_path, args.model_id)
@@ -472,6 +1069,11 @@ def main() -> int:
         rewrite_metadata_and_provenance(
             metadata_paths=metadata_paths,
             rewrite_passes=rewrite_passes,
+        )
+    if not args.show_template_vars:
+        rewrite_gmt_descriptions(
+            model_dir=model_dir,
+            template_map=template_map,
         )
     return 0
 
