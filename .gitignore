@@ -26,6 +26,14 @@
 !HuBMAP/config/model_list.tsv
 !HuBMAP/config/model_manifest.tsv
 !HuBMAP/config/model_description_templates.tsv
+!IGVF/config/model_list.tsv
+!IGVF/config/model_manifest.tsv
+!IGVF/config/model_description_templates.tsv
+!IGVF/config/analysis_set_list.tsv
+!ImmPort/config/model_list.tsv
+!ImmPort/config/model_manifest.tsv
+!ImmPort/config/model_description_templates.tsv
+!ImmPort/config/study_list.tsv
 
 # Allow traversing these subdirectories
 !LINCS_L1000/
@@ -38,6 +46,8 @@
 !HuBMAP/
 !MoTrPAC/
 !KOMP2/
+!IGVF/
+!ImmPort/
 !src/
 !run/
 !proposals/
@@ -53,6 +63,8 @@
 !HuBMAP/**/
 !MoTrPAC/**/
 !KOMP2/**/
+!IGVF/**/
+!ImmPort/**/
 !src/**/
 !run/**/
 !proposals/**/
@@ -149,5 +161,24 @@
 !KOMP2/**/*.md
 !KOMP2/**/*.pdf
 !KOMP2/**/*.png
+!IGVF/**/*.py
+!IGVF/**/*.r
+!IGVF/**/*.R
+!IGVF/**/*.sh
+!IGVF/**/*.md
+!IGVF/**/*.pdf
+!IGVF/**/*.png
+!ImmPort/**/*.py
+!ImmPort/**/*.r
+!ImmPort/**/*.R
+!ImmPort/**/*.sh
+!ImmPort/**/*.md
+!ImmPort/**/*.pdf
+!ImmPort/**/*.png
+
+# Downloaded library inputs and generated outputs stay untracked
+inputs/
+igvf_all_models/
+immport_all_models/
 
 archive/

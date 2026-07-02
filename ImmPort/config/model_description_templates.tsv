@@ -1,0 +1,2 @@
+model_id	description_template
+IM1	ImmPort bulk RNA-seq immune-response gene-set library (model {model.model_id}) for {model.parameters.study_label}: signed up and down differential-expression signatures ranked by {model.parameters.score_mode}. Each gene set is derived either from the study's released differential-expression table or from raw counts and sample metadata through the rna_de_prepare workflow; see the individual gene-set descriptions and provenance for the input used.

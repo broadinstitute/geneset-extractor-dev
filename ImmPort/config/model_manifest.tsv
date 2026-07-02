@@ -1,0 +1,2 @@
+model_id	workflow_backend	extractor_postprocess_mode	extractor_score_mode	extractor_score_mode_released	extractor_select	extractor_top_k	extractor_padj_max	extractor_min_abs_logfc	extractor_gmt_require_symbol	extractor_gmt_min_genes	extractor_gmt_max_genes
+IM1	r_limma_voom	harmonizome	signed_neglog10padj	stat	top_k	250	0.05	NA	true	5	500

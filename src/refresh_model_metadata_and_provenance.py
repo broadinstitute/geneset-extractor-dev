@@ -24,7 +24,7 @@ DIRECTORY_ARG_PLACEHOLDERS = {
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEV_REPO_ROOT = WORKSPACE_ROOT / "geneset-extractor-dev"
-KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000")
+KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "IGVF", "ImmPort")
 
 
 def parse_args() -> argparse.Namespace:
@@ -290,6 +290,47 @@ def hubmap_row_description(model_payload: dict[str, object], base_description: s
     )
 
 
+def igvf_row_description(model_payload: dict[str, object], base_description: str, direction: str, stem: str) -> str:
+    parameters = model_payload.get("parameters", {}) if isinstance(model_payload.get("parameters"), dict) else {}
+    term_prefix = str(parameters.get("term_prefix", "")).strip()
+    term = extract_term_after_prefix(stem, f"{term_prefix}_").replace("_", " ") if term_prefix else stem.replace("_", " ")
+    analysis_set_id = str(parameters.get("analysis_set_id", "")).strip()
+    model_id = str(model_payload.get("model_id", "")).strip()
+    kind = "up-gene set" if direction == "up" else "down-gene set"
+    regulated = "up-regulated" if direction == "up" else "down-regulated"
+    set_clause = f" in IGVF analysis set {analysis_set_id}" if analysis_set_id else ""
+    return (
+        f"IGVF Perturb-seq {kind} for {term} using model {model_id}: "
+        f"genes {regulated} after CRISPR perturbation of {term}{set_clause}, "
+        f"derived from released IGVF single-cell CRISPR (Perturb-seq) differential-expression signatures."
+    )
+
+
+def immport_row_description(model_payload: dict[str, object], base_description: str, direction: str, stem: str) -> str:
+    parameters = model_payload.get("parameters", {}) if isinstance(model_payload.get("parameters"), dict) else {}
+    model_id = str(model_payload.get("model_id", "")).strip()
+    workflow_name = str(model_payload.get("workflow_name", "")).strip()
+    case_label = str(parameters.get("case_label", "")).strip()
+    control_label = str(parameters.get("control_label", "")).strip()
+    study_label = str(parameters.get("study_label", "")).strip()
+    score_mode = str(parameters.get("score_mode", "")).strip()
+    de_source = str(parameters.get("de_source", "")).strip()
+    kind = "up-gene set" if direction == "up" else "down-gene set"
+    higher_lower = "higher" if direction == "up" else "lower"
+    if workflow_name == "released_de" or de_source == "study_published_de_table":
+        mode_phrase = "taken from the study's released differential-expression table"
+    else:
+        mode_phrase = "computed from raw counts and sample metadata through the rna_de_prepare workflow"
+    contrast = f"{case_label} vs {control_label}" if case_label and control_label else stem.replace("_", " ")
+    study_clause = f" in {study_label}" if study_label else ""
+    rank_clause = f", ranked by {score_mode}" if score_mode else ""
+    return (
+        f"ImmPort bulk RNA-seq {kind} for {contrast} using model {model_id}: "
+        f"genes with {higher_lower} expression in {case_label or 'the case group'} relative to "
+        f"{control_label or 'the control group'}{study_clause}, {mode_phrase}{rank_clause}."
+    )
+
+
 def render_gmt_row_description(set_name: str, model_payload: dict[str, object], template: str) -> str:
     stem, direction = split_gmt_set_name(set_name)
     base_description = expand_description_template(template, model_payload, set_name)
@@ -302,6 +343,10 @@ def render_gmt_row_description(set_name: str, model_payload: dict[str, object], 
         return lincs_row_description(model_payload, base_description, direction, stem)
     if library == "HuBMAP":
         return hubmap_row_description(model_payload, base_description, stem)
+    if library == "IGVF" and direction:
+        return igvf_row_description(model_payload, base_description, direction, stem)
+    if library == "ImmPort" and direction:
+        return immport_row_description(model_payload, base_description, direction, stem)
     return base_description
 
 
@@ -495,6 +540,10 @@ def infer_library_name(
                 return "HuBMAP"
             if name.startswith("LINCS_L1000_"):
                 return "LINCS_L1000"
+            if name.startswith("IGVF_"):
+                return "IGVF"
+            if name.startswith("ImmPort_"):
+                return "ImmPort"
     raise SystemExit("Unable to infer library for model refresh. Provide --description_template_tsv from a library config.")
 
 
@@ -719,6 +768,54 @@ def regenerate_lincs_model_sidecars(args: argparse.Namespace, model_dir: Path) -
         )
 
 
+def regenerate_igvf_model_sidecars(args: argparse.Namespace, model_dir: Path) -> None:
+    analysis_set_id = model_dir.parent.parent.name
+    with prepend_sys_path(DEV_REPO_ROOT / "IGVF" / "src"):
+        module = importlib.import_module("run_igvf_perturbseq_model")
+        settings_by_model = module.load_model_settings(DEV_REPO_ROOT / "IGVF" / "config" / "model_manifest.tsv")
+        if args.model_id not in settings_by_model:
+            raise SystemExit(f"Unknown IGVF model_id for refresh: {args.model_id}")
+        module.write_model_sidecar(
+            path=model_dir / "extractor" / "geneset.model.json",
+            model_id=args.model_id,
+            analysis_set_id=analysis_set_id,
+            settings=settings_by_model[args.model_id],
+        )
+
+
+def regenerate_immport_model_sidecars(args: argparse.Namespace, model_dir: Path) -> None:
+    study_id = model_dir.parent.parent.name
+    study_list_tsv = DEV_REPO_ROOT / "ImmPort" / "config" / "study_list.tsv"
+    study_row: dict[str, str] | None = None
+    for row in read_tsv_rows(study_list_tsv):
+        if str(row.get("study_id", "")).strip() == study_id:
+            study_row = row
+            break
+    if study_row is None:
+        raise SystemExit(f"Unable to resolve ImmPort study row for study_id={study_id}")
+    released_de_object = str(study_row.get("released_de_object", "")).strip()
+    with prepend_sys_path(DEV_REPO_ROOT / "ImmPort" / "src"):
+        module = importlib.import_module("run_immport_bulk_de_model")
+        settings_by_model = module.load_model_settings(DEV_REPO_ROOT / "ImmPort" / "config" / "model_manifest.tsv")
+        if args.model_id not in settings_by_model:
+            raise SystemExit(f"Unknown ImmPort model_id for refresh: {args.model_id}")
+        settings = dict(settings_by_model[args.model_id])
+        settings["group_column"] = str(study_row.get("group_column", "")).strip()
+        module.write_model_sidecar(
+            path=model_dir / "extractor" / "geneset.model.json",
+            model_id=args.model_id,
+            study_id=study_id,
+            study_accession=str(study_row.get("study_accession", "")).strip(),
+            study_label=str(study_row.get("study_label", "")).strip(),
+            case_label=str(study_row.get("case_label", "")).strip(),
+            control_label=str(study_row.get("control_label", "")).strip(),
+            covariates=str(study_row.get("covariates", "")).strip(),
+            settings=settings,
+            released=bool(released_de_object),
+            released_de_object=released_de_object,
+        )
+
+
 def regenerate_model_sidecars(
     *,
     args: argparse.Namespace,
@@ -741,6 +838,12 @@ def regenerate_model_sidecars(
         return
     if library_name == "LINCS_L1000":
         regenerate_lincs_model_sidecars(args, model_dir)
+        return
+    if library_name == "IGVF":
+        regenerate_igvf_model_sidecars(args, model_dir)
+        return
+    if library_name == "ImmPort":
+        regenerate_immport_model_sidecars(args, model_dir)
         return
     raise SystemExit(f"Unsupported library for standalone model-sidecar regeneration: {library_name}")
 
