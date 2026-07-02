@@ -24,7 +24,7 @@ DIRECTORY_ARG_PLACEHOLDERS = {
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEV_REPO_ROOT = WORKSPACE_ROOT / "geneset-extractor-dev"
-KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000")
+KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "NCI_GDC_TCGA_RNAseq", "NCI_GDC_TCGA_CNV", "NCI_GDC_TCGA_Methylation", "NCI_GDC_TCGA_ATAC", "NCI_GDC_TCGA_Splice")
 
 
 def parse_args() -> argparse.Namespace:
@@ -741,6 +741,10 @@ def regenerate_model_sidecars(
         return
     if library_name == "LINCS_L1000":
         regenerate_lincs_model_sidecars(args, model_dir)
+        return
+    if library_name in ("NCI_GDC_TCGA_RNAseq", "NCI_GDC_TCGA_CNV", "NCI_GDC_TCGA_Methylation", "NCI_GDC_TCGA_ATAC", "NCI_GDC_TCGA_Splice"):
+        # TCGA wrapper runners write geneset.model.json during the run (and via --write_model_only);
+        # refresh only needs to patch metadata + GMT descriptions here.
         return
     raise SystemExit(f"Unsupported library for standalone model-sidecar regeneration: {library_name}")
 
