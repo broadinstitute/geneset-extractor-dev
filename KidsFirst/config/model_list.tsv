@@ -1,0 +1,3 @@
+model_id	model_family	description	enabled
+HZ1	hz_de	kidsfirst_harmonizome_de	true
+HZ2	curated_disease_up	kidsfirst_curated_disease_up	true
