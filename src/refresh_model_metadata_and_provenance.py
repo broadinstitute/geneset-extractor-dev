@@ -6,6 +6,7 @@ import csv
 import importlib
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -94,6 +95,269 @@ def read_input_source_map(path: Path) -> dict[str, str]:
     return dict(sorted(mapping.items(), key=lambda item: len(item[0]), reverse=True))
 
 
+def parse_gmt_rows(path: Path) -> list[list[str]]:
+    rows: list[list[str]] = []
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        for line in handle:
+            rows.append(line.rstrip("\n").split("\t"))
+    return rows
+
+
+def write_gmt_rows(path: Path, rows: list[list[str]]) -> None:
+    path.write_text(
+        "\n".join("\t".join(row) for row in rows) + ("\n" if rows else ""),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
+def split_gmt_set_name(set_name: str) -> tuple[str, str | None]:
+    lower_name = set_name.lower()
+    for suffix, direction in (("_up", "up"), ("_dn", "dn"), ("_down", "dn")):
+        if lower_name.endswith(suffix):
+            return set_name[: -len(suffix)], direction
+    return set_name, None
+
+
+def strip_trailing_period(text: str) -> str:
+    return str(text).strip().rstrip(".")
+
+
+def replace_header_gene_set_kind(header: str, direction: str | None) -> str:
+    if not direction:
+        return header
+    label = "up-gene set" if direction == "up" else "down-gene set"
+    for needle in (" gene-set library ", " gene set ", " gene-set library", " gene set"):
+        if needle in header:
+            return header.replace(needle, f" {label} ", 1).rstrip()
+    return f"{header} {label}".strip()
+
+
+def model_lookup_context(model_payload: dict[str, object], set_name: str) -> dict[str, object]:
+    naming = model_payload.get("naming", {}) if isinstance(model_payload.get("naming"), dict) else {}
+    inputs = model_payload.get("inputs", {}) if isinstance(model_payload.get("inputs"), dict) else {}
+    stem, direction = split_gmt_set_name(set_name)
+    context: dict[str, object] = {
+        "model": model_payload,
+        "set_name": set_name,
+        "set_stem": stem,
+        "direction": direction or "",
+    }
+    for key, value in naming.items():
+        context.setdefault(str(key), value)
+    for key, value in inputs.items():
+        context.setdefault(str(key), value)
+    if not context.get("comparison_label"):
+        library = str(model_payload.get("library", "")).strip()
+        model_group = str(model_payload.get("model_group", "")).strip()
+        if library == "MoTrPAC":
+            if stem.startswith("MoTrPAC_"):
+                comparison_label = stem[len("MoTrPAC_") :]
+            else:
+                comparison_label = stem
+            if model_group == "TR" and comparison_label.endswith("_TrainingVsControl"):
+                comparison_label = comparison_label[: -len("_TrainingVsControl")] + " training-versus-control"
+            context["comparison_label"] = comparison_label.replace("_", " ")
+    return context
+
+
+TEMPLATE_VAR_PATTERN = re.compile(r"\{([^{}]+)\}")
+
+
+def resolve_template_value(context: dict[str, object], path: str) -> str:
+    current: object = context
+    for part in path.split("."):
+        if isinstance(current, dict) and part in current:
+            current = current[part]
+        else:
+            return ""
+    if current is None:
+        return ""
+    return str(current)
+
+
+def expand_description_template(template: str, model_payload: dict[str, object], set_name: str) -> str:
+    context = model_lookup_context(model_payload, set_name)
+    return TEMPLATE_VAR_PATTERN.sub(lambda match: resolve_template_value(context, match.group(1).strip()), template)
+
+
+def split_description(description: str) -> tuple[str, str]:
+    text = str(description).strip()
+    if ": " in text:
+        head, tail = text.split(": ", 1)
+        return head.strip(), strip_trailing_period(tail)
+    return strip_trailing_period(text), ""
+
+
+def extract_term_after_prefix(stem: str, prefix: str) -> str:
+    if stem.startswith(prefix):
+        return stem[len(prefix) :]
+    return stem
+
+
+def gtex_row_description(model_payload: dict[str, object], base_description: str, direction: str, stem: str) -> str:
+    header, body = split_description(base_description)
+    header = replace_header_gene_set_kind(header, direction)
+    naming = model_payload.get("naming", {}) if isinstance(model_payload.get("naming"), dict) else {}
+    comparison_style = str(naming.get("comparison_style", "")).strip()
+    if comparison_style == "age_pair":
+        comparison_age = str(naming.get("comparison_age_label", "")).strip()
+        reference_age = str(naming.get("reference_age_label", "")).strip()
+        higher_lower = "higher" if direction == "up" else "lower"
+        match = re.match(
+            r"(?P<method>.+?) in (?P<comparison>.+?) relative to (?P<reference>.+?),(?P<rest>.*)$",
+            body,
+        )
+        if match:
+            method = strip_trailing_period(match.group("method"))
+            rest = strip_trailing_period(match.group("rest"))
+            clause = f"genes with {higher_lower} expression in {comparison_age} relative to {reference_age}, identified by {method}"
+            if rest:
+                clause += f", {rest}"
+            return f"{header}: {clause}."
+        return f"{header}: genes with {higher_lower} expression in {comparison_age} relative to {reference_age}, identified by {body}."
+    association = "positive" if direction == "up" else "negative"
+    return f"{header}: genes with {association} association with increasing age, identified by {body}."
+
+
+def motrpac_tw_condition_phrase(stem: str) -> str:
+    label = extract_term_after_prefix(stem, "MoTrPAC_")
+    parts = [part for part in label.split("_") if part]
+    if len(parts) >= 3 and parts[-2].lower() in {"female", "male"}:
+        return f"at {parts[-1]} in {parts[-2].lower()} trained animals relative to matched controls"
+    if len(parts) >= 2:
+        return f"at {parts[-1]} in trained animals relative to matched controls"
+    return f"for {label.replace('_', ' ')} relative to matched controls"
+
+
+def normalize_library_body(body: str) -> str:
+    stripped = strip_trailing_period(body)
+    lowered = stripped.lower()
+    if lowered.startswith("library built "):
+        return stripped[len("library ") :]
+    return stripped
+
+
+def motrpac_row_description(model_payload: dict[str, object], base_description: str, direction: str, stem: str) -> str:
+    header, body = split_description(base_description)
+    model_group = str(model_payload.get("model_group", "")).strip()
+    if model_group in {"TR", "TW"}:
+        header = replace_header_gene_set_kind(header, direction)
+        higher_lower = "higher" if direction == "up" else "lower"
+        if model_group == "TR":
+            clause = f"genes with {higher_lower} expression in trained animals relative to controls, identified by {body}"
+        else:
+            clause = f"genes with {higher_lower} expression {motrpac_tw_condition_phrase(stem)}, identified by {body}"
+        return f"{header}: {clause}."
+    label = extract_term_after_prefix(stem, "MoTrPAC_").replace("_", " ")
+    polarity = "positive" if direction == "up" else "negative"
+    model_id = str(model_payload.get("model_id", "")).strip()
+    normalized = normalize_library_body(body)
+    return (
+        f"MoTrPAC rat endurance-training aggregated {'up-gene set' if direction == 'up' else 'down-gene set'} "
+        f"for {label} using model {model_id}: genes with {polarity} aggregated training-response signal for {label}, "
+        f"derived from {normalized}."
+    )
+
+
+def lincs_row_description(model_payload: dict[str, object], base_description: str, direction: str, stem: str) -> str:
+    _header, body = split_description(base_description)
+    model_id = str(model_payload.get("model_id", "")).strip()
+    term_prefix = ""
+    parameters = model_payload.get("parameters", {}) if isinstance(model_payload.get("parameters"), dict) else {}
+    term_prefix = str(parameters.get("term_prefix", "")).strip()
+    term = extract_term_after_prefix(stem, f"{term_prefix}_").replace("_", " ")
+    if model_id == "HZ1":
+        return (
+            f"LINCS L1000 chemical perturbation {'up-gene set' if direction == 'up' else 'down-gene set'} "
+            f"for {term} using model {model_id}: genes {'increased' if direction == 'up' else 'decreased'} "
+            f"after chemical perturbation by {term}, derived from {normalize_library_body(body)}."
+        )
+    return (
+        f"LINCS L1000 CRISPR knockout {'up-gene set' if direction == 'up' else 'down-gene set'} "
+        f"for {term} using model {model_id}: genes {'increased' if direction == 'up' else 'decreased'} "
+        f"after CRISPR knockout of {term}, derived from {normalize_library_body(body)}."
+    )
+
+
+def hubmap_row_description(model_payload: dict[str, object], base_description: str, stem: str) -> str:
+    _header, body = split_description(base_description)
+    model_id = str(model_payload.get("model_id", "")).strip()
+    term = extract_term_after_prefix(stem, "HuBMAP_").replace("_", " ")
+    return (
+        f"HuBMAP ASCT+B marker gene set for {term} using model {model_id}: "
+        f"marker genes for {term}, derived from {normalize_library_body(body)}."
+    )
+
+
+def render_gmt_row_description(set_name: str, model_payload: dict[str, object], template: str) -> str:
+    stem, direction = split_gmt_set_name(set_name)
+    base_description = expand_description_template(template, model_payload, set_name)
+    library = str(model_payload.get("library", "")).strip()
+    if library == "GTEx" and direction:
+        return gtex_row_description(model_payload, base_description, direction, stem)
+    if library == "MoTrPAC" and direction:
+        return motrpac_row_description(model_payload, base_description, direction, stem)
+    if library == "LINCS_L1000" and direction:
+        return lincs_row_description(model_payload, base_description, direction, stem)
+    if library == "HuBMAP":
+        return hubmap_row_description(model_payload, base_description, stem)
+    return base_description
+
+
+def discover_gmt_paths(model_dir: Path) -> list[Path]:
+    return sorted((model_dir / "extractor").rglob("genesets.gmt"))
+
+
+def rewrite_gmt_descriptions(
+    *,
+    model_dir: Path,
+    template_map: dict[str, str],
+) -> None:
+    gmt_paths = discover_gmt_paths(model_dir)
+    if not gmt_paths:
+        return
+    set_name_to_payload: dict[str, dict[str, object]] = {}
+    for gmt_path in sorted(gmt_paths, key=lambda path: len(path.parts), reverse=True):
+        sidecar_path = gmt_path.with_name("geneset.model.json")
+        if not sidecar_path.exists():
+            continue
+        model_payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
+        if not isinstance(model_payload, dict):
+            continue
+        for row in parse_gmt_rows(gmt_path):
+            if row and row[0] and row[0] not in set_name_to_payload:
+                set_name_to_payload[row[0]] = model_payload
+
+    for gmt_path in gmt_paths:
+        sidecar_path = gmt_path.with_name("geneset.model.json")
+        fallback_payload: dict[str, object] | None = None
+        if sidecar_path.exists():
+            payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                fallback_payload = payload
+        rows = parse_gmt_rows(gmt_path)
+        changed = False
+        for row in rows:
+            if len(row) < 3 or not row[0]:
+                continue
+            model_payload = set_name_to_payload.get(row[0], fallback_payload)
+            if not model_payload:
+                continue
+            model_id = str(model_payload.get("model_id", "")).strip()
+            template = template_map.get(model_id, "")
+            if not template:
+                continue
+            while len(row) < 3:
+                row.append("")
+            description = render_gmt_row_description(row[0], model_payload, template)
+            if row[1] != description:
+                row[1] = description
+                changed = True
+        if changed:
+            write_gmt_rows(gmt_path, rows)
+
+
 def read_manifest_meta_paths(manifest_path: Path, extractor_dir: Path) -> list[Path]:
     meta_paths: list[Path] = []
     with manifest_path.open("r", encoding="utf-8", newline="") as handle:
@@ -159,6 +423,18 @@ def restore_from_originals(metadata_paths: list[Path]) -> None:
             orig_path = Path(f"{path}.orig")
             if orig_path.exists():
                 shutil.copy2(orig_path, path)
+
+
+def snapshot_gmt_originals(model_dir: Path) -> None:
+    for gmt_path in discover_gmt_paths(model_dir):
+        write_orig_once(gmt_path)
+
+
+def restore_gmt_from_originals(model_dir: Path) -> None:
+    for gmt_path in discover_gmt_paths(model_dir):
+        orig_path = Path(f"{gmt_path}.orig")
+        if orig_path.exists():
+            shutil.copy2(orig_path, gmt_path)
 
 
 def run_command(cmd: list[str], *, cwd: Path, env: dict[str, str]) -> None:
@@ -733,7 +1009,9 @@ def main() -> int:
             raise SystemExit(f"Missing source map TSV: {source_map_path}")
         source_map = read_input_source_map(source_map_path)
     snapshot_originals(metadata_paths)
+    snapshot_gmt_originals(model_dir)
     restore_from_originals(metadata_paths)
+    restore_gmt_from_originals(model_dir)
 
     env = dict(os.environ)
     existing_pythonpath = env.get("PYTHONPATH", "").strip()
@@ -791,6 +1069,11 @@ def main() -> int:
         rewrite_metadata_and_provenance(
             metadata_paths=metadata_paths,
             rewrite_passes=rewrite_passes,
+        )
+    if not args.show_template_vars:
+        rewrite_gmt_descriptions(
+            model_dir=model_dir,
+            template_map=template_map,
         )
     return 0
 
