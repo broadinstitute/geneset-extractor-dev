@@ -633,6 +633,16 @@ def metadata_gene_set_name(metadata_path: Path) -> str:
     return ""
 
 
+def gtex_comparison_label_from_gene_set_name(gene_set_name: str) -> str:
+    name = str(gene_set_name).strip()
+    if not name:
+        return ""
+    match = re.search(r"(\d{2}-\d{2}_\d{2}-\d{2})$", name)
+    if match:
+        return match.group(1)
+    return name
+
+
 def rewrite_gtex_sidecars_for_metadata_paths(
     *,
     args: argparse.Namespace,
@@ -661,7 +671,7 @@ def rewrite_gtex_sidecars_for_metadata_paths(
                         tissue_id=tissue_id,
                         tissue_label=tissue_label,
                         settings=settings,
-                        comparison_label=metadata_gene_set_name(metadata_path),
+                        comparison_label=gtex_comparison_label_from_gene_set_name(metadata_gene_set_name(metadata_path)),
                     ),
                 )
         return
@@ -703,7 +713,7 @@ def rewrite_gtex_sidecars_for_metadata_paths(
                     tissue_id=tissue_id,
                     tissue_label=tissue_label,
                     args=hz_args,
-                    comparison_label=metadata_gene_set_name(metadata_path),
+                    comparison_label=gtex_comparison_label_from_gene_set_name(metadata_gene_set_name(metadata_path)),
                 ),
             )
 
