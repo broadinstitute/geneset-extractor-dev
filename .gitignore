@@ -178,7 +178,7 @@
 
 # Downloaded library inputs and generated outputs stay untracked
 inputs/
-igvf_outputs/
-immport_outputs/
+igvf_all_models/
+immport_all_models/
 
 archive/

@@ -1,2 +1,2 @@
 model_id	description_template
-PS1	IGVF Perturb-seq perturbational gene-set library using model {model.model_id}: signed up and down gene signatures for each CRISPR-perturbed element, derived from IGVF single-cell CRISPR (Perturb-seq) differential-expression results.
+PS1	IGVF Perturb-seq perturbational gene-set library (model {model.model_id}) for analysis set {model.parameters.analysis_set_id}: signed up and down gene signatures for each CRISPR-perturbed element, derived from released IGVF single-cell CRISPR (Perturb-seq) differential-expression signatures.

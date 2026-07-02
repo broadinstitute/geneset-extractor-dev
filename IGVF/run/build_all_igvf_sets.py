@@ -7,7 +7,7 @@ long_de column mapping + thresholds, then invokes build_igvf_genesets.py for tha
 
 Usage (in container):
   python IGVF/run/build_all_igvf_sets.py --inputs_root inputs/IGVF --dig_dir <DIG> \
-      --out_root igvf_outputs [--only IGVFDS....,IGVFDS....] [--overwrite]
+      --out_root igvf_all_models [--only IGVFDS....,IGVFDS....] [--overwrite]
 """
 from __future__ import annotations
 
