@@ -14,6 +14,8 @@ import cptac_selection_io as sio
 import fetch_pdc_study as fetch
 import build_pdc_provenance_overlay as ovl
 
+DEFAULT_OUT_ROOT = "cptac_all_models"
+
 
 def engine_cmd(dig_dir: Path, python_bin: str, *args: str) -> tuple[list[str], dict]:
     cmd = [python_bin, "-m", "geneset_extractors.cli", *args]
@@ -94,7 +96,7 @@ def run_model(
     cohort_out = Path(out_root) / "genesets" / cohort_id
     model_out = cohort_out / "models" / model_id
     fetch_dir = cohort_out / "fetch"
-    prepared_dir = model_out / "prepared"
+    workflow_dir = model_out / "workflow"
     extractor_dir = model_out / "extractor"
     model_out.mkdir(parents=True, exist_ok=True)
     log_lines: list[str] = []
@@ -120,7 +122,7 @@ def run_model(
             "--ptm_report_tsv", str(fetched["phospho_report"]),
             "--protein_report_tsv", str(fetched["proteome_report"]),
             "--sample_annotations_tsv", str(fetched["sample_annotations"]),
-            "--out_dir", str(prepared_dir),
+            "--out_dir", str(workflow_dir),
             "--organism", "human",
             "--ptm_type", pflags.get("ptm_type", "phospho"),
             "--study_id", cohort_id,
@@ -137,7 +139,7 @@ def run_model(
         }
         written = ovl.write_overlay(
             manifest_rows=manifest_rows,
-            prepared_dir=str(prepared_dir),
+            prepared_dir=str(workflow_dir),
             operation_meta=operation_meta,
             out_dir=model_out,
         )
@@ -146,9 +148,9 @@ def run_model(
         eflags = sio.extractor_flags(model)
         extract_args = [
             "convert", "ptm_site_matrix",
-            "--ptm_matrix_tsv", str(prepared_dir / "ptm_matrix.tsv"),
-            "--sample_metadata_tsv", str(prepared_dir / "sample_metadata.tsv"),
-            "--protein_matrix_tsv", str(prepared_dir / "protein_matrix.tsv"),
+            "--ptm_matrix_tsv", str(workflow_dir / "ptm_matrix.tsv"),
+            "--sample_metadata_tsv", str(workflow_dir / "sample_metadata.tsv"),
+            "--protein_matrix_tsv", str(workflow_dir / "protein_matrix.tsv"),
             "--study_contrast", eflags.get("study_contrast", "condition_a_vs_b"),
             "--condition_a", eflags.get("condition_a", "case"),
             "--condition_b", eflags.get("condition_b", "control"),

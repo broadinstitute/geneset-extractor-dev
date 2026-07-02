@@ -45,6 +45,11 @@ def test_run_model_offline_end_to_end(tmp_path):
         api_cache_json=_api_cache(tmp_path),
         python_bin=sys.executable,
     )
+    # Model output standardizes on a workflow/ dir (formerly "prepared").
+    assert (Path(model_dir) / "workflow").exists()
+    assert (Path(model_dir) / "workflow" / "ptm_matrix.tsv").exists()
+    assert not (Path(model_dir) / "prepared").exists()
+
     # At least one variant dir with the 3-file contract.
     provs = list(Path(model_dir).rglob("geneset.provenance.json"))
     assert provs, "no geneset.provenance.json produced"
