@@ -1,0 +1,2 @@
+model_id	workflow_cnmf_k_list	workflow_cnmf_k	workflow_cnmf_n_iter	workflow_cnmf_numgenes	workflow_cnmf_export_kind	workflow_cnmf_select_strategy	workflow_top_k	workflow_min_genes	workflow_max_cells_total	workflow_seed
+GP1	auto	auto	100	2000	score	largest_stable	100	5	20000	1

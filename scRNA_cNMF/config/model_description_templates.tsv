@@ -1,0 +1,2 @@
+model_id	description_template
+GP1	scRNA cNMF gene program library using model {model.model_id}: programs extracted by consensus NMF from the {model.dataset_id} single-cell RNA-seq count matrix (organism: {model.organism}; K selected automatically by stability analysis; top {model.parameters.top_k} genes by spectra score per program).
