@@ -250,6 +250,10 @@ lookup_input_paths() {
 }
 
 run_worker() {
+  # Prepend conda env bin to PATH so cnmf CLI and other entry points are found
+  # even when the conda env is not activated (qsub passes PYTHON_BIN but not PATH)
+  export PATH="$(dirname "${PYTHON_BIN}"):${PATH}"
+
   local task_id dataset_id model_id
   task_id="$(task_id_from_env)" || {
     echo "Unable to determine array task id from PBS_ARRAYID or SGE_TASK_ID" >&2
