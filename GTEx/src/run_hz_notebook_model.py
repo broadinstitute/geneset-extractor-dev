@@ -22,10 +22,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model_id", required=True)
     parser.add_argument("--tissue_id", required=True)
     parser.add_argument("--tissue_label", required=True)
-    parser.add_argument("--expression_gct", required=True)
-    parser.add_argument("--sample_attributes_tsv", required=True)
-    parser.add_argument("--subject_phenotypes_tsv", required=True)
-    parser.add_argument("--human_gene_info", required=True)
+    parser.add_argument("--expression_gct")
+    parser.add_argument("--sample_attributes_tsv")
+    parser.add_argument("--subject_phenotypes_tsv")
+    parser.add_argument("--human_gene_info")
     parser.add_argument("--tissue_column")
     parser.add_argument("--tissue_value")
     parser.add_argument("--prepared_dir")
@@ -308,6 +308,11 @@ def main() -> int:
                 ),
             )
         return 0
+
+    if not args.expression_gct or not args.sample_attributes_tsv or not args.subject_phenotypes_tsv or not args.human_gene_info:
+        raise SystemExit(
+            "--expression_gct, --sample_attributes_tsv, --subject_phenotypes_tsv, and --human_gene_info are required unless --write_model_only is used"
+        )
 
     expression_gct = require_existing_file(args.expression_gct, "expression GCT")
     sample_attributes_tsv = require_existing_file(args.sample_attributes_tsv, "sample attributes TSV")
