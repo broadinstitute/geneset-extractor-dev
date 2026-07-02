@@ -26,6 +26,9 @@
 !HuBMAP/config/model_list.tsv
 !HuBMAP/config/model_manifest.tsv
 !HuBMAP/config/model_description_templates.tsv
+!PsychENCODE/config/model_list.tsv
+!PsychENCODE/config/model_manifest.tsv
+!PsychENCODE/config/model_description_templates.tsv
 
 # Allow traversing these subdirectories
 !LINCS_L1000/
@@ -36,6 +39,7 @@
 !Metabolomics/
 !GlyGen/
 !HuBMAP/
+!PsychENCODE/
 !MoTrPAC/
 !KOMP2/
 !src/
@@ -51,6 +55,7 @@
 !Metabolomics/**/
 !GlyGen/**/
 !HuBMAP/**/
+!PsychENCODE/**/
 !MoTrPAC/**/
 !KOMP2/**/
 !src/**/
@@ -135,6 +140,13 @@
 !HuBMAP/**/*.md
 !HuBMAP/**/*.pdf
 !HuBMAP/**/*.png
+!PsychENCODE/**/*.py
+!PsychENCODE/**/*.r
+!PsychENCODE/**/*.R
+!PsychENCODE/**/*.sh
+!PsychENCODE/**/*.md
+!PsychENCODE/**/*.pdf
+!PsychENCODE/**/*.png
 !MoTrPAC/**/*.py
 !MoTrPAC/**/*.r
 !MoTrPAC/**/*.R

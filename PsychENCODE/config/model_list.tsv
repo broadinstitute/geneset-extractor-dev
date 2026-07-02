@@ -1,0 +1,3 @@
+model_id	model_family	description	enabled
+HZ1	released_dex	psychencode_disorder_dex_signed	true
+HZ2	released_modules	psychencode_coexpression_modules_unsigned	true

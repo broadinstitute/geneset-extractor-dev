@@ -1,0 +1,3 @@
+model_id	workflow_name	extractor_name	term_prefix	workflow_exclude_modules	gmt_min_genes
+HZ1	psychencode_dex	signed_term_gene	PsychENCODE	NA	5
+HZ2	psychencode_modules	unsigned_term_gene	PsychENCODE	geneM0	5

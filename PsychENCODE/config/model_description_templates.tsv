@@ -1,0 +1,3 @@
+model_id	description_template
+HZ1	PsychENCODE disorder differential-expression gene-set library using model {model.model_id}: signed up/down gene sets per psychiatric disorder (ASD, BD, SCZ) from the released cross-disorder DEX gene table (Gandal et al. 2018, Science aat8127).
+HZ2	PsychENCODE gene co-expression module gene-set library using model {model.model_id}: unsigned gene sets, one per WGCNA co-expression module, from the released cross-disorder gene-module table (Gandal et al. 2018, Science aat8127).
