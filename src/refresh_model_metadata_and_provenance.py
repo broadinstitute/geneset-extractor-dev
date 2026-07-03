@@ -672,6 +672,123 @@ def metadata_gene_set_name(metadata_path: Path) -> str:
     return ""
 
 
+def metadata_input_file_path(payload: dict[str, object], preferred_roles: tuple[str, ...]) -> Path | None:
+    input_section = payload.get("input", {})
+    if not isinstance(input_section, dict):
+        return None
+    files = input_section.get("files", [])
+    if not isinstance(files, list):
+        return None
+    normalized_roles = {role.strip() for role in preferred_roles if role.strip()}
+    fallback: Path | None = None
+    for item in files:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role", "")).strip()
+        raw_path = str(item.get("local_path") or item.get("path") or "").strip()
+        if not raw_path:
+            continue
+        candidate = Path(raw_path)
+        if fallback is None:
+            fallback = candidate
+        if role in normalized_roles:
+            return candidate
+    return fallback
+
+
+def maybe_map_mirrored_output_to_local(
+    path: Path,
+    *,
+    local_output_root: Path | None,
+    remote_prefixes: list[str],
+) -> Path:
+    raw = str(path).strip()
+    if local_output_root is None or not raw:
+        return path
+    for remote_prefix in remote_prefixes:
+        normalized_remote = str(remote_prefix).rstrip("/")
+        if not normalized_remote:
+            continue
+        if raw == normalized_remote:
+            return local_output_root
+        if raw.startswith(normalized_remote + "/"):
+            suffix = raw[len(normalized_remote) :].lstrip("/")
+            return local_output_root / suffix
+    return path
+
+
+def resolve_term_upstream_graph_path(table_path: Path) -> Path | None:
+    if not table_path.exists():
+        return None
+    candidates = [table_path.with_name(f"{table_path.stem}.provenance_graph.json")]
+    if table_path.stem.endswith("_prefixed"):
+        candidates.append(table_path.with_name(f"{table_path.stem[:-len('_prefixed')]}.provenance_graph.json"))
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def resolve_deg_upstream_graph_path(deg_path: Path) -> Path | None:
+    if not deg_path.exists():
+        return None
+    candidate = deg_path.with_name(f"{deg_path.stem}.provenance_graph.json")
+    return candidate if candidate.exists() else None
+
+
+def resolve_explicit_upstream_graph_path(
+    *,
+    metadata_path: Path,
+    args: argparse.Namespace,
+    model_dir: Path,
+) -> Path | None:
+    payload = read_json_dict(metadata_path)
+    converter = payload.get("converter", {})
+    if not isinstance(converter, dict):
+        return None
+    converter_name = str(converter.get("name", "")).strip()
+    if not converter_name:
+        return None
+
+    local_output_root = (
+        Path(args.provenance_mirror_local_prefix).resolve()
+        if args.provenance_mirror_local_prefix
+        else model_dir
+    )
+    remote_prefixes = [
+        str(prefix).strip()
+        for prefix in (
+            args.provenance_mirror_remote_prefix,
+            args.previous_provenance_mirror_remote_prefix,
+        )
+        if str(prefix).strip()
+    ]
+
+    if converter_name in {"unsigned_term_gene", "signed_term_gene"}:
+        table_path = metadata_input_file_path(payload, ("table_tsv",))
+        if table_path is None:
+            return None
+        local_table_path = maybe_map_mirrored_output_to_local(
+            table_path,
+            local_output_root=local_output_root,
+            remote_prefixes=remote_prefixes,
+        )
+        return resolve_term_upstream_graph_path(local_table_path)
+
+    if converter_name in {"rna_deg", "rna_deg_multi"}:
+        deg_path = metadata_input_file_path(payload, ("deg_tsv",))
+        if deg_path is None:
+            return None
+        local_deg_path = maybe_map_mirrored_output_to_local(
+            deg_path,
+            local_output_root=local_output_root,
+            remote_prefixes=remote_prefixes,
+        )
+        return resolve_deg_upstream_graph_path(local_deg_path)
+
+    return None
+
+
 def gtex_comparison_label_from_gene_set_name(gene_set_name: str) -> str:
     name = str(gene_set_name).strip()
     if not name:
@@ -1218,6 +1335,11 @@ def main() -> int:
 
     for metadata_path in metadata_paths:
         ensure_model_sidecar(metadata_path, args.model_id)
+        explicit_upstream_graph_path = resolve_explicit_upstream_graph_path(
+            metadata_path=metadata_path,
+            args=args,
+            model_dir=model_dir,
+        )
         cmd = [
             str(Path(args.python_bin).resolve()),
             "-m",
@@ -1230,6 +1352,8 @@ def main() -> int:
             cmd.append("--show_template_vars")
         else:
             cmd.extend(["--description_template", template])
+        if explicit_upstream_graph_path is not None:
+            cmd.extend(["--upstream_provenance_graph_json", str(explicit_upstream_graph_path)])
         run_command(cmd, cwd=dig_dir, env=env)
 
     local_output_root = (
