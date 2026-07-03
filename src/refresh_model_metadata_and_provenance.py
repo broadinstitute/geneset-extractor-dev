@@ -25,6 +25,7 @@ DIRECTORY_ARG_PLACEHOLDERS = {
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEV_REPO_ROOT = WORKSPACE_ROOT / "geneset-extractor-dev"
 KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000")
+LEGACY_EXTRACTOR_DIR_NAMES = ("extractor", "tissue_extractor")
 
 
 def parse_args() -> argparse.Namespace:
@@ -109,6 +110,11 @@ def write_gmt_rows(path: Path, rows: list[list[str]]) -> None:
         encoding="utf-8",
         newline="\n",
     )
+
+
+def write_json(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
 
 
 def split_gmt_set_name(set_name: str) -> tuple[str, str | None]:
@@ -306,7 +312,14 @@ def render_gmt_row_description(set_name: str, model_payload: dict[str, object], 
 
 
 def discover_gmt_paths(model_dir: Path) -> list[Path]:
-    return sorted((model_dir / "extractor").rglob("genesets.gmt"))
+    gmt_paths: list[Path] = []
+    seen: set[Path] = set()
+    for extractor_dir in discover_extractor_dirs(model_dir):
+        for gmt_path in sorted(extractor_dir.rglob("genesets.gmt")):
+            if gmt_path not in seen:
+                gmt_paths.append(gmt_path)
+                seen.add(gmt_path)
+    return gmt_paths
 
 
 def rewrite_gmt_descriptions(
@@ -368,16 +381,30 @@ def read_manifest_meta_paths(manifest_path: Path, extractor_dir: Path) -> list[P
     return meta_paths
 
 
+def discover_extractor_dirs(model_dir: Path) -> list[Path]:
+    extractor_dirs: list[Path] = []
+    for name in LEGACY_EXTRACTOR_DIR_NAMES:
+        path = model_dir / name
+        if path.exists() and path.is_dir():
+            extractor_dirs.append(path)
+    return extractor_dirs
+
+
 def discover_metadata_paths(model_dir: Path) -> list[Path]:
-    extractor_dir = model_dir / "extractor"
-    if not extractor_dir.exists() or not extractor_dir.is_dir():
-        raise SystemExit(f"Missing extractor directory: {extractor_dir}")
-    manifest_path = extractor_dir / "manifest.tsv"
-    if manifest_path.exists():
-        meta_paths = read_manifest_meta_paths(manifest_path, extractor_dir)
-    else:
-        single_meta = extractor_dir / "geneset.meta.json"
-        meta_paths = [single_meta] if single_meta.exists() else []
+    extractor_dirs = discover_extractor_dirs(model_dir)
+    if not extractor_dirs:
+        raise SystemExit(
+            f"Missing extractor directory under {model_dir}; expected one of: {', '.join(LEGACY_EXTRACTOR_DIR_NAMES)}"
+        )
+    meta_paths: list[Path] = []
+    for extractor_dir in extractor_dirs:
+        manifest_path = extractor_dir / "manifest.tsv"
+        if manifest_path.exists():
+            meta_paths.extend(read_manifest_meta_paths(manifest_path, extractor_dir))
+        else:
+            single_meta = extractor_dir / "geneset.meta.json"
+            if single_meta.exists():
+                meta_paths.append(single_meta)
     deduped: list[Path] = []
     seen: set[Path] = set()
     for meta_path in meta_paths:
@@ -596,6 +623,106 @@ def regenerate_gtex_model_sidecars(args: argparse.Namespace, model_dir: Path, en
     run_command(cmd, cwd=WORKSPACE_ROOT, env=env)
 
 
+def read_json_dict(path: Path) -> dict[str, object]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise SystemExit(f"Expected JSON object at {path}")
+    return payload
+
+
+def metadata_gene_set_name(metadata_path: Path) -> str:
+    payload = read_json_dict(metadata_path)
+    gene_set = payload.get("gene_set", {})
+    if isinstance(gene_set, dict):
+        return str(gene_set.get("name", "")).strip()
+    return ""
+
+
+def gtex_comparison_label_from_gene_set_name(gene_set_name: str) -> str:
+    name = str(gene_set_name).strip()
+    if not name:
+        return ""
+    match = re.search(r"(\d{2}-\d{2}_\d{2}-\d{2})$", name)
+    if match:
+        return match.group(1)
+    return name
+
+
+def rewrite_gtex_sidecars_for_metadata_paths(
+    *,
+    args: argparse.Namespace,
+    model_dir: Path,
+    metadata_paths: list[Path],
+) -> None:
+    tissue_id = model_dir.parent.parent.name
+    tissue_list_tsv = DEV_REPO_ROOT / "GTEx" / "config" / "broad_tissue_list.tsv"
+    tissue_label = (
+        resolve_tsv_value(tissue_list_tsv, key_field="tissue_id", key_value=tissue_id, value_field="tissue_name")
+        or resolve_tsv_value(tissue_list_tsv, key_field="tissue_id", key_value=tissue_id, value_field="tissue_label")
+    )
+    if not tissue_label:
+        raise SystemExit(f"Unable to resolve GTEx tissue label for tissue_id={tissue_id}")
+    group = gtex_model_group(args.model_id)
+    if group == "AB":
+        with prepend_sys_path(DEV_REPO_ROOT / "GTEx" / "src"):
+            module = importlib.import_module("run_age_binned_model")
+            settings_by_model = module.load_model_settings(DEV_REPO_ROOT / "GTEx" / "config" / "age_binned_model_manifest.tsv")
+            settings = settings_by_model[args.model_id]
+            for metadata_path in metadata_paths:
+                write_json(
+                    metadata_path.with_name("geneset.model.json"),
+                    module.build_model_sidecar_payload(
+                        model_id=args.model_id,
+                        tissue_id=tissue_id,
+                        tissue_label=tissue_label,
+                        settings=settings,
+                        comparison_label=gtex_comparison_label_from_gene_set_name(metadata_gene_set_name(metadata_path)),
+                    ),
+                )
+        return
+    if group == "AC":
+        with prepend_sys_path(DEV_REPO_ROOT / "GTEx" / "src"):
+            module = importlib.import_module("run_continuous_age_model")
+            settings_by_model = module.load_tissue_model_settings(
+                DEV_REPO_ROOT / "GTEx" / "config" / "continuous_age_model_manifest.tsv"
+            )
+            settings = settings_by_model[args.model_id]
+            for metadata_path in metadata_paths:
+                write_json(
+                    metadata_path.with_name("geneset.model.json"),
+                    module.build_model_sidecar_payload(
+                        model_id=args.model_id,
+                        tissue_id=tissue_id,
+                        tissue_label=tissue_label,
+                        settings=settings,
+                    ),
+                )
+        return
+    with prepend_sys_path(DEV_REPO_ROOT / "GTEx" / "src"):
+        module = importlib.import_module("run_hz_notebook_model")
+        hz_args = argparse.Namespace(
+            reference_age_group="20-29",
+            comparison_age_groups="30-39,40-49,50-59,60-69,70-79",
+            random_state=1,
+            min_samples_per_group=3,
+            filter_mode="none",
+            chunksize=1000,
+            organism="human",
+            genome_build="hg38",
+        )
+        for metadata_path in metadata_paths:
+            write_json(
+                metadata_path.with_name("geneset.model.json"),
+                module.build_model_sidecar_payload(
+                    model_id=args.model_id,
+                    tissue_id=tissue_id,
+                    tissue_label=tissue_label,
+                    args=hz_args,
+                    comparison_label=gtex_comparison_label_from_gene_set_name(metadata_gene_set_name(metadata_path)),
+                ),
+            )
+
+
 def regenerate_motrpac_model_sidecars(args: argparse.Namespace, model_dir: Path, env: dict[str, str]) -> None:
     model_list_tsv = DEV_REPO_ROOT / "MoTrPAC" / "config" / "model_list.tsv"
     model_family = resolve_tsv_value(model_list_tsv, key_field="model_id", key_value=args.model_id, value_field="model_family")
@@ -732,6 +859,11 @@ def regenerate_model_sidecars(
     )
     if library_name == "GTEx":
         regenerate_gtex_model_sidecars(args, model_dir, env)
+        rewrite_gtex_sidecars_for_metadata_paths(
+            args=args,
+            model_dir=model_dir,
+            metadata_paths=metadata_paths,
+        )
         return
     if library_name == "MoTrPAC":
         regenerate_motrpac_model_sidecars(args, model_dir, env)
