@@ -1355,6 +1355,20 @@ def main() -> int:
         if explicit_upstream_graph_path is not None:
             cmd.extend(["--upstream_provenance_graph_json", str(explicit_upstream_graph_path)])
         run_command(cmd, cwd=dig_dir, env=env)
+        if (not args.show_template_vars) and explicit_upstream_graph_path is not None:
+            provenance_cmd = [
+                str(Path(args.python_bin).resolve()),
+                "-m",
+                "geneset_extractors.cli",
+                "provenance",
+                "build",
+                str(metadata_path),
+                "--out",
+                str(metadata_path.with_name("geneset.provenance.json")),
+                "--upstream_provenance_graph_json",
+                str(explicit_upstream_graph_path),
+            ]
+            run_command(provenance_cmd, cwd=dig_dir, env=env)
 
     local_output_root = (
         Path(args.provenance_mirror_local_prefix).resolve()
