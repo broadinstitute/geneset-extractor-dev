@@ -34,7 +34,9 @@ Notes:
       geneset-extractor-dev/run/refresh_model_metadata_and_provenance.sh
   - Common path-bearing arguments like --model_dir, --description_template_tsv,
     --provenance_mirror_local_prefix, and --local_input_source_map_tsv are
-    bind-mounted automatically.
+    bind-mounted automatically. Remote-only arguments like
+    --provenance_mirror_remote_prefix and
+    --previous_provenance_mirror_remote_prefix are forwarded without binds.
 EOF
 }
 

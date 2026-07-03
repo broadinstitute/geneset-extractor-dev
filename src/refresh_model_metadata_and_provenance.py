@@ -42,6 +42,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--provenance_mirror_local_prefix")
     parser.add_argument("--provenance_mirror_remote_prefix")
+    parser.add_argument("--previous_provenance_mirror_remote_prefix")
     parser.add_argument("--local_input_source_map_tsv")
     parser.add_argument("--show_template_vars", action="store_true")
     return parser.parse_args()
@@ -1106,6 +1107,18 @@ def build_output_replacements(
     return dict(sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True))
 
 
+def build_previous_output_replacements(
+    *,
+    previous_provenance_mirror_remote_prefix: str,
+    provenance_mirror_remote_prefix: str,
+) -> dict[str, str]:
+    previous_remote_root = previous_provenance_mirror_remote_prefix.rstrip("/")
+    new_remote_root = provenance_mirror_remote_prefix.rstrip("/")
+    if not previous_remote_root or not new_remote_root or previous_remote_root == new_remote_root:
+        return {}
+    return {previous_remote_root: new_remote_root}
+
+
 def build_execution_replacements(dig_dir: Path) -> dict[str, str]:
     resolved_dig_dir = dig_dir.resolve()
     cli_py = resolved_dig_dir / "src" / "geneset_extractors" / "cli.py"
@@ -1225,6 +1238,17 @@ def main() -> int:
         else model_dir
     )
     replacements: dict[str, str] = {}
+    rewrite_passes: list[dict[str, str]] = []
+    if (
+        args.previous_provenance_mirror_remote_prefix
+        and args.provenance_mirror_remote_prefix
+    ):
+        previous_output_replacements = build_previous_output_replacements(
+            previous_provenance_mirror_remote_prefix=args.previous_provenance_mirror_remote_prefix,
+            provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
+        )
+        if previous_output_replacements:
+            rewrite_passes.append(previous_output_replacements)
     if args.provenance_mirror_remote_prefix:
         replacements.update(
             build_output_replacements(
@@ -1241,7 +1265,6 @@ def main() -> int:
             )
         )
     replacements.update(build_execution_replacements(dig_dir))
-    rewrite_passes: list[dict[str, str]] = []
     if replacements:
         rewrite_passes.append(dict(sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)))
     if rewrite_passes:
