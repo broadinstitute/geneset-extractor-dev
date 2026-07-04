@@ -798,25 +798,30 @@ def rename_scrna_cnmf_gmt_sets(model_dir: Path) -> dict[str, str]:
         if not meta_path.exists():
             continue
         payload = json.loads(meta_path.read_text(encoding="utf-8"))
-        gene_set = payload.get("gene_set", {})
-        if not isinstance(gene_set, dict):
+        gmt_section = payload.get("gmt", {})
+        if not isinstance(gmt_section, dict):
             continue
-        old_name = str(gene_set.get("name", "")).strip()
-        if not old_name:
-            continue
-        if not (old_name.startswith("rna_sc_programs__") or old_name.startswith("scRNA_cNMF_")):
-            continue
-        prog_num, direction = _parse_scrna_cnmf_set_name(old_name)
-        if prog_num is None or direction is None:
-            continue
-        new_name = f"scRNA_cNMF_{dataset_label}_Program{prog_num}_{direction}"
-        if old_name == new_name:
-            continue
-        name_map[old_name] = new_name
-        gene_set["name"] = new_name
-        meta_path.write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
+        changed = False
+        for section_key in ("emitted_outputs", "plans", "requested_outputs"):
+            for entry in gmt_section.get(section_key, []):
+                if not isinstance(entry, dict):
+                    continue
+                old_name = str(entry.get("name", "")).strip()
+                if not (old_name.startswith("rna_sc_programs__") or old_name.startswith("scRNA_cNMF_")):
+                    continue
+                prog_num, direction = _parse_scrna_cnmf_set_name(old_name)
+                if prog_num is None or direction is None:
+                    continue
+                new_name = f"scRNA_cNMF_{dataset_label}_Program{prog_num}_{direction}"
+                if old_name == new_name:
+                    continue
+                name_map[old_name] = new_name
+                entry["name"] = new_name
+                changed = True
+        if changed:
+            meta_path.write_text(
+                json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
 
     if not name_map:
         return {}
