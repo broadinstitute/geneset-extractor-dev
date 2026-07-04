@@ -24,7 +24,7 @@ DIRECTORY_ARG_PLACEHOLDERS = {
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEV_REPO_ROOT = WORKSPACE_ROOT / "geneset-extractor-dev"
-KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000")
+KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "scRNA_cNMF")
 
 
 def parse_args() -> argparse.Namespace:
@@ -302,6 +302,8 @@ def render_gmt_row_description(set_name: str, model_payload: dict[str, object], 
         return lincs_row_description(model_payload, base_description, direction, stem)
     if library == "HuBMAP":
         return hubmap_row_description(model_payload, base_description, stem)
+    if library == "scRNA_cNMF":
+        return scrna_cnmf_row_description(model_payload, base_description, direction, stem)
     return base_description
 
 
@@ -495,6 +497,18 @@ def infer_library_name(
                 return "HuBMAP"
             if name.startswith("LINCS_L1000_"):
                 return "LINCS_L1000"
+            if name.startswith("rna_sc_programs__") or name.startswith("scRNA_cNMF_"):
+                return "scRNA_cNMF"
+    for metadata_path in metadata_paths:
+        sidecar_path = metadata_path.with_name("geneset.model.json")
+        if not sidecar_path.exists():
+            continue
+        try:
+            sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(sidecar, dict) and sidecar.get("library") == "scRNA_cNMF":
+            return "scRNA_cNMF"
     raise SystemExit("Unable to infer library for model refresh. Provide --description_template_tsv from a library config.")
 
 
@@ -719,6 +733,235 @@ def regenerate_lincs_model_sidecars(args: argparse.Namespace, model_dir: Path) -
         )
 
 
+def regenerate_scrna_cnmf_model_sidecars(args: argparse.Namespace, model_dir: Path) -> None:
+    dataset_id = model_dir.parent.parent.name
+    dataset_list_tsv = DEV_REPO_ROOT / "scRNA_cNMF" / "config" / "dataset_list.tsv"
+    model_manifest_tsv = DEV_REPO_ROOT / "scRNA_cNMF" / "config" / "model_manifest.tsv"
+    with prepend_sys_path(DEV_REPO_ROOT / "scRNA_cNMF" / "src"):
+        module = importlib.import_module("run_scrna_cnmf_model")
+        model_settings = module.load_model_settings(model_manifest_tsv, args.model_id)
+        dataset_settings = module.load_dataset_settings(dataset_list_tsv, dataset_id)
+        module.write_model_sidecar(
+            path=model_dir / "extractor" / "geneset.model.json",
+            model_id=args.model_id,
+            dataset_id=dataset_id,
+            model_settings=model_settings,
+            dataset_settings=dataset_settings,
+        )
+
+
+def _parse_scrna_cnmf_set_name(name: str) -> tuple[int | None, str | None]:
+    """Return (program_number, direction) from an rna_sc_programs internal or renamed GMT name."""
+    m = re.search(r"__program[=_](\d+)__?(pos|neg)$", name)
+    if m:
+        return int(m.group(1)), ("up" if m.group(2) == "pos" else "dn")
+    m = re.search(r"_Program(\d+)_(up|dn)$", name)
+    if m:
+        return int(m.group(1)), m.group(2)
+    return None, None
+
+
+def rename_scrna_cnmf_gmt_sets(model_dir: Path) -> dict[str, str]:
+    """Rename rna_sc_programs internal GMT names to publish-facing scRNA_cNMF_... names.
+
+    Returns old->new name mapping.  Updates genesets.gmt, geneset.meta.json, and the
+    top-level keys of geneset.provenance.json.
+    """
+    extractor_dir = model_dir / "extractor"
+    sidecar_path = extractor_dir / "geneset.model.json"
+    if not sidecar_path.exists():
+        return {}
+    model_payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    naming = model_payload.get("naming", {}) if isinstance(model_payload.get("naming"), dict) else {}
+    inputs = model_payload.get("inputs", {}) if isinstance(model_payload.get("inputs"), dict) else {}
+    dataset_label = (
+        naming.get("dataset_label")
+        or inputs.get("dataset_label")
+        or str(model_payload.get("dataset_id", ""))
+    )
+
+    manifest_path = extractor_dir / "manifest.tsv"
+    meta_paths = (
+        read_manifest_meta_paths(manifest_path, extractor_dir)
+        if manifest_path.exists()
+        else ([extractor_dir / "geneset.meta.json"] if (extractor_dir / "geneset.meta.json").exists() else [])
+    )
+
+    name_map: dict[str, str] = {}
+
+    for meta_path in meta_paths:
+        if not meta_path.exists():
+            continue
+        payload = json.loads(meta_path.read_text(encoding="utf-8"))
+        gene_set = payload.get("gene_set", {})
+        if not isinstance(gene_set, dict):
+            continue
+        old_name = str(gene_set.get("name", "")).strip()
+        if not old_name:
+            continue
+        if not (old_name.startswith("rna_sc_programs__") or old_name.startswith("scRNA_cNMF_")):
+            continue
+        prog_num, direction = _parse_scrna_cnmf_set_name(old_name)
+        if prog_num is None or direction is None:
+            continue
+        new_name = f"scRNA_cNMF_{dataset_label}_Program{prog_num}_{direction}"
+        if old_name == new_name:
+            continue
+        name_map[old_name] = new_name
+        gene_set["name"] = new_name
+        meta_path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+
+    if not name_map:
+        return {}
+
+    for gmt_path in discover_gmt_paths(model_dir):
+        rows = parse_gmt_rows(gmt_path)
+        changed = False
+        for row in rows:
+            if row and row[0] in name_map:
+                row[0] = name_map[row[0]]
+                changed = True
+        if changed:
+            write_gmt_rows(gmt_path, rows)
+
+    for meta_path in meta_paths:
+        prov_path = meta_path.with_name("geneset.provenance.json")
+        if not prov_path.exists():
+            continue
+        prov = json.loads(prov_path.read_text(encoding="utf-8"))
+        new_prov = {name_map.get(k, k): v for k, v in prov.items()}
+        if new_prov != prov:
+            prov_path.write_text(
+                json.dumps(new_prov, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+
+    return name_map
+
+
+def _build_scrna_cnmf_provenance_overlay(model_payload: dict) -> dict:
+    inputs = model_payload.get("inputs", {}) if isinstance(model_payload.get("inputs"), dict) else {}
+    matrix_url = str(inputs.get("matrix_url", "")).strip()
+    meta_url = str(inputs.get("meta_url", "")).strip()
+    if not matrix_url or not meta_url:
+        return {}
+    naming = model_payload.get("naming", {}) if isinstance(model_payload.get("naming"), dict) else {}
+    dataset_label = naming.get("dataset_label") or inputs.get("dataset_label") or str(model_payload.get("dataset_id", ""))
+    matrix_id = f"file:matrix_{dataset_label}"
+    meta_id = f"file:meta_{dataset_label}"
+    analysis_id = "analysis:scrna_cnmf_prepare"
+    return {
+        "nodes": [
+            {"id": matrix_id, "type": "File", "name": "matrix.csv",
+             "description": "Public scRNA-seq count matrix", "drc_url": matrix_url},
+            {"id": meta_id, "type": "File", "name": "metadata.csv",
+             "description": "Public cell metadata", "drc_url": meta_url},
+            {"id": analysis_id, "type": "AnalysisType", "name": "scrna_cnmf_prepare",
+             "description": (
+                 "DIG scrna_cnmf_prepare workflow: cell filtering, overdispersed gene selection, "
+                 "cNMF factorization across K values, and consensus K selection by stability."
+             )},
+        ],
+        "edges": [
+            {"id": f"{matrix_id}_to_{analysis_id}", "source": matrix_id, "target": analysis_id,
+             "label": "data input", "description": "scRNA-seq count matrix"},
+            {"id": f"{meta_id}_to_{analysis_id}", "source": meta_id, "target": analysis_id,
+             "label": "metadata input", "description": "cell metadata"},
+        ],
+    }
+
+
+def inject_scrna_cnmf_upstream_provenance(model_dir: Path) -> None:
+    """Prepend scrna_cnmf_prepare + public input file nodes into each geneset.provenance.json."""
+    extractor_dir = model_dir / "extractor"
+    sidecar_path = extractor_dir / "geneset.model.json"
+    if not sidecar_path.exists():
+        return
+    model_payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    overlay = _build_scrna_cnmf_provenance_overlay(model_payload)
+    if not overlay:
+        return
+
+    overlay_node_ids = {n["id"] for n in overlay.get("nodes", [])}
+    analysis_id = "analysis:scrna_cnmf_prepare"
+
+    manifest_path = extractor_dir / "manifest.tsv"
+    meta_paths = (
+        read_manifest_meta_paths(manifest_path, extractor_dir)
+        if manifest_path.exists()
+        else ([extractor_dir / "geneset.meta.json"] if (extractor_dir / "geneset.meta.json").exists() else [])
+    )
+
+    for meta_path in meta_paths:
+        prov_path = meta_path.with_name("geneset.provenance.json")
+        if not prov_path.exists():
+            continue
+        prov = json.loads(prov_path.read_text(encoding="utf-8"))
+        changed = False
+        for gene_set_name, graph in prov.items():
+            if not isinstance(graph, dict):
+                continue
+            nodes = list(graph.get("nodes", []))
+            edges = list(graph.get("edges", []))
+            existing_ids = {n.get("id") for n in nodes if isinstance(n, dict)}
+            if overlay_node_ids & existing_ids:
+                continue
+            all_targets = {e.get("target") for e in edges if isinstance(e, dict)}
+            root_file_ids = [
+                n.get("id") for n in nodes
+                if isinstance(n, dict) and n.get("type") == "File" and n.get("id") not in all_targets
+            ]
+            if not root_file_ids:
+                continue
+            nodes.extend(overlay.get("nodes", []))
+            edges.extend(overlay.get("edges", []))
+            for root_id in root_file_ids:
+                edge_id = f"{analysis_id}_to_{root_id}"
+                if not any(e.get("id") == edge_id for e in edges):
+                    edges.append({
+                        "id": edge_id,
+                        "source": analysis_id,
+                        "target": root_id,
+                        "label": "generated",
+                        "description": "cNMF gene spectra output",
+                    })
+            graph["nodes"] = nodes
+            graph["edges"] = edges
+            changed = True
+        if changed:
+            prov_path.write_text(
+                json.dumps(prov, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+
+
+def scrna_cnmf_row_description(
+    model_payload: dict,
+    base_description: str,
+    direction: str | None,
+    stem: str,
+) -> str:
+    prog_match = re.search(r"[Pp]rogram[_=]?(\d+)", stem)
+    program_num = prog_match.group(1) if prog_match else "?"
+    inputs = model_payload.get("inputs", {}) if isinstance(model_payload.get("inputs"), dict) else {}
+    naming = model_payload.get("naming", {}) if isinstance(model_payload.get("naming"), dict) else {}
+    dataset_label = naming.get("dataset_label") or inputs.get("dataset_label") or str(model_payload.get("dataset_id", ""))
+    model_id = str(model_payload.get("model_id", "GP1"))
+    if direction == "up":
+        return (
+            f"Up-regulated genes from the scRNA cNMF gene program library for {dataset_label} "
+            f"using model {model_id}: genes with the strongest positive program-loading scores for "
+            f"program {program_num} from consensus NMF of the released single-cell RNA-seq count matrix."
+        )
+    if direction == "dn":
+        return (
+            f"Down-regulated genes from the scRNA cNMF gene program library for {dataset_label} "
+            f"using model {model_id}: genes with the strongest negative program-loading scores for "
+            f"program {program_num} from consensus NMF of the released single-cell RNA-seq count matrix."
+        )
+    return base_description
+
+
 def regenerate_model_sidecars(
     *,
     args: argparse.Namespace,
@@ -741,6 +984,9 @@ def regenerate_model_sidecars(
         return
     if library_name == "LINCS_L1000":
         regenerate_lincs_model_sidecars(args, model_dir)
+        return
+    if library_name == "scRNA_cNMF":
+        regenerate_scrna_cnmf_model_sidecars(args, model_dir)
         return
     raise SystemExit(f"Unsupported library for standalone model-sidecar regeneration: {library_name}")
 
@@ -1024,6 +1270,14 @@ def main() -> int:
         env=env,
     )
 
+    library_name = infer_library_name(
+        description_template_tsv=args.description_template_tsv,
+        metadata_paths=metadata_paths,
+    )
+    if library_name == "scRNA_cNMF":
+        rename_scrna_cnmf_gmt_sets(model_dir)
+        metadata_paths = discover_metadata_paths(model_dir)
+
     for metadata_path in metadata_paths:
         ensure_model_sidecar(metadata_path, args.model_id)
         cmd = [
@@ -1039,6 +1293,9 @@ def main() -> int:
         else:
             cmd.extend(["--description_template", template])
         run_command(cmd, cwd=dig_dir, env=env)
+
+    if library_name == "scRNA_cNMF":
+        inject_scrna_cnmf_upstream_provenance(model_dir)
 
     local_output_root = (
         Path(args.provenance_mirror_local_prefix).resolve()

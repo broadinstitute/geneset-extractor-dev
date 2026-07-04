@@ -191,10 +191,16 @@ def write_model_sidecar(
             "value_type": dataset_settings.get("value_type", "counts"),
             "funding": dataset_settings.get("funding", ""),
             "access": dataset_settings.get("access", ""),
+            "matrix_url": dataset_settings.get("matrix_url", ""),
+            "meta_url": dataset_settings.get("meta_url", ""),
+            "dataset_label": dataset_settings.get("dataset_label", dataset_id),
+            "dataset_source": dataset_settings.get("dataset_source", ""),
         },
         "naming": {
             "comparison_style": "cnmf_program",
-            "gene_set_pattern": f"{dataset_id}_cNMF_program_<k>",
+            "dataset_label": dataset_settings.get("dataset_label", dataset_id),
+            "gene_set_pattern": "scRNA_cNMF_{dataset_label}_Program<k>_up|dn",
+            "direction_labels": {"pos": "up", "neg": "dn"},
         },
     }
     write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
