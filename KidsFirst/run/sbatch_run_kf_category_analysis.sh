@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=KF_category_DE
-#SBATCH --output=KidsFirst_DE_Analysis/logs/kf_category_%j.out
-#SBATCH --error=KidsFirst_DE_Analysis/logs/kf_category_%j.err
+#SBATCH --output=KidsFirst/logs/kf_category_%j.out
+#SBATCH --error=KidsFirst/logs/kf_category_%j.err
 #SBATCH --time=16:00:00
 #SBATCH --mem=128G
 #SBATCH --cpus-per-task=8
@@ -23,8 +23,8 @@ set -euo pipefail
 
 PROJECT_DIR="/path/to/your/project"
 DIG_DIR="/path/to/dig-gene-set-extractors"
-SCRIPT_DIR="${PROJECT_DIR}/KidsFirst_DE_Analysis/run"
-SRC_DIR="${PROJECT_DIR}/KidsFirst_DE_Analysis/src"
+SCRIPT_DIR="${PROJECT_DIR}/KidsFirst/run"
+SRC_DIR="${PROJECT_DIR}/KidsFirst/src"
 ANALYSIS_DIR="${PROJECT_DIR}/outputs/analysis"
 GTEX_DIR="${PROJECT_DIR}/inputs/GTEx/v10"
 WORKERS="${SLURM_CPUS_PER_TASK:-8}"
@@ -32,7 +32,7 @@ WORKERS="${SLURM_CPUS_PER_TASK:-8}"
 export PYTHON_BIN="python3"
 export GENESET_BIN="${DIG_DIR}/.venv/bin/geneset-extractors"
 
-mkdir -p "${PROJECT_DIR}/KidsFirst_DE_Analysis/logs"
+mkdir -p "${PROJECT_DIR}/KidsFirst/logs"
 echo "start: $(date)"
 
 # ── Helper: ensure individual study RSEM matrix exists ──────────────────────

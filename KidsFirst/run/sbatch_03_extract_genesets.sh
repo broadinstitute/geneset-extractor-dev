@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=KF_genesets
-#SBATCH --output=KidsFirst_DE_Analysis/logs/kf_genesets_%j.out
-#SBATCH --error=KidsFirst_DE_Analysis/logs/kf_genesets_%j.err
+#SBATCH --output=KidsFirst/logs/kf_genesets_%j.out
+#SBATCH --error=KidsFirst/logs/kf_genesets_%j.err
 #SBATCH --time=04:00:00
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=4
@@ -43,15 +43,15 @@ PADJ_MAX="0.05"    # FDR threshold
 GTF_PATH=""        # e.g. /path/to/gencode.v39.annotation.gtf.gz
 # ══════════════════════════════════════════════════════════════════════════════
 
-PROJECT_DIR="/lab-share/RC-Data-Science-e2/Groups/gnomad/kyuryung/geneset-extractor-dev/KidsFirst_non_CBTN"
-DIG_DIR="/lab-share/RC-Data-Science-e2/Groups/gnomad/kyuryung/dig-gene-set-extractors"
-SRC_DIR="${PROJECT_DIR}/KidsFirst_DE_Analysis/src"
+PROJECT_DIR="/path/to/your/project"
+DIG_DIR="/path/to/dig-gene-set-extractors"
+SRC_DIR="${PROJECT_DIR}/KidsFirst/src"
 ANALYSIS_DIR="${PROJECT_DIR}/outputs/analysis"
 
 PYTHON_BIN="python3"
 GENESET_BIN="${DIG_DIR}/.venv/bin/geneset-extractors"
 
-mkdir -p "${PROJECT_DIR}/KidsFirst_DE_Analysis/logs"
+mkdir -p "${PROJECT_DIR}/KidsFirst/logs"
 echo "======================================================"
 echo " KF + CBTN gene set extraction — Phase 2"
 echo " TOP_K=${TOP_K}  MIN_LOGFC=${MIN_LOGFC}  PADJ_MAX=${PADJ_MAX}"

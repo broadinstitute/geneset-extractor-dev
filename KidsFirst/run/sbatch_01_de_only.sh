@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=KF_DE_only
-#SBATCH --output=KidsFirst_DE_Analysis/logs/kf_de_only_%j.out
-#SBATCH --error=KidsFirst_DE_Analysis/logs/kf_de_only_%j.err
+#SBATCH --output=KidsFirst/logs/kf_de_only_%j.out
+#SBATCH --error=KidsFirst/logs/kf_de_only_%j.err
 #SBATCH --time=16:00:00
 #SBATCH --mem=128G
 #SBATCH --cpus-per-task=8
@@ -11,9 +11,9 @@
 # ── PHASE 1 of 2-phase workflow ───────────────────────────────────────────────
 # This script: build count matrices + run all 8 DE analyses (NO gene set extraction)
 # After this completes:
-#   1. bash KidsFirst_DE_Analysis/run/02_check_natural_sizes.sh  ← see gene counts
+#   1. bash KidsFirst/run/02_check_natural_sizes.sh  ← see gene counts
 #   2. Decide TOP_K and MIN_LOGFC in sbatch_03_extract_genesets.sh
-#   3. sbatch KidsFirst_DE_Analysis/run/sbatch_03_extract_genesets.sh
+#   3. sbatch KidsFirst/run/sbatch_03_extract_genesets.sh
 #
 # Comparisons (8 total — see analysis_design.md for scientific rationale):
 #   KF-TALL-vs-T21       T-ALL vs Down syndrome blood (primary, pediatric-matched)
@@ -36,7 +36,7 @@ set -euo pipefail
 
 PROJECT_DIR="/path/to/your/project"
 DIG_DIR="/path/to/dig-gene-set-extractors"
-SRC_DIR="${PROJECT_DIR}/KidsFirst_DE_Analysis/src"
+SRC_DIR="${PROJECT_DIR}/KidsFirst/src"
 ANALYSIS_DIR="${PROJECT_DIR}/outputs/analysis"
 GTEX_DIR="${PROJECT_DIR}/inputs/GTEx/v10"
 GTEX_ATTRS="${GTEX_DIR}/GTEx_Analysis_v10_Annotations_SampleAttributesDS.txt"
@@ -46,7 +46,7 @@ PYTHON_BIN="python3"
 GENESET_BIN="${DIG_DIR}/.venv/bin/geneset-extractors"
 GENE_MAP="${PROJECT_DIR}/inputs/ensg_to_symbol.tsv"
 
-mkdir -p "${PROJECT_DIR}/KidsFirst_DE_Analysis/logs" "${ANALYSIS_DIR}/gtex"
+mkdir -p "${PROJECT_DIR}/KidsFirst/logs" "${ANALYSIS_DIR}/gtex"
 echo "======================================================"
 echo " KF DE analysis — Phase 1: matrices + DE"
 echo " Start: $(date)"
@@ -293,5 +293,5 @@ done
 echo ""
 echo "======================================================"
 echo " Phase 1 DONE: $(date)"
-echo " Next: bash KidsFirst_DE_Analysis/run/02_check_natural_sizes.sh"
+echo " Next: bash KidsFirst/run/02_check_natural_sizes.sh"
 echo "======================================================"

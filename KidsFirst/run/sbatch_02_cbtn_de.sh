@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=CBTN_DE
-#SBATCH --output=KidsFirst_DE_Analysis/logs/cbtn_de_%j.out
-#SBATCH --error=KidsFirst_DE_Analysis/logs/cbtn_de_%j.err
+#SBATCH --output=KidsFirst/logs/cbtn_de_%j.out
+#SBATCH --error=KidsFirst/logs/cbtn_de_%j.err
 #SBATCH --time=16:00:00
 #SBATCH --mem=128G
 #SBATCH --cpus-per-task=8
@@ -31,7 +31,7 @@ set -euo pipefail
 
 PROJECT_DIR="/path/to/your/project"
 DIG_DIR="/path/to/dig-gene-set-extractors"
-SRC_DIR="${PROJECT_DIR}/KidsFirst_DE_Analysis/src"
+SRC_DIR="${PROJECT_DIR}/KidsFirst/src"
 ANALYSIS_DIR="${PROJECT_DIR}/outputs/analysis"
 GENE_MAP="${PROJECT_DIR}/inputs/ensg_to_symbol.tsv"
 
@@ -40,7 +40,7 @@ GENESET_BIN="${DIG_DIR}/.venv/bin/geneset-extractors"
 
 GTEX_BRAIN="${ANALYSIS_DIR}/gtex/brain_cortex.tsv"
 
-mkdir -p "${PROJECT_DIR}/KidsFirst_DE_Analysis/logs"
+mkdir -p "${PROJECT_DIR}/KidsFirst/logs"
 echo "======================================================"
 echo " CBTN DE analysis — brain tumors vs GTEx brain cortex"
 echo " Start: $(date)"

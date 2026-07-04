@@ -24,7 +24,7 @@ DIRECTORY_ARG_PLACEHOLDERS = {
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEV_REPO_ROOT = WORKSPACE_ROOT / "geneset-extractor-dev"
-KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000")
+KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "KidsFirst")
 
 
 def parse_args() -> argparse.Namespace:
@@ -290,10 +290,21 @@ def hubmap_row_description(model_payload: dict[str, object], base_description: s
     )
 
 
+def kidsfirst_row_description(model_payload: dict[str, object], base_description: str, direction: str, stem: str) -> str:
+    header, body = split_description(base_description)
+    header = replace_header_gene_set_kind(header, direction)
+    updown = "up-regulated" if direction == "up" else "down-regulated"
+    if body:
+        return f"{header}: genes with {updown} expression in the tumor relative to the reference cohort, identified by {body}."
+    return f"{header}."
+
+
 def render_gmt_row_description(set_name: str, model_payload: dict[str, object], template: str) -> str:
     stem, direction = split_gmt_set_name(set_name)
     base_description = expand_description_template(template, model_payload, set_name)
     library = str(model_payload.get("library", "")).strip()
+    if library == "KidsFirst" and direction:
+        return kidsfirst_row_description(model_payload, base_description, direction, stem)
     if library == "GTEx" and direction:
         return gtex_row_description(model_payload, base_description, direction, stem)
     if library == "MoTrPAC" and direction:
@@ -495,6 +506,18 @@ def infer_library_name(
                 return "HuBMAP"
             if name.startswith("LINCS_L1000_"):
                 return "LINCS_L1000"
+            if name.startswith("KidsFirst_"):
+                return "KidsFirst"
+    for metadata_path in metadata_paths:
+        sidecar_path = metadata_path.with_name("geneset.model.json")
+        try:
+            model_payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(model_payload, dict):
+            library = str(model_payload.get("library", "")).strip()
+            if library in KNOWN_LIBRARIES:
+                return library
     raise SystemExit("Unable to infer library for model refresh. Provide --description_template_tsv from a library config.")
 
 
@@ -719,6 +742,27 @@ def regenerate_lincs_model_sidecars(args: argparse.Namespace, model_dir: Path) -
         )
 
 
+def regenerate_kidsfirst_model_sidecars(args: argparse.Namespace, model_dir: Path, env: dict[str, str]) -> None:
+    comparison_id = model_dir.parent.parent.name
+    models_root = model_dir.parent
+    runner = DEV_REPO_ROOT / "KidsFirst" / "src" / "run_kidsfirst_hz_model.py"
+    config_dir = DEV_REPO_ROOT / "KidsFirst" / "config"
+    cmd = [
+        str(Path(args.python_bin).resolve()),
+        str(runner),
+        "--model_id",
+        args.model_id,
+        "--comparison_id",
+        comparison_id,
+        "--run_root",
+        str(models_root),
+        "--config_dir",
+        str(config_dir),
+        "--write_model_only",
+    ]
+    run_command(cmd, cwd=DEV_REPO_ROOT, env=env)
+
+
 def regenerate_model_sidecars(
     *,
     args: argparse.Namespace,
@@ -741,6 +785,9 @@ def regenerate_model_sidecars(
         return
     if library_name == "LINCS_L1000":
         regenerate_lincs_model_sidecars(args, model_dir)
+        return
+    if library_name == "KidsFirst":
+        regenerate_kidsfirst_model_sidecars(args, model_dir, env)
         return
     raise SystemExit(f"Unsupported library for standalone model-sidecar regeneration: {library_name}")
 

@@ -1,16 +1,14 @@
 comparison_id	tumor_label	tumor_study	reference_label	reference_source	disease_label	model_eligible
-KF-TALL-vs-GTEx	T-ALL	KF-TALL	GTEx blood	GTEx	T-cell acute lymphoblastic leukemia	HZ1
-KF-TALL-vs-T21	T-ALL	KF-TALL	Down syndrome blood	KF-CHDALL	T-cell acute lymphoblastic leukemia	HZ1
-KF-TALL-vs-MMC	T-ALL	KF-TALL	medulloblastoma SHH	KF-MMC	T-cell acute lymphoblastic leukemia	HZ1
-KF-CHDALL-vs-GTEx	Down syndrome blood	KF-CHDALL	GTEx blood	GTEx	Down syndrome (hematologic)	HZ1
-KF-NBL-vs-GTEx	neuroblastoma	KF-NBL	GTEx adrenal gland	GTEx	neuroblastoma	HZ1
-KF-ESGR-vs-GTEx	Ewing sarcoma	KF-ESGR	GTEx muscle	GTEx	Ewing sarcoma	HZ1
-KF-MMC-vs-GTEx	medulloblastoma SHH	KF-MMC	GTEx brain cerebellum	GTEx	medulloblastoma (SHH subtype)	HZ1
-KF-MMC-vs-GTEx-brain	medulloblastoma SHH	KF-MMC	GTEx brain all	GTEx	medulloblastoma (SHH subtype)	HZ1
-CBTN-GBM-vs-brain	glioblastoma	CBTN	GTEx brain all	GTEx	glioblastoma	HZ1,HZ2
-CBTN-LGG-vs-brain	low-grade glioma	CBTN	GTEx brain all	GTEx	low-grade glioma	HZ1,HZ2
-CBTN-MB-vs-brain	medulloblastoma	CBTN	GTEx brain all	GTEx	medulloblastoma	HZ1,HZ2
-CBTN-ATRT-vs-brain	atypical teratoid rhabdoid tumor	CBTN	GTEx brain all	GTEx	ATRT	HZ1,HZ2
-CBTN-EPN-vs-brain	ependymoma	CBTN	GTEx brain all	GTEx	ependymoma	HZ1,HZ2
-CBTN-HGG-vs-brain	high-grade glioma	CBTN	GTEx brain all	GTEx	high-grade glioma	HZ1,HZ2
-CBTN-CRANIO-vs-brain	craniopharyngioma	CBTN	GTEx brain all	GTEx	craniopharyngioma	HZ1,HZ2
+KF-TALL-vs-T21	T-cell acute lymphoblastic leukemia (T-ALL)	KF-TALL	Down syndrome blood (KF-CHDALL)	KF-CHDALL	T-cell acute lymphoblastic leukemia	HZ1
+KF-TALL-vs-GTEx	T-cell acute lymphoblastic leukemia (T-ALL)	KF-TALL	GTEx whole blood	GTEx	T-cell acute lymphoblastic leukemia	HZ1
+KF-NBL-vs-adrenal	neuroblastoma	KF-NBL	GTEx adrenal gland	GTEx	neuroblastoma	HZ1
+KF-ESGR-vs-muscle	Ewing sarcoma	KF-ESGR	GTEx skeletal muscle	GTEx	Ewing sarcoma	HZ1
+KF-MMC-vs-blood	acute myeloid leukemia (AML)	KF-MMC	GTEx whole blood	GTEx	acute myeloid leukemia	HZ1
+KF-BLOOD-vs-normal	pediatric blood tumors (T-ALL + AML)	KF-TALL+KF-MMC	GTEx whole blood	GTEx	pediatric blood tumors	HZ1
+CBTN-atypical_teratoid_rhabdoid_tumor-vs-brain_cortex	atypical teratoid rhabdoid tumor (ATRT)	CBTN	GTEx brain cortex	GTEx	atypical teratoid rhabdoid tumor	HZ1
+CBTN-craniopharyngioma-vs-brain_cortex	craniopharyngioma	CBTN	GTEx brain cortex	GTEx	craniopharyngioma	HZ1
+CBTN-ependymoma-vs-brain_cortex	ependymoma	CBTN	GTEx brain cortex	GTEx	ependymoma	HZ1
+CBTN-ganglioglioma-vs-brain_cortex	ganglioglioma	CBTN	GTEx brain cortex	GTEx	ganglioglioma	HZ1
+CBTN-low_grade_glioma-vs-brain_cortex	low-grade glioma	CBTN	GTEx brain cortex	GTEx	low-grade glioma	HZ1
+CBTN-malignant_glioma-vs-brain_cortex	malignant glioma (HGG/GBM)	CBTN	GTEx brain cortex	GTEx	malignant glioma	HZ1
+CBTN-medulloblastoma-vs-brain_cortex	medulloblastoma	CBTN	GTEx brain cortex	GTEx	medulloblastoma	HZ1

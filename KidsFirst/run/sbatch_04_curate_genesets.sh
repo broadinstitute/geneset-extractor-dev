@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=KF_curate
-#SBATCH --output=KidsFirst_DE_Analysis/logs/kf_curate_%j.out
-#SBATCH --error=KidsFirst_DE_Analysis/logs/kf_curate_%j.err
+#SBATCH --output=KidsFirst/logs/kf_curate_%j.out
+#SBATCH --error=KidsFirst/logs/kf_curate_%j.err
 #SBATCH --time=01:00:00
 #SBATCH --mem=8G
 #SBATCH --cpus-per-task=2
@@ -40,13 +40,13 @@ unset PYTHONPATH
 set -euo pipefail
 
 PROJECT_DIR="/path/to/your/project"
-SRC_DIR="${PROJECT_DIR}/KidsFirst_DE_Analysis/src"
+SRC_DIR="${PROJECT_DIR}/KidsFirst/src"
 ANALYSIS_DIR="${PROJECT_DIR}/outputs/analysis"
 OUT_DIR="${ANALYSIS_DIR}/curated_genesets"
 
 PYTHON_BIN="python3"
 
-mkdir -p "${PROJECT_DIR}/KidsFirst_DE_Analysis/logs"
+mkdir -p "${PROJECT_DIR}/KidsFirst/logs"
 echo "======================================================"
 echo " Curated disease gene set extraction (KF + CBTN)"
 echo " padj<0.05 | logFC≥1 | concordant | score>=2.0 | cap=200 | warn<50"

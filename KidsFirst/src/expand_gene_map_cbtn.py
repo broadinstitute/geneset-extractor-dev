@@ -4,7 +4,7 @@ Expand inputs/ensg_to_symbol.tsv with CBTN ENSG IDs via mygene.info.
 Run from KidsFirst_non_CBTN project root.
 
 Usage:
-  python3 KidsFirst_DE_Analysis/src/expand_gene_map_cbtn.py
+  python3 KidsFirst/src/expand_gene_map_cbtn.py
 """
 from __future__ import annotations
 
@@ -126,7 +126,7 @@ def main() -> None:
     print(f"  After:  {len(existing) + len(new_mapping)}", file=sys.stderr)
     print("\nNext steps:", file=sys.stderr)
     print("  1. Delete CBTN de_inputs + de_results (see below)", file=sys.stderr)
-    print("  2. sbatch KidsFirst_DE_Analysis/run/sbatch_02_cbtn.de.sh", file=sys.stderr)
+    print("  2. sbatch KidsFirst/run/sbatch_02_cbtn.de.sh", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -3,18 +3,18 @@
 # Reads all deg_long.tsv files and shows gene counts at multiple thresholds.
 #
 # Usage:
-#   bash KidsFirst_DE_Analysis/run/02_check_natural_sizes.sh
-#   bash KidsFirst_DE_Analysis/run/02_check_natural_sizes.sh --full   # verbose tables
+#   bash KidsFirst/run/02_check_natural_sizes.sh
+#   bash KidsFirst/run/02_check_natural_sizes.sh --full   # verbose tables
 #
 # After reviewing output:
 #   1. Edit TOP_K and MIN_LOGFC in sbatch_03_extract_genesets.sh
-#   2. sbatch KidsFirst_DE_Analysis/run/sbatch_03_extract_genesets.sh
+#   2. sbatch KidsFirst/run/sbatch_03_extract_genesets.sh
 
 source /programs/biogrids.shrc
 export PYTHON_X=3.9.16
 
 PROJECT_DIR="/path/to/your/project"
-SRC_DIR="${PROJECT_DIR}/KidsFirst_DE_Analysis/src"
+SRC_DIR="${PROJECT_DIR}/KidsFirst/src"
 ANALYSIS_DIR="${PROJECT_DIR}/outputs/analysis"
 PYTHON_BIN="python3"
 
@@ -70,9 +70,9 @@ echo "   PIGEAN minimum: ≥50 genes per gene set"
 echo ""
 echo " Next steps:"
 echo "   1. Edit TOP_K and MIN_LOGFC at the top of:"
-echo "      KidsFirst_DE_Analysis/run/sbatch_03_extract_genesets.sh"
-echo "   2. sbatch KidsFirst_DE_Analysis/run/sbatch_03_extract_genesets.sh"
+echo "      KidsFirst/run/sbatch_03_extract_genesets.sh"
+echo "   2. sbatch KidsFirst/run/sbatch_03_extract_genesets.sh"
 echo ""
 echo " For full per-study tables:"
-echo "   bash KidsFirst_DE_Analysis/run/02_check_natural_sizes.sh --full"
+echo "   bash KidsFirst/run/02_check_natural_sizes.sh --full"
 echo "================================================================"

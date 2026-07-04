@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run interactively on login node BEFORE submitting sbatch_01_de_only.sh
-# Usage: bash KidsFirst_DE_Analysis/run/00_verify_downloads.sh
+# Usage: bash KidsFirst/run/00_verify_downloads.sh
 #
 # Checks:
 #   1. KidsFirst RSEM files (rsem_files/ directory per study)
@@ -117,9 +117,9 @@ fi
 
 # ── 6. Python scripts (our analysis code) ────────────────────────────────────
 echo ""
-echo "--- 6. KidsFirst_DE_Analysis scripts (our code) ---"
-echo "    Note: these are in KidsFirst_DE_Analysis/ — NOT in the git repo"
-SCRIPT_SRC="${PROJECT_DIR}/KidsFirst_DE_Analysis/src"
+echo "--- 6. KidsFirst scripts (our code) ---"
+echo "    Note: these are in KidsFirst/ — NOT in the git repo"
+SCRIPT_SRC="${PROJECT_DIR}/KidsFirst/src"
 for script in build_rsem_matrix.py extract_gtex_counts.py prepare_de_inputs.py \
               merge_study_matrices.py extract_immune_genesets.py \
               summarize_de_natural_sizes.py; do
@@ -132,7 +132,7 @@ echo "================================================================"
 echo " RESULT: ${PASS} passed, ${FAIL} failed"
 echo "================================================================"
 if [[ "$FAIL" -eq 0 ]]; then
-  echo " Ready to submit: sbatch KidsFirst_DE_Analysis/run/sbatch_01_de_only.sh"
+  echo " Ready to submit: sbatch KidsFirst/run/sbatch_01_de_only.sh"
 else
   echo " Fix ${FAIL} failure(s) before submitting jobs."
   exit 1

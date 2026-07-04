@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=KF_immune_genesets
-#SBATCH --output=KidsFirst_DE_Analysis/logs/kf_immune_%j.out
-#SBATCH --error=KidsFirst_DE_Analysis/logs/kf_immune_%j.err
+#SBATCH --output=KidsFirst/logs/kf_immune_%j.out
+#SBATCH --error=KidsFirst/logs/kf_immune_%j.err
 #SBATCH --time=08:00:00
 #SBATCH --mem=64G
 #SBATCH --cpus-per-task=4
@@ -23,13 +23,13 @@ set -euo pipefail
 
 PROJECT_DIR="/path/to/your/project"
 DIG_DIR="/path/to/dig-gene-set-extractors"
-SRC_DIR="${PROJECT_DIR}/KidsFirst_DE_Analysis/src"
+SRC_DIR="${PROJECT_DIR}/KidsFirst/src"
 ANALYSIS_DIR="${PROJECT_DIR}/outputs/analysis"
 
 export PYTHON_BIN="python3"
 export GENESET_BIN="${DIG_DIR}/.venv/bin/geneset-extractors"
 
-mkdir -p "${PROJECT_DIR}/KidsFirst_DE_Analysis/logs"
+mkdir -p "${PROJECT_DIR}/KidsFirst/logs"
 echo "start: $(date)"
 
 # ── Studies to process ────────────────────────────────────────────────────────

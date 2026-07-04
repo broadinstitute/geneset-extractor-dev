@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=CBTN_matrices
-#SBATCH --output=KidsFirst_DE_Analysis/logs/cbtn_matrices_%j.out
-#SBATCH --error=KidsFirst_DE_Analysis/logs/cbtn_matrices_%j.err
+#SBATCH --output=KidsFirst/logs/cbtn_matrices_%j.out
+#SBATCH --error=KidsFirst/logs/cbtn_matrices_%j.err
 #SBATCH --time=08:00:00
 #SBATCH --mem=64G
 #SBATCH --cpus-per-task=8
@@ -28,7 +28,7 @@ set -euo pipefail
 
 PROJECT_DIR="/path/to/your/project"
 CBTN_DIR="/path/to/your/cbtn/project"
-SRC_DIR="${PROJECT_DIR}/KidsFirst_DE_Analysis/src"
+SRC_DIR="${PROJECT_DIR}/KidsFirst/src"
 ANALYSIS_DIR="${PROJECT_DIR}/outputs/analysis"
 GTEX_DIR="${PROJECT_DIR}/inputs/GTEx/v10"
 GTEX_ATTRS="${GTEX_DIR}/GTEx_Analysis_v10_Annotations_SampleAttributesDS.txt"
@@ -38,7 +38,7 @@ PYTHON_BIN="python3"
 CBTN_RSEM_DIR="${CBTN_DIR}/outputs/rsem_files"
 CBTN_MANIFEST="${CBTN_DIR}/config/cbtn_rsem_full_manifest.tsv"
 
-mkdir -p "${PROJECT_DIR}/KidsFirst_DE_Analysis/logs" "${ANALYSIS_DIR}/gtex"
+mkdir -p "${PROJECT_DIR}/KidsFirst/logs" "${ANALYSIS_DIR}/gtex"
 
 echo "======================================================"
 echo " CBTN matrix building"

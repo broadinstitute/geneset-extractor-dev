@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=KF_DE_analysis
-#SBATCH --output=KidsFirst_DE_Analysis/logs/kf_de_%j.out
-#SBATCH --error=KidsFirst_DE_Analysis/logs/kf_de_%j.err
+#SBATCH --output=KidsFirst/logs/kf_de_%j.out
+#SBATCH --error=KidsFirst/logs/kf_de_%j.err
 #SBATCH --time=12:00:00
 #SBATCH --mem=96G
 #SBATCH --cpus-per-task=8
@@ -15,9 +15,9 @@ set -euo pipefail
 
 PROJECT_DIR="/path/to/your/project"
 DIG_DIR="/path/to/dig-gene-set-extractors"
-SCRIPT_DIR="${PROJECT_DIR}/KidsFirst_DE_Analysis/run"
+SCRIPT_DIR="${PROJECT_DIR}/KidsFirst/run"
 
-mkdir -p "${PROJECT_DIR}/KidsFirst_DE_Analysis/logs"
+mkdir -p "${PROJECT_DIR}/KidsFirst/logs"
 
 export PYTHON_BIN="python3"
 export GENESET_BIN="${DIG_DIR}/.venv/bin/geneset-extractors"
