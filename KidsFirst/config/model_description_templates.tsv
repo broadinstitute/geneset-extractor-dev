@@ -1,0 +1,3 @@
+model_id	description_template
+HZ1	KidsFirst pediatric cancer bulk RNA-seq gene set for {model.inputs.comparison_label} using model {model.model_id}: limma-voom differential expression between {model.inputs.tumor_label} and {model.inputs.reference_label}, extracted with harmonizome-style ranked selection.
+HZ2	KidsFirst pediatric cancer curated disease-up gene set for {model.inputs.disease_label} using model {model.model_id}: concordant tumor-up genes across configured controls with signed neglog10padj score filtering (threshold {model.parameters.score_threshold}) and safety cap of {model.parameters.safety_cap} genes.

@@ -151,3 +151,19 @@
 !KOMP2/**/*.png
 
 archive/
+
+# KidsFirst
+!KidsFirst/
+!KidsFirst/config/
+!KidsFirst/config/**
+!KidsFirst/run/
+!KidsFirst/run/**/
+!KidsFirst/src/
+!KidsFirst/src/**/
+!KidsFirst/docs/
+!KidsFirst/docs/**/
+!KidsFirst/README.md
+!KidsFirst/config/*.tsv
+!KidsFirst/run/**/*.sh
+!KidsFirst/src/**/*.py
+!KidsFirst/docs/**/*.md
