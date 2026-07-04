@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import re
@@ -276,6 +277,16 @@ def run_model(
         cmd, env = engine_cmd(dig_dir, python_bin, *overlay_args)
         _run(cmd, env, dig_dir, log_lines)
         overlay_json = model_out / "provenance_overlay.json"
+
+        # sample_annotations is biospecimen-derived (no file-level DRS): map its local
+        # path to the phospho study's PDC page so refresh rewrites it out of the prepare
+        # provenance command instead of leaking a local path.
+        source_map_path = model_out / "local_input_source_map.tsv"
+        sample_annotations = fetched.get("sample_annotations")
+        if source_map_path.exists() and sample_annotations:
+            study_url = f"https://pdc.cancer.gov/pdc/study/{study['phospho_pdc_study_id']}"
+            with source_map_path.open("a", encoding="utf-8", newline="") as fh:
+                csv.writer(fh, delimiter="\t").writerow([str(sample_annotations), study_url])
 
         # 4. extract
         eflags = sio.extractor_flags(model)
