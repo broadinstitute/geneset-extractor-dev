@@ -741,13 +741,18 @@ def regenerate_scrna_cnmf_model_sidecars(args: argparse.Namespace, model_dir: Pa
         module = importlib.import_module("run_scrna_cnmf_model")
         model_settings = module.load_model_settings(model_manifest_tsv, args.model_id)
         dataset_settings = module.load_dataset_settings(dataset_list_tsv, dataset_id)
+        extractor_dir = model_dir / "extractor"
         module.write_model_sidecar(
-            path=model_dir / "extractor" / "geneset.model.json",
+            path=extractor_dir / "geneset.model.json",
             model_id=args.model_id,
             dataset_id=dataset_id,
             model_settings=model_settings,
             dataset_settings=dataset_settings,
         )
+        sidecar_text = (extractor_dir / "geneset.model.json").read_text(encoding="utf-8")
+        for program_dir in sorted(extractor_dir.glob("program=*")):
+            if program_dir.is_dir():
+                (program_dir / "geneset.model.json").write_text(sidecar_text, encoding="utf-8")
 
 
 def _parse_scrna_cnmf_set_name(name: str) -> tuple[int | None, str | None]:
