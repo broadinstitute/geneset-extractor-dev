@@ -26,6 +26,10 @@
 !HuBMAP/config/model_list.tsv
 !HuBMAP/config/model_manifest.tsv
 !HuBMAP/config/model_description_templates.tsv
+!scRNA_cNMF/config/model_list.tsv
+!scRNA_cNMF/config/model_manifest.tsv
+!scRNA_cNMF/config/model_description_templates.tsv
+!scRNA_cNMF/config/dataset_list.tsv
 
 # Allow traversing these subdirectories
 !LINCS_L1000/
@@ -38,6 +42,7 @@
 !HuBMAP/
 !MoTrPAC/
 !KOMP2/
+!scRNA_cNMF/
 !src/
 !run/
 !proposals/
@@ -53,6 +58,7 @@
 !HuBMAP/**/
 !MoTrPAC/**/
 !KOMP2/**/
+!scRNA_cNMF/**/
 !src/**/
 !run/**/
 !proposals/**/
@@ -149,5 +155,8 @@
 !KOMP2/**/*.md
 !KOMP2/**/*.pdf
 !KOMP2/**/*.png
+!scRNA_cNMF/**/*.py
+!scRNA_cNMF/**/*.sh
+!scRNA_cNMF/**/*.md
 
 archive/

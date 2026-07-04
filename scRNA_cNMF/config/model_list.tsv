@@ -1,0 +1,2 @@
+model_id	model_family	description	enabled
+GP1	cnmf_programs	scrna_cnmf_standard_top_program	true
