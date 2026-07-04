@@ -81,15 +81,29 @@ def test_run_model_offline_end_to_end(tmp_path):
         variant_labels.add(payload["naming"]["variant_label"])
     # compare_if_protein + a matched protein matrix should emit both variants.
     assert variant_labels == {"ProteinAdjusted", "Unadjusted"}
-    # The ptm_matrix.tsv File node carries the PDC phosphosite DRS id + PDC dcc_url.
-    graph = json.loads(provs[0].read_text())
-    graph = list(graph.values())[0] if "nodes" not in graph else graph
-    file_nodes = [n for n in graph["nodes"] if n["type"] == "File" and n["name"] == "ptm_matrix.tsv"]
-    assert file_nodes, "ptm_matrix.tsv File node missing"
-    c = file_nodes[0]["c2m2_properties"]
-    assert c["persistent_id"] == "11111111-1111-1111-1111-111111111111"
-    assert c["local_id"] == "drs://dg.4DFC/11111111-1111-1111-1111-111111111111"
-    assert file_nodes[0]["dcc_url"] == "https://pdc.cancer.gov/pdc/study/PDC000128"
+    # Workflow provenance graph is emitted by the DIG prepare step.
+    assert (Path(model_dir) / "workflow" / "ptm_matrix.provenance_graph.json").exists()
+
+    # Every emitted per-gene-set provenance records BOTH analysis steps, connected
+    # through a single coalesced ptm_matrix.tsv bridge node.
+    for prov in provs:
+        graph = json.loads(prov.read_text())
+        graph = list(graph.values())[0] if "nodes" not in graph else graph
+        methods = sorted(n["id"].split(":")[1] for n in graph["nodes"] if n["type"] == "AnalysisType")
+        assert methods == ["ptm_prepare_public", "ptm_site_matrix"], f"{prov}: {methods}"
+
+        ptm_nodes = [n for n in graph["nodes"] if n["type"] == "File" and n["name"] == "ptm_matrix.tsv"]
+        assert len(ptm_nodes) == 1, f"{prov}: ptm_matrix.tsv should be one coalesced node"
+        bridge_id = ptm_nodes[0]["id"]
+        prepare_op = next(n for n in graph["nodes"] if n["id"].split(":")[1] == "ptm_prepare_public")
+        convert_op = next(n for n in graph["nodes"] if n["id"].split(":")[1] == "ptm_site_matrix")
+        edge_pairs = {(e["source"], e["target"]) for e in graph["edges"]}
+        assert (prepare_op["id"], bridge_id) in edge_pairs
+        assert (bridge_id, convert_op["id"]) in edge_pairs
+
+        # A raw PDC report is present as an input to the prepare step.
+        raw_names = {n["name"] for n in graph["nodes"] if n["type"] == "File"}
+        assert any(name.endswith(".tsv") and "Phospho" in name for name in raw_names), raw_names
 
     # Publish-facing GMT set names: cohort-level signature + DIG-appended variant label,
     # no legacy '__signature=' scaffold.

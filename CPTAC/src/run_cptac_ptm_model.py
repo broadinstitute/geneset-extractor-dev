@@ -76,6 +76,40 @@ def _parse_variant_id(variant_id: str) -> dict[str, str]:
     return parsed
 
 
+def rebuild_grouped_provenance(
+    *,
+    dig_dir: Path,
+    python_bin: str,
+    extractor_dir: Path,
+    workflow_graph_json: Path,
+    overlay_json: Path,
+    log_lines: list[str],
+) -> None:
+    """Merge the prepare-step workflow provenance graph into each variant's provenance.
+
+    Mirrors MoTrPAC's rebuild_grouped_provenance: one `provenance build` per grouped
+    variant so the final geneset.provenance.json carries both the ptm_prepare_public
+    workflow step and the convert ptm_site_matrix step.
+    """
+    manifest = extractor_dir / "manifest.tsv"
+    if not manifest.exists() or not workflow_graph_json.exists():
+        return
+    for row in sio.read_tsv(manifest):
+        meta_rel = (row.get("meta_path") or "").strip()
+        prov_rel = (row.get("provenance_path") or "").strip()
+        if not meta_rel or not prov_rel:
+            continue
+        build_args = [
+            "provenance", "build",
+            str(extractor_dir / meta_rel),
+            "--out", str(extractor_dir / prov_rel),
+            "--upstream_provenance_graph_json", str(workflow_graph_json),
+            "--provenance_overlay_json", str(overlay_json),
+        ]
+        cmd, env = engine_cmd(dig_dir, python_bin, *build_args)
+        _run(cmd, env, dig_dir, log_lines)
+
+
 def write_model_sidecars(
     *,
     extractor_dir: Path,
@@ -275,6 +309,16 @@ def run_model(
         ]
         cmd, env = engine_cmd(dig_dir, python_bin, *extract_args)
         _run(cmd, env, dig_dir, log_lines)
+
+        # 4b. merge the prepare-step workflow provenance graph into each variant's provenance
+        rebuild_grouped_provenance(
+            dig_dir=dig_dir,
+            python_bin=python_bin,
+            extractor_dir=extractor_dir,
+            workflow_graph_json=workflow_dir / "ptm_matrix.provenance_graph.json",
+            overlay_json=overlay_json,
+            log_lines=log_lines,
+        )
 
         # 5. model sidecars (description-template vars for the shared refresh tooling)
         write_model_sidecars(
