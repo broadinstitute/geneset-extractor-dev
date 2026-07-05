@@ -35,7 +35,8 @@ SRC_DIR="${PROJECT_DIR}/KidsFirst/src"
 ANALYSIS_DIR="${PROJECT_DIR}/outputs/analysis"
 GENE_MAP="${PROJECT_DIR}/inputs/ensg_to_symbol.tsv"
 
-PYTHON_BIN="python3"
+# prep scripts delegate to the DIG-owned kidsfirst_prepare workflow; run under the DIG venv Python.
+PYTHON_BIN="${DIG_DIR}/.venv/bin/python"
 GENESET_BIN="${DIG_DIR}/.venv/bin/geneset-extractors"
 
 GTEX_BRAIN="${ANALYSIS_DIR}/gtex/brain_cortex.tsv"

@@ -34,7 +34,10 @@ GTEX_DIR="${PROJECT_DIR}/inputs/GTEx/v10"
 GTEX_ATTRS="${GTEX_DIR}/GTEx_Analysis_v10_Annotations_SampleAttributesDS.txt"
 WORKERS="${SLURM_CPUS_PER_TASK:-8}"
 
-PYTHON_BIN="python3"
+DIG_DIR="/path/to/dig-gene-set-extractors"
+# prep scripts (build_rsem_matrix/extract_gtex_counts) are thin shims that delegate to the
+# DIG-owned kidsfirst_prepare workflow, so they run under the DIG venv Python.
+PYTHON_BIN="${DIG_DIR}/.venv/bin/python"
 CBTN_RSEM_DIR="${CBTN_DIR}/outputs/rsem_files"
 CBTN_MANIFEST="${CBTN_DIR}/config/cbtn_rsem_full_manifest.tsv"
 

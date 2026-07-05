@@ -52,7 +52,10 @@ OUT_DIR="${PROJECT_DIR}/outputs/analysis/${STUDY_ID}"
 WORKERS="${SLURM_CPUS_PER_TASK:-4}"
 
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-GENESET_BIN="${GENESET_BIN:-geneset-extractors}"
+GENESET_BIN="${GENESET_BIN:-${DIG_DIR}/.venv/bin/geneset-extractors}"
+# DIG venv Python (the wrapper prep scripts are thin shims that delegate to the
+# DIG-owned kidsfirst_prepare workflow, so they must run under the DIG environment).
+DIG_PY="${DIG_PY:-${DIG_DIR}/.venv/bin/python}"
 
 echo "=============================="
 echo "study_id:     ${STUDY_ID}"
@@ -67,52 +70,48 @@ echo "=============================="
 
 mkdir -p "${OUT_DIR}"
 
-# ── Step 1: Build tumor RSEM count matrix ────────────────────────────────────
-RSEM_COUNTS="${OUT_DIR}/rsem_counts.tsv"
-if [[ -f "${RSEM_COUNTS}" ]]; then
-  echo "[Step 1] RSEM matrix exists, skipping"
-else
-  echo "[Step 1] Building tumor RSEM count matrix (${STUDY})..."
-  "${PYTHON_BIN}" "${SRC_DIR}/build_rsem_matrix.py" \
-    --rsem_dir     "${STUDY_DIR}/outputs/rsem_files" \
-    --manifest_tsv "${STUDY_DIR}/config/rsem_manifest.tsv" \
-    --out_tsv      "${RSEM_COUNTS}" \
-    --workers      "${WORKERS}"
-fi
-
-# ── Step 2: Build normal count matrix ────────────────────────────────────────
-NORMAL_COUNTS="${OUT_DIR}/normal_counts.tsv"
-if [[ -f "${NORMAL_COUNTS}" ]]; then
-  echo "[Step 2] Normal counts exist, skipping"
+# ── Steps 1-3: Prepare DE inputs via the DIG-owned kidsfirst_prepare workflow ──
+# kidsfirst_prepare builds the tumor RSEM matrix, obtains the normal matrix (GTEx
+# tissue extraction, or a pre-built KidsFirst-normal matrix), aligns gene IDs, and
+# emits combined_counts.tsv + sample_metadata.tsv in one call. This is the exact
+# DIG workflow cited in geneset.provenance.json (analysis:kidsfirst_prepare), so the
+# run path matches the delivered provenance. (Verified byte-identical to the former
+# build_rsem_matrix + extract_gtex_counts + prepare_de_inputs three-step sequence.)
+DE_INPUTS_DIR="${OUT_DIR}/de_inputs"
+if [[ -f "${DE_INPUTS_DIR}/combined_counts.tsv" ]]; then
+  echo "[Prep] DE inputs exist, skipping"
 elif $USE_GTEX; then
-  echo "[Step 2] Extracting GTEx counts for '${GTEX_TISSUE}'..."
-  "${PYTHON_BIN}" "${SRC_DIR}/extract_gtex_counts.py" \
-    --gct          "${PROJECT_DIR}/${GTEX_GCT}" \
-    --sample_attrs "${GTEX_SAMPLE_ATTRS}" \
-    --tissue       "${GTEX_TISSUE}" \
-    --out_tsv      "${NORMAL_COUNTS}"
+  echo "[Prep] kidsfirst_prepare: tumor RSEM + GTEx '${GTEX_TISSUE}' -> combined DE inputs..."
+  "${GENESET_BIN}" workflows kidsfirst_prepare \
+    --study_id          "${STUDY_ID}" \
+    --out_dir           "${DE_INPUTS_DIR}" \
+    --rsem_dir          "${STUDY_DIR}/outputs/rsem_files" \
+    --manifest_tsv      "${STUDY_DIR}/config/rsem_manifest.tsv" \
+    --tumor_metadata    "${STUDY_DIR}/config/sample_metadata.tsv" \
+    --workers           "${WORKERS}" \
+    --gtex_gct          "${PROJECT_DIR}/${GTEX_GCT}" \
+    --gtex_sample_attrs "${GTEX_SAMPLE_ATTRS}" \
+    --gtex_tissue       "${GTEX_TISSUE}"
 else
-  echo "[Step 2] Building normal RSEM count matrix (${NORMAL_STUDY})..."
+  # KidsFirst-normal control: build the normal matrix (delegates to DIG), then let
+  # kidsfirst_prepare consume it as a pre-built normal matrix.
   NORMAL_DIR="${PROJECT_DIR}/${NORMAL_STUDY}"
-  "${PYTHON_BIN}" "${SRC_DIR}/build_rsem_matrix.py" \
+  NORMAL_COUNTS="${OUT_DIR}/normal_counts.tsv"
+  echo "[Prep] Building KidsFirst-normal matrix (${NORMAL_STUDY})..."
+  "${DIG_PY}" "${SRC_DIR}/build_rsem_matrix.py" \
     --rsem_dir     "${NORMAL_DIR}/outputs/rsem_files" \
     --manifest_tsv "${NORMAL_DIR}/config/rsem_manifest.tsv" \
     --out_tsv      "${NORMAL_COUNTS}" \
     --workers      "${WORKERS}"
-fi
-
-# ── Step 3: Merge + create sample metadata ───────────────────────────────────
-DE_INPUTS_DIR="${OUT_DIR}/de_inputs"
-if [[ -f "${DE_INPUTS_DIR}/combined_counts.tsv" ]]; then
-  echo "[Step 3] DE inputs exist, skipping"
-else
-  echo "[Step 3] Merging counts and creating sample metadata..."
-  "${PYTHON_BIN}" "${SRC_DIR}/prepare_de_inputs.py" \
-    --tumor_counts   "${RSEM_COUNTS}" \
-    --normal_counts  "${NORMAL_COUNTS}" \
-    --tumor_metadata "${STUDY_DIR}/config/sample_metadata.tsv" \
+  echo "[Prep] kidsfirst_prepare: tumor RSEM + KidsFirst-normal -> combined DE inputs..."
+  "${GENESET_BIN}" workflows kidsfirst_prepare \
     --study_id       "${STUDY_ID}" \
-    --out_dir        "${DE_INPUTS_DIR}"
+    --out_dir        "${DE_INPUTS_DIR}" \
+    --rsem_dir       "${STUDY_DIR}/outputs/rsem_files" \
+    --manifest_tsv   "${STUDY_DIR}/config/rsem_manifest.tsv" \
+    --tumor_metadata "${STUDY_DIR}/config/sample_metadata.tsv" \
+    --workers        "${WORKERS}" \
+    --normal_counts  "${NORMAL_COUNTS}"
 fi
 
 # ── Step 4: Differential expression (limma-voom) ─────────────────────────────

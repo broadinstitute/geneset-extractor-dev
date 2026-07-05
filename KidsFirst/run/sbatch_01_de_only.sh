@@ -9,23 +9,25 @@
 #SBATCH --mail-type=BEGIN,END,FAIL
 
 # ── PHASE 1 of 2-phase workflow ───────────────────────────────────────────────
-# This script: build count matrices + run all 8 DE analyses (NO gene set extraction)
-# After this completes:
-#   1. bash KidsFirst/run/02_check_natural_sizes.sh  ← see gene counts
-#   2. Decide TOP_K and MIN_LOGFC in sbatch_03_extract_genesets.sh
-#   3. sbatch KidsFirst/run/sbatch_03_extract_genesets.sh
+# This script: build count matrices + run the 6 delivered KidsFirst DE analyses (NO gene set extraction)
 #
-# Comparisons (8 total — see analysis_design.md for scientific rationale):
+# NOTE (DIG ownership): the matrix-prep steps (build_rsem_matrix / extract_gtex_counts /
+# prepare_de_inputs) are thin shims that delegate to the DIG-owned kidsfirst_prepare
+# workflow, so run this under the DIG environment (set PYTHON_BIN to the DIG venv Python).
+# The canonical single-command prep is `geneset-extractors workflows kidsfirst_prepare`
+# (see run/run_kf_de_study.sh); this batch driver is the original multi-study e3 pipeline
+# retained for reproducibility.
+#
+# After this completes:
+#   sbatch KidsFirst/run/sbatch_03_extract_genesets.sh   (HZ1 gene set extraction)
+#
+# Comparisons (6 delivered KidsFirst comparisons):
 #   KF-TALL-vs-T21       T-ALL vs Down syndrome blood (primary, pediatric-matched)
 #   KF-TALL-vs-GTEx      T-ALL vs GTEx whole blood (secondary validation)
 #   KF-NBL-vs-adrenal    Neuroblastoma vs GTEx adrenal gland
 #   KF-ESGR-vs-muscle    Ewing sarcoma vs GTEx skeletal muscle
 #   KF-MMC-vs-blood      AML vs GTEx whole blood
-#   KF-TALL-vs-MMC       T-cell vs myeloid lineage contrast (NEW)
 #   KF-BLOOD-vs-normal   Pan-blood cancer (TALL+MMC) vs GTEx whole blood
-#   KF-BLOOD-vs-SOLID    Pan-blood cancer vs pan-solid cancer (internal contrast)
-#
-# Note: KF-SOLID-vs-normal excluded (scientifically rejected — see analysis_design.md §2)
 # ─────────────────────────────────────────────────────────────────────────────
 
 source /programs/biogrids.shrc
@@ -42,7 +44,9 @@ GTEX_DIR="${PROJECT_DIR}/inputs/GTEx/v10"
 GTEX_ATTRS="${GTEX_DIR}/GTEx_Analysis_v10_Annotations_SampleAttributesDS.txt"
 WORKERS="${SLURM_CPUS_PER_TASK:-8}"
 
-PYTHON_BIN="python3"
+# prep scripts (build_rsem_matrix/extract_gtex_counts/prepare_de_inputs) are thin shims that
+# delegate to the DIG-owned kidsfirst_prepare workflow, so they run under the DIG venv Python.
+PYTHON_BIN="${DIG_DIR}/.venv/bin/python"
 GENESET_BIN="${DIG_DIR}/.venv/bin/geneset-extractors"
 GENE_MAP="${PROJECT_DIR}/inputs/ensg_to_symbol.tsv"
 
@@ -173,11 +177,7 @@ build_merged "KF-BLOOD" \
   --input "${ANALYSIS_DIR}/KF-TALL/rsem_counts.tsv" --study "KF-TALL" \
   --input "${ANALYSIS_DIR}/KF-MMC/rsem_counts.tsv"  --study "KF-MMC"
 
-build_merged "KF-SOLID" \
-  --input "${ANALYSIS_DIR}/KF-NBL/rsem_counts.tsv"  --study "KF-NBL" \
-  --input "${ANALYSIS_DIR}/KF-ESGR/rsem_counts.tsv" --study "KF-ESGR"
-
-# ── PHASE D: Run all 8 DE analyses ───────────────────────────────────────────
+# ── PHASE D: Run the 6 delivered DE analyses ─────────────────────────────────
 echo ""
 echo "====== PHASE D: Differential expression (limma-voom) ======"
 
@@ -256,22 +256,10 @@ run_de "KF-MMC-vs-blood" \
   "${ANALYSIS_DIR}/gtex/whole_blood.tsv"
 
 echo ""
-echo "-- Lineage contrast --"
-# TALL (T-cell) as 'tumor', MMC (myeloid) as 'normal' — directionality label only
-run_de "KF-TALL-vs-MMC" \
-  "${ANALYSIS_DIR}/KF-TALL/rsem_counts.tsv" \
-  "${ANALYSIS_DIR}/KF-MMC/rsem_counts.tsv"
-
-echo ""
-echo "-- Category analyses --"
+echo "-- Category analysis (pan-blood) --"
 run_de "KF-BLOOD-vs-normal" \
   "${ANALYSIS_DIR}/KF-BLOOD/merged_tumor.tsv" \
   "${ANALYSIS_DIR}/gtex/whole_blood.tsv"
-
-# KF-SOLID used as 'normal' (reference) for blood vs solid contrast
-run_de "KF-BLOOD-vs-SOLID" \
-  "${ANALYSIS_DIR}/KF-BLOOD/merged_tumor.tsv" \
-  "${ANALYSIS_DIR}/KF-SOLID/merged_tumor.tsv"
 
 # ── PHASE E: Summary ──────────────────────────────────────────────────────────
 echo ""
@@ -279,7 +267,7 @@ echo "====== PHASE E: Summary ======"
 echo ""
 echo "DEG quick summary (padj<0.05 + |logFC|≥1):"
 for COMP in KF-TALL-vs-T21 KF-TALL-vs-GTEx KF-NBL-vs-adrenal KF-ESGR-vs-muscle \
-            KF-MMC-vs-blood KF-TALL-vs-MMC KF-BLOOD-vs-normal KF-BLOOD-vs-SOLID; do
+            KF-MMC-vs-blood KF-BLOOD-vs-normal; do
   DEG="${ANALYSIS_DIR}/${COMP}/de_results/deg_long.tsv"
   if [[ -f "$DEG" ]]; then
     up=$(awk -F'\t' 'NR>1 && $7!="NA" && $7+0<0.05 && $4+0>1'  "$DEG" | wc -l)
@@ -293,5 +281,5 @@ done
 echo ""
 echo "======================================================"
 echo " Phase 1 DONE: $(date)"
-echo " Next: bash KidsFirst/run/02_check_natural_sizes.sh"
+echo " Next: sbatch KidsFirst/run/sbatch_03_extract_genesets.sh"
 echo "======================================================"

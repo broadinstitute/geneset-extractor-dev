@@ -1,6 +1,6 @@
 # KidsFirst Pediatric Cancer Gene Sets
 
-Author: kyuryung
+Author: KidsFirst submission team
 
 Differential expression analysis and gene set extraction for pediatric cancers using
 KidsFirst PBTA, CBTN, and GTEx data. Packaged as a branch-standard library: harmonizome-style
@@ -145,8 +145,10 @@ kidsfirst_all_models/
 Each `geneset.provenance.json` begins from the released inputs (Kids First DRC RSEM via DRS
 `drs://nci-crdc.datacommons.io/dg.4DFC/` + GTEx v10), through `kidsfirst_prepare` →
 `rna_de_prepare` → `deg_long`, to the model's extractor (`rna_deg_multi` for HZ1,
-`kidsfirst_curate` for HZ2). `.orig` snapshots of the pre-refresh HZ1 metadata/provenance are
-preserved alongside.
+`kidsfirst_curate` for HZ2). The refresh step produces `.orig` snapshots of the pre-refresh HZ1
+metadata/provenance and retains them in the repository; they are **excluded from the external
+submission package** because they hold pre-sanitization local working paths (see
+`SUBMISSION_MANIFEST.md`).
 
 ---
 
@@ -156,11 +158,17 @@ preserved alongside.
 `PROJECT_DIR`/`DIG_DIR` set at the top of each `sbatch_*.sh`):
 
 ```bash
-sbatch run/sbatch_01_de_only.sh          # KidsFirst DE (8 comparisons)
+sbatch run/sbatch_01_de_only.sh          # KidsFirst DE (6 comparisons)
 sbatch run/sbatch_02_cbtn_de.sh          # CBTN DE (7 brain tumor comparisons)
 sbatch run/sbatch_03_extract_genesets.sh # HZ1 harmonizome gene sets
 sbatch run/sbatch_04_curate_genesets.sh  # HZ2 curated disease-up gene sets
 ```
+
+Matrix prep and curation are DIG-owned: `sbatch_01/02` delegate the prep steps to the DIG
+`kidsfirst_prepare` workflow and `sbatch_04` calls `kidsfirst_curate`. For one study end-to-end
+against the DIG workflow directly (matching the delivered provenance), use
+`run/run_kf_de_study.sh`, whose prep step is a single `geneset-extractors workflows
+kidsfirst_prepare` call. Run the batch scripts under the DIG environment.
 
 **Branch-standard model operations** (config/env-driven, no in-script path editing) use the shared
 wrappers at the repo-level `run/`:
@@ -170,6 +178,8 @@ wrappers at the repo-level `run/`:
 bash geneset-extractor-dev/run/submit_kidsfirst_models_cluster.sh --submit --write_model_only
 
 # refresh metadata/provenance/GMT descriptions and inject public source identifiers
+# (local_input_source_map.tsv is a repo-internal refresh aid; it is EXCLUDED from the external
+#  submission package because it holds local working paths — see SUBMISSION_MANIFEST.md)
 LOCAL_INPUT_SOURCE_MAP_TSV=geneset-extractor-dev/KidsFirst/config/local_input_source_map.tsv \
 bash geneset-extractor-dev/run/submit_kidsfirst_models_cluster.sh --submit --refresh_metadata_and_provenance
 ```
@@ -177,14 +187,17 @@ bash geneset-extractor-dev/run/submit_kidsfirst_models_cluster.sh --submit --ref
 An Apptainer-backed variant (`submit_kidsfirst_models_cluster_apptainer.sh`) is provided for
 container execution. Use `--model_id HZ1|HZ2` and `--comparison <id>` to filter.
 
-Supporting scripts are in `src/`:
+Supporting scripts are in `src/`. The core prep + curation logic is **DIG-owned**: the prep
+scripts are thin shims over `geneset_extractors.workflows.kidsfirst_prepare` and the curation
+entrypoint delegates to `kidsfirst_curate` (branch two-repo standard). They require the DIG
+environment; the canonical entry points are `geneset-extractors workflows kidsfirst_prepare`
+and `... kidsfirst_curate`.
 
 | Script | Purpose |
 |--------|---------|
-| `build_rsem_matrix.py` | Build per-study RSEM count matrix from individual files |
-| `extract_gtex_counts.py` | Extract tissue-specific count matrix from GTEx GCT |
-| `merge_study_matrices.py` | Merge multiple study matrices (pan-cancer categories) |
-| `prepare_de_inputs.py` | Merge tumor + normal counts, create sample_metadata.tsv |
-| `expand_gene_map_cbtn.py` | Expand ENSG→HGNC gene map for CBTN using mygene.info |
+| `build_rsem_matrix.py` | Shim → DIG `kidsfirst_prepare.build_tumor_matrix` (tumor RSEM matrix) |
+| `extract_gtex_counts.py` | Shim → DIG `kidsfirst_prepare.extract_gtex_matrix` (GTEx normal matrix) |
+| `prepare_de_inputs.py` | Shim → DIG `kidsfirst_prepare.merge_de_inputs` (combined_counts + sample_metadata) |
+| `merge_study_matrices.py` | Wrapper orchestration: combine multi-study matrices (e.g. KF-BLOOD = TALL + MMC) |
 | `curate_disease_genesets.py` | Legacy compatibility entrypoint that delegates to DIG `kidsfirst_curate` |
-| `extract_immune_genesets.py` | Split DE results into immune / non-immune gene sets |
+| `expand_gene_map_cbtn.py` | Expand ENSG→HGNC gene map for CBTN using mygene.info |

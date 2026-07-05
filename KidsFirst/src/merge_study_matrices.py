@@ -4,6 +4,11 @@ from __future__ import annotations
 Merge multiple KidsFirst count matrices (tumor studies) into one combined matrix.
 Used to build category-level gene sets (e.g., all blood cancers, all solid tumors).
 
+Wrapper-level ORCHESTRATION (not core workflow logic): deciding which studies to
+combine (e.g. KF-BLOOD = KF-TALL + KF-MMC) is a KidsFirst config choice, so it lives
+in the wrapper. It operates on matrices produced by the DIG-owned kidsfirst_prepare
+workflow; the reusable tumor/normal matrix prep + DE-input build is DIG-owned.
+
 Genes: intersection of all input matrices (strips Ensembl version suffix).
 Sample IDs: all columns from all inputs (must be unique across studies).
 

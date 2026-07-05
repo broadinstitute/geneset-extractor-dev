@@ -121,8 +121,7 @@ echo "--- 6. KidsFirst scripts (our code) ---"
 echo "    Note: these are in KidsFirst/ — NOT in the git repo"
 SCRIPT_SRC="${PROJECT_DIR}/KidsFirst/src"
 for script in build_rsem_matrix.py extract_gtex_counts.py prepare_de_inputs.py \
-              merge_study_matrices.py extract_immune_genesets.py \
-              summarize_de_natural_sizes.py; do
+              merge_study_matrices.py; do
   check_file "${script}" "${SCRIPT_SRC}/${script}" 100
 done
 

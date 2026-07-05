@@ -10,19 +10,11 @@
 
 # ── PHASE 2 of 2-phase workflow ───────────────────────────────────────────────
 # Prerequisites:
-#   sbatch_01_de_only.sh  (KF 8 comparisons)
-#   sbatch_02_cbtn.de.sh  (CBTN 7 comparisons) — skipped gracefully if not done
-# Run 02_check_natural_sizes.sh first to decide TOP_K and MIN_LOGFC below.
+#   sbatch_01_de_only.sh   (KF 6 delivered comparisons)
+#   sbatch_02_cbtn_de.sh   (CBTN 7 comparisons) — skipped gracefully if not done
 #
-# This script produces TWO versions per comparison:
-#   genesets_natural/  padj<PADJ, |logFC|≥MIN_LOGFC, no top_k cap
-#                      → shows natural landscape size
-#   genesets_topk/     padj<PADJ, |logFC|≥MIN_LOGFC, top_k=TOP_K
-#                      → curated size for GWAS / delivery
-#
-# Then runs immune annotation on the TOP_K version (KF blood/solid only):
-#   genesets_immune/      top_k immune DEGs
-#   genesets_nonimmune/   top_k non-immune DEGs
+# Extracts the HZ1 harmonizome-style gene sets (padj<PADJ_MAX, |logFC|≥MIN_LOGFC,
+# top_k=TOP_K) for the 13 delivered comparisons via the DIG rna_deg_multi converter.
 # ─────────────────────────────────────────────────────────────────────────────
 
 source /programs/biogrids.shrc
@@ -32,14 +24,14 @@ unset PYTHONPATH
 set -euo pipefail
 
 # ══════════════════════════════════════════════════════════════════════════════
-# USER CONFIGURATION — edit after reviewing 02_check_natural_sizes.sh output
+# USER CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
 TOP_K=100          # Cap for curated gene sets (genesets_topk/)
-MIN_LOGFC="1.0"    # |log2FC| threshold (try 1.5 or 2.0 if natural sizes are very large)
+MIN_LOGFC="1.0"    # |log2FC| threshold
 PADJ_MAX="0.05"    # FDR threshold
 # GTF for gene symbol annotation (GENCODE v39, hg38 — matches GTEx v10 quantification).
 # Download: https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_39/gencode.v39.annotation.gtf.gz
-# Set to "" to skip annotation (gene_symbol will fall back to Ensembl IDs; immune regex will not work).
+# Set to "" to skip annotation (gene_symbol will fall back to Ensembl IDs).
 GTF_PATH=""        # e.g. /path/to/gencode.v39.annotation.gtf.gz
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -48,26 +40,23 @@ DIG_DIR="/path/to/dig-gene-set-extractors"
 SRC_DIR="${PROJECT_DIR}/KidsFirst/src"
 ANALYSIS_DIR="${PROJECT_DIR}/outputs/analysis"
 
-PYTHON_BIN="python3"
 GENESET_BIN="${DIG_DIR}/.venv/bin/geneset-extractors"
 
 mkdir -p "${PROJECT_DIR}/KidsFirst/logs"
 echo "======================================================"
-echo " KF + CBTN gene set extraction — Phase 2"
+echo " KF + CBTN gene set extraction — Phase 2 (HZ1 top_k)"
 echo " TOP_K=${TOP_K}  MIN_LOGFC=${MIN_LOGFC}  PADJ_MAX=${PADJ_MAX}"
 echo " Start: $(date)"
 echo "======================================================"
 
-# KF comparisons (8 total)
+# KF comparisons (6 delivered)
 KF_COMPARISONS=(
   "KF-TALL-vs-T21"
   "KF-TALL-vs-GTEx"
   "KF-NBL-vs-adrenal"
   "KF-ESGR-vs-muscle"
   "KF-MMC-vs-blood"
-  "KF-TALL-vs-MMC"
   "KF-BLOOD-vs-normal"
-  "KF-BLOOD-vs-SOLID"
 )
 
 # CBTN comparisons (7 total — brain tumors vs GTEx brain cortex)
@@ -81,22 +70,12 @@ CBTN_COMPARISONS=(
   "CBTN-atypical_teratoid_rhabdoid_tumor-vs-brain_cortex"
 )
 
-# All comparisons combined
+# All delivered comparisons (13)
 COMPARISONS=("${KF_COMPARISONS[@]}" "${CBTN_COMPARISONS[@]}")
 
-# Studies that get immune split (blood/solid tumors only — not brain tumors)
-IMMUNE_COMPARISONS=(
-  "KF-TALL-vs-GTEx"
-  "KF-NBL-vs-adrenal"
-  "KF-MMC-vs-blood"
-  "KF-TALL-vs-MMC"
-  "KF-BLOOD-vs-normal"
-  "KF-BLOOD-vs-SOLID"
-)
-
-# ── Helper: run rna_deg_multi ─────────────────────────────────────────────────
+# ── Helper: run rna_deg_multi (top_k HZ1) ─────────────────────────────────────
 run_geneset() {
-  local LABEL="$1" DEG_TSV="$2" OUT_DIR="$3" USE_TOPK="$4"
+  local LABEL="$1" DEG_TSV="$2" OUT_DIR="$3"
   if [[ -d "$OUT_DIR" ]]; then
     echo "[SKIP] ${LABEL} $(basename $OUT_DIR) already exists"
     return
@@ -105,34 +84,18 @@ run_geneset() {
   if [[ -n "${GTF_PATH}" && -f "${GTF_PATH}" ]]; then
     GTF_ARGS=(--gtf "${GTF_PATH}")
   fi
-  if [[ "$USE_TOPK" == "yes" ]]; then
-    PYTHONPATH="" "${GENESET_BIN}" convert rna_deg_multi \
-      --deg_tsv           "$DEG_TSV" \
-      --comparison_column comparison_id \
-      --out_dir           "$OUT_DIR" \
-      --organism          human \
-      --genome_build      hg38 \
-      --padj_max          "${PADJ_MAX}" \
-      --min_abs_logfc     "${MIN_LOGFC}" \
-      --select            top_k \
-      --top_k             "${TOP_K}" \
-      --gmt_topk_list     "${TOP_K}" \
-      "${GTF_ARGS[@]}"
-  else
-    # Natural: high top_k = effectively no cap
-    PYTHONPATH="" "${GENESET_BIN}" convert rna_deg_multi \
-      --deg_tsv           "$DEG_TSV" \
-      --comparison_column comparison_id \
-      --out_dir           "$OUT_DIR" \
-      --organism          human \
-      --genome_build      hg38 \
-      --padj_max          "${PADJ_MAX}" \
-      --min_abs_logfc     "${MIN_LOGFC}" \
-      --select            top_k \
-      --top_k             9999 \
-      --gmt_topk_list     9999 \
-      "${GTF_ARGS[@]}"
-  fi
+  PYTHONPATH="" "${GENESET_BIN}" convert rna_deg_multi \
+    --deg_tsv           "$DEG_TSV" \
+    --comparison_column comparison_id \
+    --out_dir           "$OUT_DIR" \
+    --organism          human \
+    --genome_build      hg38 \
+    --padj_max          "${PADJ_MAX}" \
+    --min_abs_logfc     "${MIN_LOGFC}" \
+    --select            top_k \
+    --top_k             "${TOP_K}" \
+    --gmt_topk_list     "${TOP_K}" \
+    "${GTF_ARGS[@]}"
 }
 
 # ── Check gene set output sizes ───────────────────────────────────────────────
@@ -162,9 +125,9 @@ check_geneset_size() {
   fi
 }
 
-# ── Step 1: Extract gene sets (both versions) for all comparisons ─────────────
+# ── Extract HZ1 gene sets (top_k) for all delivered comparisons ───────────────
 echo ""
-echo "====== Step 1: Gene set extraction (KF + CBTN) ======"
+echo "====== HZ1 gene set extraction (KF + CBTN) ======"
 echo ""
 
 for COMP in "${COMPARISONS[@]}"; do
@@ -175,61 +138,20 @@ for COMP in "${COMPARISONS[@]}"; do
   fi
 
   echo "--- ${COMP} ---"
-  run_geneset "${COMP}" "$DEG" "${ANALYSIS_DIR}/${COMP}/genesets_topk"     "yes"
-  run_geneset "${COMP}" "$DEG" "${ANALYSIS_DIR}/${COMP}/genesets_natural"  "no"
-  check_geneset_size "${COMP}/topk"     "${ANALYSIS_DIR}/${COMP}/genesets_topk"
-  check_geneset_size "${COMP}/natural"  "${ANALYSIS_DIR}/${COMP}/genesets_natural"
-done
-
-# ── Step 2: Immune annotation + split (KF blood/solid comparisons only) ───────
-echo ""
-echo "====== Step 2: Immune gene set extraction (KF only) ======"
-echo ""
-
-for COMP in "${IMMUNE_COMPARISONS[@]}"; do
-  DEG="${ANALYSIS_DIR}/${COMP}/de_results/deg_long.tsv"
-  if [[ ! -f "$DEG" ]]; then
-    echo "[SKIP] ${COMP}: deg_long.tsv not found"
-    continue
-  fi
-  SPLIT_DIR="${ANALYSIS_DIR}/${COMP}/de_results/immune_split"
-  IMMUNE_DEG="${SPLIT_DIR}/deg_long_immune.tsv"
-  NONIMMUNE_DEG="${SPLIT_DIR}/deg_long_nonimmune.tsv"
-  echo "--- ${COMP} ---"
-
-  if [[ -f "$IMMUNE_DEG" && -f "$NONIMMUNE_DEG" ]]; then
-    echo "[SKIP] ${COMP} immune split already exists"
-  else
-    echo "[RUN] Splitting immune/non-immune: ${COMP}..."
-    "${PYTHON_BIN}" "${SRC_DIR}/extract_immune_genesets.py" \
-      --deg_tsv "$DEG" \
-      --out_dir "$SPLIT_DIR"
-    local_immune=$(tail -n +2 "$IMMUNE_DEG" | wc -l)
-    local_nonimmune=$(tail -n +2 "$NONIMMUNE_DEG" | wc -l)
-    local_sig_immune=$(awk -F'\t' 'NR>1 && $7!="NA" && $7+0<0.05 && ($4+0>1||$4+0<-1)' "$IMMUNE_DEG" | wc -l)
-    local_sig_nonimmune=$(awk -F'\t' 'NR>1 && $7!="NA" && $7+0<0.05 && ($4+0>1||$4+0<-1)' "$NONIMMUNE_DEG" | wc -l)
-    echo "[CHECK] ${COMP} split: ${local_immune} immune rows (${local_sig_immune} sig), ${local_nonimmune} non-immune rows (${local_sig_nonimmune} sig)"
-  fi
-
-  run_geneset "${COMP}/immune"    "$IMMUNE_DEG"    "${ANALYSIS_DIR}/${COMP}/genesets_immune"    "yes"
-  run_geneset "${COMP}/nonimmune" "$NONIMMUNE_DEG" "${ANALYSIS_DIR}/${COMP}/genesets_nonimmune" "yes"
-  check_geneset_size "${COMP}/immune"    "${ANALYSIS_DIR}/${COMP}/genesets_immune"
-  check_geneset_size "${COMP}/nonimmune" "${ANALYSIS_DIR}/${COMP}/genesets_nonimmune"
+  run_geneset "${COMP}" "$DEG" "${ANALYSIS_DIR}/${COMP}/genesets_topk"
+  check_geneset_size "${COMP}/topk" "${ANALYSIS_DIR}/${COMP}/genesets_topk"
 done
 
 # ── Final summary ─────────────────────────────────────────────────────────────
 echo ""
 echo "====== Final summary: gene sets produced ======"
 echo ""
-printf "%-55s  %10s  %10s  %10s  %10s\n" "Study" "topk" "natural" "immune" "nonimmune"
-echo "────────────────────────────────────────────────────────────────────────────────────────────"
+printf "%-55s  %10s\n" "Study" "topk"
+echo "──────────────────────────────────────────────────────────────────────"
 for COMP in "${COMPARISONS[@]}"; do
   count_dir() { [[ -d "${1}" ]] && find "${1}" -name "*.json" 2>/dev/null | wc -l || echo 0; }
-  n_topk=$(count_dir     "${ANALYSIS_DIR}/${COMP}/genesets_topk")
-  n_nat=$(count_dir      "${ANALYSIS_DIR}/${COMP}/genesets_natural")
-  n_imm=$(count_dir      "${ANALYSIS_DIR}/${COMP}/genesets_immune")
-  n_nonimm=$(count_dir   "${ANALYSIS_DIR}/${COMP}/genesets_nonimmune")
-  printf "%-55s  %10s  %10s  %10s  %10s\n" "${COMP}" "${n_topk}" "${n_nat}" "${n_imm}" "${n_nonimm}"
+  n_topk=$(count_dir "${ANALYSIS_DIR}/${COMP}/genesets_topk")
+  printf "%-55s  %10s\n" "${COMP}" "${n_topk}"
 done
 
 echo ""
