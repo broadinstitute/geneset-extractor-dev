@@ -106,7 +106,7 @@ def build_model_payload(
             "model_group": model_group,
             "model_label": f"KidsFirst curated disease-up — {disease_label}",
             "workflow_name": WORKFLOW_NAME,
-            "extractor_name": "curate_disease_genesets",
+            "extractor_name": "kidsfirst_curate",
             "inputs": {
                 "comparison_label": comparison_id,
                 "tumor_label": tumor_label,
