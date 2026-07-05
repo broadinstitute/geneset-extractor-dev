@@ -40,11 +40,10 @@ unset PYTHONPATH
 set -euo pipefail
 
 PROJECT_DIR="/path/to/your/project"
-SRC_DIR="${PROJECT_DIR}/KidsFirst/src"
 ANALYSIS_DIR="${PROJECT_DIR}/outputs/analysis"
 OUT_DIR="${ANALYSIS_DIR}/curated_genesets"
 
-PYTHON_BIN="python3"
+GENESET_EXTRACTORS_BIN="${GENESET_EXTRACTORS_BIN:-geneset-extractors}"
 
 mkdir -p "${PROJECT_DIR}/KidsFirst/logs"
 echo "======================================================"
@@ -53,7 +52,7 @@ echo " padj<0.05 | logFC≥1 | concordant | score>=2.0 | cap=200 | warn<50"
 echo " Start: $(date)"
 echo "======================================================"
 
-"${PYTHON_BIN}" "${SRC_DIR}/curate_disease_genesets.py" \
+"${GENESET_EXTRACTORS_BIN}" workflows kidsfirst_curate \
   --analysis_dir    "${ANALYSIS_DIR}" \
   --out_dir         "${OUT_DIR}" \
   --padj_max        0.05 \

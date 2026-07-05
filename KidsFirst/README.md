@@ -9,8 +9,9 @@ under the shared `<library>_all_models` layout.
 
 **Repository split (two-repo standard):** the reusable workflow/extractor logic lives in
 `dig-gene-set-extractors` — `workflows kidsfirst_prepare` (tumor/normal matrix prep), `workflows
-rna_de_prepare` (limma-voom DE), and the `rna_deg_multi` converter. This `KidsFirst/` directory is
-the config + orchestration wrapper (models, comparisons, submit scripts, model-sidecar/refresh).
+rna_de_prepare` (limma-voom DE), `workflows kidsfirst_curate` (HZ2 disease-up curation), and the
+`rna_deg_multi` converter. This `KidsFirst/` directory is the config + orchestration wrapper
+(models, comparisons, submit scripts, model-sidecar/refresh).
 
 ---
 
@@ -96,10 +97,11 @@ extractor using the harmonizome preset. Available for all 13 comparisons.
 
 ### HZ2 — curated disease-up
 
-Curated pediatric-cancer disease-up gene sets (`src/curate_disease_genesets.py`): for each disease,
-concordant tumor-up genes across the configured control(s), filtered by mean signed_neglog10padj
-(threshold 2.0 ≈ padj < 0.01) and capped at 200 genes. Available for 11 diseases (KF-TALL takes the
-concordance across both the T21 pediatric and GTEx controls; the others use their single control).
+Curated pediatric-cancer disease-up gene sets generated with the DIG `kidsfirst_curate` workflow:
+for each disease, concordant tumor-up genes across the configured control(s), filtered by mean
+signed_neglog10padj (threshold 2.0 ≈ padj < 0.01) and capped at 200 genes. Available for 11
+diseases (KF-TALL takes the concordance across both the T21 pediatric and GTEx controls; the others
+use their single control).
 
 - Criteria: padj < 0.05, |logFC| ≥ 1, control-concordance, mean signed_neglog10padj ≥ 2.0, cap 200
 - Emits one disease-up gene set per disease; lives under the disease's primary comparison partition
@@ -141,9 +143,10 @@ kidsfirst_all_models/
 ```
 
 Each `geneset.provenance.json` begins from the released inputs (Kids First DRC RSEM via DRS
-`drs://nci-crdc.datacommons.io/dg.4DFC/` + GTEx v10), through `rna_de_prepare` → `deg_long`, to the
-model's extractor (`rna_deg_multi` for HZ1, `curate_disease_genesets` for HZ2). `.orig` snapshots of
-the pre-refresh HZ1 metadata/provenance are preserved alongside.
+`drs://nci-crdc.datacommons.io/dg.4DFC/` + GTEx v10), through `kidsfirst_prepare` →
+`rna_de_prepare` → `deg_long`, to the model's extractor (`rna_deg_multi` for HZ1,
+`kidsfirst_curate` for HZ2). `.orig` snapshots of the pre-refresh HZ1 metadata/provenance are
+preserved alongside.
 
 ---
 
@@ -183,5 +186,5 @@ Supporting scripts are in `src/`:
 | `merge_study_matrices.py` | Merge multiple study matrices (pan-cancer categories) |
 | `prepare_de_inputs.py` | Merge tumor + normal counts, create sample_metadata.tsv |
 | `expand_gene_map_cbtn.py` | Expand ENSG→HGNC gene map for CBTN using mygene.info |
-| `curate_disease_genesets.py` | HZ2 curation: concordance + score filter (exploratory) |
+| `curate_disease_genesets.py` | Legacy compatibility entrypoint that delegates to DIG `kidsfirst_curate` |
 | `extract_immune_genesets.py` | Split DE results into immune / non-immune gene sets |
