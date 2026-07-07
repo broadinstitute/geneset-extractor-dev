@@ -244,20 +244,71 @@ def _candidate_strings_from_file_node(node):  # type: (Dict[str, Any]) -> List[s
     return values
 
 
-def _resolve_provenance_file_candidate(candidate, local_output_root):  # type: (str, Path) -> Optional[Path]
+def _normalize_s3_uri_prefix(s3_uri):  # type: (str) -> str
+    return s3_uri.rstrip("/")
+
+
+def _map_mirrored_remote_candidate_to_local_path(
+    candidate,  # type: str
+    local_output_root,  # type: Path
+    s3_output_root,  # type: Optional[str]
+):  # type: (...) -> Optional[Path]
+    if not s3_output_root:
+        return None
+    normalized_output_root = _normalize_s3_uri_prefix(s3_output_root)
+    if candidate == normalized_output_root:
+        return local_output_root.resolve()
+    prefix = normalized_output_root + "/"
+    if not candidate.startswith(prefix):
+        return None
+    relative_path = candidate[len(prefix) :]
+    if not relative_path:
+        return None
+    return (local_output_root / relative_path).resolve()
+
+
+def _resolve_provenance_file_candidate(
+    candidate,  # type: str
+    local_output_root,  # type: Path
+    s3_output_root=None,  # type: Optional[str]
+):  # type: (...) -> Optional[Path]
     if not candidate:
         return None
-    parsed = urlparse(candidate)
-    if parsed.scheme or candidate.startswith("//"):
-        return None
 
-    path = Path(candidate)
-    candidate_paths = []  # type: List[Path]
-    if path.is_absolute():
-        candidate_paths.append(path)
+    mirrored_local_path = _map_mirrored_remote_candidate_to_local_path(
+        candidate,
+        local_output_root,
+        s3_output_root,
+    )
+    if mirrored_local_path is not None:
+        if mirrored_local_path.exists() and mirrored_local_path.is_file() and not should_skip_path(mirrored_local_path):
+            return mirrored_local_path
+
+    parsed = urlparse(candidate)
+
+    candidate_texts = []  # type: List[str]
+    if parsed.scheme or candidate.startswith("//"):
+        path_text = parsed.path.lstrip("/")
+        if path_text:
+            candidate_texts.append(path_text)
+            path_parts = [part for part in Path(path_text).parts if part not in ("", "/")]
+            for marker in ("genesets", "workflow", "extractor", "models"):
+                if marker in path_parts:
+                    suffix = "/".join(path_parts[path_parts.index(marker) :])
+                    if suffix and suffix not in candidate_texts:
+                        candidate_texts.append(suffix)
     else:
-        candidate_paths.append((local_output_root.parent / path))
-        candidate_paths.append(local_output_root / path)
+        candidate_texts.append(candidate)
+
+    candidate_paths = []  # type: List[Path]
+    for candidate_text in candidate_texts:
+        path = Path(candidate_text)
+        if path.is_absolute():
+            candidate_paths.append(path)
+        else:
+            candidate_paths.append((local_output_root.parent / path))
+            candidate_paths.append(local_output_root / path)
+            candidate_paths.append(local_output_root / path.name)
 
     seen = set()  # type: Set[Path]
     for candidate_path in candidate_paths:
@@ -277,6 +328,7 @@ def _resolve_provenance_file_candidate(candidate, local_output_root):  # type: (
 def extract_local_output_paths_from_provenance(
     provenance_path,  # type: Path
     local_output_root,  # type: Path
+    s3_output_root=None,  # type: Optional[str]
 ):  # type: (...) -> List[Path]
     try:
         payload = json.loads(provenance_path.read_text(encoding="utf-8"))
@@ -289,7 +341,7 @@ def extract_local_output_paths_from_provenance(
             if node.get("type") != "File":
                 continue
             for candidate in _candidate_strings_from_file_node(node):
-                resolved = _resolve_provenance_file_candidate(candidate, local_output_root)
+                resolved = _resolve_provenance_file_candidate(candidate, local_output_root, s3_output_root=s3_output_root)
                 if resolved is None:
                     continue
                 if is_within_directory(resolved, local_output_root):
@@ -445,6 +497,7 @@ def filter_output_candidates_to_provenance_paths(
     local_output_root,  # type: Path
     output_candidates,  # type: List[CandidateFile]
     provenance_paths,  # type: List[Path]
+    s3_output_root=None,  # type: Optional[str]
 ):  # type: (**Any) -> List[CandidateFile]
     if not provenance_paths:
         return []
@@ -463,7 +516,13 @@ def filter_output_candidates_to_provenance_paths(
                 ),
                 flush=True,
             )
-        keep_paths.update(extract_local_output_paths_from_provenance(provenance_path, local_output_root))
+        keep_paths.update(
+            extract_local_output_paths_from_provenance(
+                provenance_path,
+                local_output_root,
+                s3_output_root=s3_output_root,
+            )
+        )
 
     filtered = []  # type: List[CandidateFile]
     for path in sorted(keep_paths):
@@ -665,6 +724,7 @@ def main():  # type: () -> int
             local_output_root=local_output_root,
             output_candidates=output_candidates,
             provenance_paths=provenance_paths,
+            s3_output_root=args.s3_output_root,
         )
     log_line(log_path, f"discovered_output_files={len(output_candidates)}")
     log_line(log_path, f"scanned_provenance_files={len(provenance_paths)}")
