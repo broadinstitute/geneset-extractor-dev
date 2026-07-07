@@ -74,6 +74,14 @@ CBTN_COMPARISONS=(
 COMPARISONS=("${KF_COMPARISONS[@]}" "${CBTN_COMPARISONS[@]}")
 
 # ── Helper: run rna_deg_multi (top_k HZ1) ─────────────────────────────────────
+# Emits publish-facing, born-consistent set names (KidsFirst_<comparison>_up/dn)
+# in BOTH genesets.gmt and geneset.meta.json by injecting the publish comparison
+# id as a display-label column and passing the DIG converter's naming flags
+# (--comparison_name_column / --signature_name / --gmt_name_separator /
+# --gmt_signed_labels), the same mechanism GTEx uses. This removes any need for a
+# post-hoc GMT rename, which previously left geneset.meta.json holding the
+# converter's internal names (deg_long__condition=tumor_vs_normal__pos/neg) while
+# the GMT carried publish names — the meta<->gmt mismatch flagged in review.
 run_geneset() {
   local LABEL="$1" DEG_TSV="$2" OUT_DIR="$3"
   if [[ -d "$OUT_DIR" ]]; then
@@ -84,17 +92,40 @@ run_geneset() {
   if [[ -n "${GTF_PATH}" && -f "${GTF_PATH}" ]]; then
     GTF_ARGS=(--gtf "${GTF_PATH}")
   fi
+  # Add a gmt_comparison_label column (= publish comparison id) so the converter
+  # names sets after the delivered comparison rather than the internal DE contrast.
+  local DEG_LABELED="${DEG_TSV%.tsv}.labeled.tsv"
+  PYTHONPATH="" python3 - "$DEG_TSV" "$DEG_LABELED" "$LABEL" <<'PY'
+import csv, sys
+src, dst, label = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(src, newline="") as fh:
+    reader = csv.DictReader(fh, delimiter="\t")
+    rows = list(reader)
+    fieldnames = list(reader.fieldnames or [])
+if "gmt_comparison_label" not in fieldnames:
+    fieldnames.append("gmt_comparison_label")
+for row in rows:
+    row["gmt_comparison_label"] = label
+with open(dst, "w", newline="") as fh:
+    writer = csv.DictWriter(fh, fieldnames=fieldnames, delimiter="\t")
+    writer.writeheader()
+    writer.writerows(rows)
+PY
   PYTHONPATH="" "${GENESET_BIN}" convert rna_deg_multi \
-    --deg_tsv           "$DEG_TSV" \
-    --comparison_column comparison_id \
-    --out_dir           "$OUT_DIR" \
-    --organism          human \
-    --genome_build      hg38 \
-    --padj_max          "${PADJ_MAX}" \
-    --min_abs_logfc     "${MIN_LOGFC}" \
-    --select            top_k \
-    --top_k             "${TOP_K}" \
-    --gmt_topk_list     "${TOP_K}" \
+    --deg_tsv                "$DEG_LABELED" \
+    --comparison_column      comparison_id \
+    --comparison_name_column gmt_comparison_label \
+    --signature_name         KidsFirst \
+    --gmt_name_separator     _ \
+    --gmt_signed_labels      up_dn \
+    --out_dir                "$OUT_DIR" \
+    --organism               human \
+    --genome_build           hg38 \
+    --padj_max               "${PADJ_MAX}" \
+    --min_abs_logfc          "${MIN_LOGFC}" \
+    --select                 top_k \
+    --top_k                  "${TOP_K}" \
+    --gmt_topk_list          "${TOP_K}" \
     "${GTF_ARGS[@]}"
 }
 

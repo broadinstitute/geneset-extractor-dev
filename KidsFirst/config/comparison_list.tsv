@@ -1,14 +1,14 @@
 comparison_id	tumor_label	tumor_study	reference_label	reference_source	disease_label	model_eligible
-KF-TALL-vs-T21	T-cell acute lymphoblastic leukemia (T-ALL)	KF-TALL	Down syndrome blood (KF-CHDALL)	KF-CHDALL	T-cell acute lymphoblastic leukemia	HZ1
+KF-TALL-vs-T21	T-cell acute lymphoblastic leukemia (T-ALL)	KF-TALL	Down syndrome blood (KF-CHDALL)	KF-CHDALL	T-cell acute lymphoblastic leukemia	HZ1,HZ2
 KF-TALL-vs-GTEx	T-cell acute lymphoblastic leukemia (T-ALL)	KF-TALL	GTEx whole blood	GTEx	T-cell acute lymphoblastic leukemia	HZ1
-KF-NBL-vs-adrenal	neuroblastoma	KF-NBL	GTEx adrenal gland	GTEx	neuroblastoma	HZ1
-KF-ESGR-vs-muscle	Ewing sarcoma	KF-ESGR	GTEx skeletal muscle	GTEx	Ewing sarcoma	HZ1
-KF-MMC-vs-blood	acute myeloid leukemia (AML)	KF-MMC	GTEx whole blood	GTEx	acute myeloid leukemia	HZ1
+KF-NBL-vs-adrenal	neuroblastoma	KF-NBL	GTEx adrenal gland	GTEx	neuroblastoma	HZ1,HZ2
+KF-ESGR-vs-muscle	Ewing sarcoma	KF-ESGR	GTEx skeletal muscle	GTEx	Ewing sarcoma	HZ1,HZ2
+KF-MMC-vs-blood	acute myeloid leukemia (AML)	KF-MMC	GTEx whole blood	GTEx	acute myeloid leukemia	HZ1,HZ2
 KF-BLOOD-vs-normal	pediatric blood tumors (T-ALL + AML)	KF-TALL+KF-MMC	GTEx whole blood	GTEx	pediatric blood tumors	HZ1
-CBTN-atypical_teratoid_rhabdoid_tumor-vs-brain_cortex	atypical teratoid rhabdoid tumor (ATRT)	CBTN	GTEx brain cortex	GTEx	atypical teratoid rhabdoid tumor	HZ1
-CBTN-craniopharyngioma-vs-brain_cortex	craniopharyngioma	CBTN	GTEx brain cortex	GTEx	craniopharyngioma	HZ1
-CBTN-ependymoma-vs-brain_cortex	ependymoma	CBTN	GTEx brain cortex	GTEx	ependymoma	HZ1
-CBTN-ganglioglioma-vs-brain_cortex	ganglioglioma	CBTN	GTEx brain cortex	GTEx	ganglioglioma	HZ1
-CBTN-low_grade_glioma-vs-brain_cortex	low-grade glioma	CBTN	GTEx brain cortex	GTEx	low-grade glioma	HZ1
-CBTN-malignant_glioma-vs-brain_cortex	malignant glioma (HGG/GBM)	CBTN	GTEx brain cortex	GTEx	malignant glioma	HZ1
-CBTN-medulloblastoma-vs-brain_cortex	medulloblastoma	CBTN	GTEx brain cortex	GTEx	medulloblastoma	HZ1
+CBTN-atypical_teratoid_rhabdoid_tumor-vs-brain_cortex	atypical teratoid rhabdoid tumor (ATRT)	CBTN	GTEx brain cortex	GTEx	atypical teratoid rhabdoid tumor	HZ1,HZ2
+CBTN-craniopharyngioma-vs-brain_cortex	craniopharyngioma	CBTN	GTEx brain cortex	GTEx	craniopharyngioma	HZ1,HZ2
+CBTN-ependymoma-vs-brain_cortex	ependymoma	CBTN	GTEx brain cortex	GTEx	ependymoma	HZ1,HZ2
+CBTN-ganglioglioma-vs-brain_cortex	ganglioglioma	CBTN	GTEx brain cortex	GTEx	ganglioglioma	HZ1,HZ2
+CBTN-low_grade_glioma-vs-brain_cortex	low-grade glioma	CBTN	GTEx brain cortex	GTEx	low-grade glioma	HZ1,HZ2
+CBTN-malignant_glioma-vs-brain_cortex	malignant glioma (HGG/GBM)	CBTN	GTEx brain cortex	GTEx	malignant glioma	HZ1,HZ2
+CBTN-medulloblastoma-vs-brain_cortex	medulloblastoma	CBTN	GTEx brain cortex	GTEx	medulloblastoma	HZ1,HZ2

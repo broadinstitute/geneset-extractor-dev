@@ -1,3 +1,3 @@
 model_id	de_backend	de_padj_max	de_min_abs_logfc	extractor_preset	concordance_strategy	score_threshold	safety_cap	workflow_gmt_name	workflow_min_gmt_size	workflow_z_threshold	workflow_top_n
 HZ1	r_limma_voom	0.05	1.0	harmonizome	none	NA	NA	KidsFirst_{comparison_id}_{direction}	5	NA	NA
-HZ2	r_limma_voom	0.05	1.0	NA	intersection	2.0	200	KidsFirst_{disease_label}_DiseaseUp	5	NA	200
+HZ2	r_limma_voom	0.05	1.0	NA	per_disease	2.0	200	KidsFirst_{comparison_id}_DiseaseUp	5	NA	200

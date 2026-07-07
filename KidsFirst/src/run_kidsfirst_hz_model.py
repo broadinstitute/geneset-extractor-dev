@@ -23,11 +23,26 @@ SCHEMA_VERSION = "1.0.0"
 WORKFLOW_NAME = "rna_de_prepare"
 EXTRACTOR_NAME = "rna_deg_multi"
 
-# HZ2 (curated disease-up): partition -> (source comparisons, concordance strategy).
-# Only KF-TALL uses concordance across two controls; every other disease uses its single control.
-HZ2_SOURCES = {
-    "KF-TALL-vs-T21": (["KF-TALL-vs-T21", "KF-TALL-vs-GTEx"], "intersection"),
-}
+# HZ2 (curated disease-up): primary partition -> (source comparisons, concordance strategy).
+# Single source of truth is DIG's kidsfirst_curate.DISEASE_CONFIG; derive from it so the
+# wrapper never drifts from the workflow (the primary partition is the disease's first
+# comparison; strategy is "intersection" when a disease has >1 control, else "single").
+def _derive_hz2_sources() -> dict[str, tuple[list[str], str]]:
+    try:
+        from geneset_extractors.workflows.kidsfirst_curate import DISEASE_CONFIG
+    except Exception:
+        # Fallback if DIG is not importable in this environment.
+        return {"KF-TALL-vs-T21": (["KF-TALL-vs-T21", "KF-TALL-vs-GTEx"], "intersection")}
+    sources: dict[str, tuple[list[str], str]] = {}
+    for disease in DISEASE_CONFIG:
+        comps = list(disease.get("comparisons", []))
+        if not comps:
+            continue
+        sources[comps[0]] = (comps, "intersection" if len(comps) > 1 else "single")
+    return sources
+
+
+HZ2_SOURCES = _derive_hz2_sources()
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:
