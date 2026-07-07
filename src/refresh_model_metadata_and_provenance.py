@@ -914,7 +914,14 @@ def _build_scrna_cnmf_provenance_overlay(model_payload: dict) -> dict:
 
 
 def inject_scrna_cnmf_upstream_provenance(model_dir: Path) -> None:
-    """Prepend scrna_cnmf_prepare + public input file nodes into each geneset.provenance.json."""
+    """Prepend scrna_cnmf_prepare + public input file nodes into each geneset.provenance.json.
+
+    Falls back gracefully when DIG has already recorded scrna_cnmf_prepare natively (via the
+    invocation_context wrapper added to 'geneset-extractors workflows scrna_cnmf_prepare' and
+    the upstream_provenance_graph_json path passed to 'geneset-extractors convert rna_sc_programs'):
+    the overlay_node_ids & existing_ids guard detects any pre-existing node and skips injection,
+    so this function is a no-op on outputs produced by the updated DIG pipeline.
+    """
     extractor_dir = model_dir / "extractor"
     sidecar_path = extractor_dir / "geneset.model.json"
     if not sidecar_path.exists():
