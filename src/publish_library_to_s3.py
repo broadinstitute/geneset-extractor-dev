@@ -77,6 +77,14 @@ def parse_args():  # type: () -> argparse.Namespace
         "--path_map_out",
         help="Optional TSV path for a compact local-path to remote-URI reference table.",
     )
+    parser.add_argument(
+        "--provenance_only_outputs",
+        action="store_true",
+        help=(
+            "Upload only selected geneset.provenance.json files plus files under "
+            "--local_output_root that are explicitly referenced by those provenance files."
+        ),
+    )
     parser.add_argument("--overwrite", action="store_true", help="Overwrite objects that already exist in S3.")
     parser.add_argument("--dry_run", action="store_true", help="Evaluate and log actions without uploading.")
     parser.add_argument(
@@ -223,6 +231,72 @@ def iter_provenance_paths(local_output_root, model_ids=None):  # type: (Path, Op
     return paths
 
 
+def _candidate_strings_from_file_node(node):  # type: (Dict[str, Any]) -> List[str]
+    values = []  # type: List[str]
+    c2m2_properties = node.get("c2m2_properties") or {}
+    for candidate in (
+        c2m2_properties.get("local_id"),
+        node.get("dcc_url"),
+        node.get("drc_url"),
+    ):
+        if isinstance(candidate, str) and candidate not in values:
+            values.append(candidate)
+    return values
+
+
+def _resolve_provenance_file_candidate(candidate, local_output_root):  # type: (str, Path) -> Optional[Path]
+    if not candidate:
+        return None
+    parsed = urlparse(candidate)
+    if parsed.scheme or candidate.startswith("//"):
+        return None
+
+    path = Path(candidate)
+    candidate_paths = []  # type: List[Path]
+    if path.is_absolute():
+        candidate_paths.append(path)
+    else:
+        candidate_paths.append((local_output_root.parent / path))
+        candidate_paths.append(local_output_root / path)
+
+    seen = set()  # type: Set[Path]
+    for candidate_path in candidate_paths:
+        try:
+            resolved = candidate_path.resolve()
+        except Exception:
+            continue
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if not resolved.exists() or not resolved.is_file() or should_skip_path(resolved):
+            continue
+        return resolved
+    return None
+
+
+def extract_local_output_paths_from_provenance(
+    provenance_path,  # type: Path
+    local_output_root,  # type: Path
+):  # type: (...) -> List[Path]
+    try:
+        payload = json.loads(provenance_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise SystemExit(f"Unable to parse provenance JSON {provenance_path}: {exc}") from exc
+
+    paths = set()  # type: Set[Path]
+    for graph in payload.values():
+        for node in graph.get("nodes", []):
+            if node.get("type") != "File":
+                continue
+            for candidate in _candidate_strings_from_file_node(node):
+                resolved = _resolve_provenance_file_candidate(candidate, local_output_root)
+                if resolved is None:
+                    continue
+                if is_within_directory(resolved, local_output_root):
+                    paths.add(resolved)
+    return sorted(paths)
+
+
 def extract_existing_file_paths_from_provenance(provenance_path):  # type: (Path) -> List[Path]
     try:
         payload = json.loads(provenance_path.read_text(encoding="utf-8"))
@@ -364,6 +438,43 @@ def resolve_input_candidates_from_provenance(
 
     print("resolving_provenance_inputs complete unique_inputs={0}".format(len(by_path)), flush=True)
     return sorted(by_path.values(), key=lambda candidate: candidate.relative_path)
+
+
+def filter_output_candidates_to_provenance_paths(
+    *,
+    local_output_root,  # type: Path
+    output_candidates,  # type: List[CandidateFile]
+    provenance_paths,  # type: List[Path]
+):  # type: (**Any) -> List[CandidateFile]
+    if not provenance_paths:
+        return []
+
+    by_path = {candidate.local_path.resolve(): candidate for candidate in output_candidates}  # type: Dict[Path, CandidateFile]
+    keep_paths = set(path.resolve() for path in provenance_paths)  # type: Set[Path]
+
+    print("filtering_output_candidates_to_provenance files={0}".format(len(provenance_paths)), flush=True)
+    for index, provenance_path in enumerate(provenance_paths, 1):
+        if index == 1 or index % 100 == 0 or index == len(provenance_paths):
+            print(
+                "filtering_output_candidates_to_provenance {0}/{1} kept_paths={2}".format(
+                    index,
+                    len(provenance_paths),
+                    len(keep_paths),
+                ),
+                flush=True,
+            )
+        keep_paths.update(extract_local_output_paths_from_provenance(provenance_path, local_output_root))
+
+    filtered = []  # type: List[CandidateFile]
+    for path in sorted(keep_paths):
+        candidate = by_path.get(path)
+        if candidate is not None:
+            filtered.append(candidate)
+    print(
+        "filtering_output_candidates_to_provenance complete filtered_files={0}".format(len(filtered)),
+        flush=True,
+    )
+    return filtered
 
 
 def run_aws_command(
@@ -549,6 +660,12 @@ def main():  # type: () -> int
         model_ids=model_ids,
     )
     provenance_paths = iter_provenance_paths(local_output_root, model_ids=model_ids)
+    if args.provenance_only_outputs:
+        output_candidates = filter_output_candidates_to_provenance_paths(
+            local_output_root=local_output_root,
+            output_candidates=output_candidates,
+            provenance_paths=provenance_paths,
+        )
     log_line(log_path, f"discovered_output_files={len(output_candidates)}")
     log_line(log_path, f"scanned_provenance_files={len(provenance_paths)}")
     print(
@@ -655,6 +772,7 @@ def main():  # type: () -> int
         "s3_output_root": args.s3_output_root,
         "model_id": args.model_id,
         "model_ids": model_ids,
+        "provenance_only_outputs": bool(args.provenance_only_outputs),
         "dry_run": bool(args.dry_run),
         "overwrite": bool(args.overwrite),
         "force_publish": bool(args.force_publish),
