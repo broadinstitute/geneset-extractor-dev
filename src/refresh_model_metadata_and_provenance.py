@@ -850,7 +850,7 @@ def rename_scrna_cnmf_gmt_sets(model_dir: Path) -> dict[str, str]:
     return name_map
 
 
-def _build_scrna_cnmf_provenance_overlay(model_payload: dict) -> dict:
+def _build_scrna_cnmf_provenance_overlay(model_payload: dict, model_dir: Path = None) -> dict:
     inputs = model_payload.get("inputs", {}) if isinstance(model_payload.get("inputs"), dict) else {}
     parameters = model_payload.get("parameters", {}) if isinstance(model_payload.get("parameters"), dict) else {}
     naming = model_payload.get("naming", {}) if isinstance(model_payload.get("naming"), dict) else {}
@@ -861,18 +861,17 @@ def _build_scrna_cnmf_provenance_overlay(model_payload: dict) -> dict:
     dataset_label = naming.get("dataset_label") or inputs.get("dataset_label") or str(model_payload.get("dataset_id", ""))
     dataset_id = str(model_payload.get("dataset_id", ""))
     model_id = str(model_payload.get("model_id", "GP1"))
+    out_dir = str(model_dir / "workflow") if model_dir is not None else "<model_dir>/workflow"
     cmd_argv = [
-        "python", "run_scrna_cnmf_model.py",
-        "--dataset_id", dataset_id,
-        "--model_id", model_id,
+        "python", "-m", "geneset_extractors.cli", "workflows", "scrna_cnmf_prepare",
         "--matrix_url", matrix_url,
         "--meta_url", meta_url,
-        "--workflow_cnmf_n_iter", str(parameters.get("cnmf_n_iter", "100")),
-        "--workflow_cnmf_numgenes", str(parameters.get("cnmf_numgenes", "2000")),
-        "--workflow_cnmf_export_kind", str(parameters.get("cnmf_export_kind", "score")),
-        "--workflow_top_k", str(parameters.get("top_k", "100")),
-        "--workflow_max_cells_total", str(parameters.get("max_cells_total", "20000")),
-        "--workflow_seed", str(parameters.get("seed", "1")),
+        "--out_dir", out_dir,
+        "--cnmf_n_iter", str(parameters.get("cnmf_n_iter", "100")),
+        "--cnmf_numgenes", str(parameters.get("cnmf_numgenes", "2000")),
+        "--cnmf_export_kind", str(parameters.get("cnmf_export_kind", "score")),
+        "--max_cells_total", str(parameters.get("max_cells_total", "20000")),
+        "--seed", str(parameters.get("seed", "1")),
     ]
     matrix_id = f"file:matrix_{dataset_label}"
     meta_id = f"file:meta_{dataset_label}"
@@ -891,16 +890,16 @@ def _build_scrna_cnmf_provenance_overlay(model_payload: dict) -> dict:
              "analysis": {
                  "command": " ".join(cmd_argv),
                  "command_argv": cmd_argv,
-                 "command_kind": "wrapper_cli",
+                 "command_kind": "dig_cli",
                  "entrypoint": {
-                     "kind": "python_script",
-                     "script": "run_scrna_cnmf_model.py",
+                     "kind": "python_module",
+                     "module": "geneset_extractors.cli",
                  },
                  "notes": (
-                     "Wrapper invocation for DIG scrna_cnmf_prepare: downloads public matrix and "
-                     "metadata, filters cells, selects overdispersed genes, runs cNMF across K "
-                     "values with the configured n_iter and numgenes, then selects consensus K "
-                     "by stability to produce gene spectra output."
+                     "DIG scrna_cnmf_prepare workflow: downloads public matrix and metadata, "
+                     "filters cells, selects overdispersed genes, runs cNMF across K values "
+                     "with the configured n_iter and numgenes, then selects consensus K by "
+                     "stability to produce gene spectra output."
                  ),
              }},
         ],
@@ -927,7 +926,7 @@ def inject_scrna_cnmf_upstream_provenance(model_dir: Path) -> None:
     if not sidecar_path.exists():
         return
     model_payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
-    overlay = _build_scrna_cnmf_provenance_overlay(model_payload)
+    overlay = _build_scrna_cnmf_provenance_overlay(model_payload, model_dir=model_dir)
     if not overlay:
         return
 
