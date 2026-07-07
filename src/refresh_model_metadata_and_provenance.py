@@ -852,12 +852,28 @@ def rename_scrna_cnmf_gmt_sets(model_dir: Path) -> dict[str, str]:
 
 def _build_scrna_cnmf_provenance_overlay(model_payload: dict) -> dict:
     inputs = model_payload.get("inputs", {}) if isinstance(model_payload.get("inputs"), dict) else {}
+    parameters = model_payload.get("parameters", {}) if isinstance(model_payload.get("parameters"), dict) else {}
+    naming = model_payload.get("naming", {}) if isinstance(model_payload.get("naming"), dict) else {}
     matrix_url = str(inputs.get("matrix_url", "")).strip()
     meta_url = str(inputs.get("meta_url", "")).strip()
     if not matrix_url or not meta_url:
         return {}
-    naming = model_payload.get("naming", {}) if isinstance(model_payload.get("naming"), dict) else {}
     dataset_label = naming.get("dataset_label") or inputs.get("dataset_label") or str(model_payload.get("dataset_id", ""))
+    dataset_id = str(model_payload.get("dataset_id", ""))
+    model_id = str(model_payload.get("model_id", "GP1"))
+    cmd_argv = [
+        "python", "run_scrna_cnmf_model.py",
+        "--dataset_id", dataset_id,
+        "--model_id", model_id,
+        "--matrix_url", matrix_url,
+        "--meta_url", meta_url,
+        "--workflow_cnmf_n_iter", str(parameters.get("cnmf_n_iter", "100")),
+        "--workflow_cnmf_numgenes", str(parameters.get("cnmf_numgenes", "2000")),
+        "--workflow_cnmf_export_kind", str(parameters.get("cnmf_export_kind", "score")),
+        "--workflow_top_k", str(parameters.get("top_k", "100")),
+        "--workflow_max_cells_total", str(parameters.get("max_cells_total", "20000")),
+        "--workflow_seed", str(parameters.get("seed", "1")),
+    ]
     matrix_id = f"file:matrix_{dataset_label}"
     meta_id = f"file:meta_{dataset_label}"
     analysis_id = "analysis:scrna_cnmf_prepare"
@@ -871,7 +887,22 @@ def _build_scrna_cnmf_provenance_overlay(model_payload: dict) -> dict:
              "description": (
                  "DIG scrna_cnmf_prepare workflow: cell filtering, overdispersed gene selection, "
                  "cNMF factorization across K values, and consensus K selection by stability."
-             )},
+             ),
+             "analysis": {
+                 "command": " ".join(cmd_argv),
+                 "command_argv": cmd_argv,
+                 "command_kind": "wrapper_cli",
+                 "entrypoint": {
+                     "kind": "python_script",
+                     "script": "run_scrna_cnmf_model.py",
+                 },
+                 "notes": (
+                     "Wrapper invocation for DIG scrna_cnmf_prepare: downloads public matrix and "
+                     "metadata, filters cells, selects overdispersed genes, runs cNMF across K "
+                     "values with the configured n_iter and numgenes, then selects consensus K "
+                     "by stability to produce gene spectra output."
+                 ),
+             }},
         ],
         "edges": [
             {"id": f"{matrix_id}_to_{analysis_id}", "source": matrix_id, "target": analysis_id,
@@ -1329,6 +1360,9 @@ def main() -> int:
             )
         )
     replacements.update(build_execution_replacements(dig_dir))
+    python_bin_path = str(Path(args.python_bin).resolve())
+    if python_bin_path and python_bin_path not in ("python", "python3"):
+        replacements[python_bin_path] = "python"
     rewrite_passes: list[dict[str, str]] = []
     if replacements:
         rewrite_passes.append(dict(sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)))
