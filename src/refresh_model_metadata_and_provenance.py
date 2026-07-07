@@ -1360,9 +1360,9 @@ def main() -> int:
             )
         )
     replacements.update(build_execution_replacements(dig_dir))
-    python_bin_path = str(Path(args.python_bin).resolve())
-    if python_bin_path and python_bin_path not in ("python", "python3"):
-        replacements[python_bin_path] = "python"
+    for _pb in {args.python_bin, str(Path(args.python_bin).resolve())}:
+        if _pb and _pb not in ("python", "python3"):
+            replacements[_pb] = "python"
     rewrite_passes: list[dict[str, str]] = []
     if replacements:
         rewrite_passes.append(dict(sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)))
