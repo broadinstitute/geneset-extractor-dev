@@ -143,12 +143,13 @@ kidsfirst_all_models/
 ```
 
 Each `geneset.provenance.json` begins from the released inputs (Kids First DRC RSEM via DRS
-`drs://nci-crdc.datacommons.io/dg.4DFC/` + GTEx v10), through `kidsfirst_prepare` →
-`rna_de_prepare` → `deg_long`, to the model's extractor (`rna_deg_multi` for HZ1,
-`kidsfirst_curate` for HZ2). The refresh step produces `.orig` snapshots of the pre-refresh HZ1
-metadata/provenance and retains them in the repository; they are **excluded from the external
-submission package** because they hold pre-sanitization local working paths (see
-`SUBMISSION_MANIFEST.md`).
+`drs://nci-crdc.datacommons.io/dg.4DFC/` + GTEx v10 via `gs://adult-gtex/bulk-gex/v10/rna-seq/`),
+through `kidsfirst_prepare` → `rna_de_prepare` → `deg_long`, to the model's extractor
+(`rna_deg_multi` for HZ1, `kidsfirst_curate` for HZ2 — HZ2 preserves the same upstream chain).
+The refresh step produces `.orig` snapshots of the pre-description-refresh HZ1 metadata/provenance;
+the final publish-refresh (`src/publish_refresh.py`) sanitizes every sidecar **including the
+`.orig` snapshots** so they carry no collaborator-local paths, and they ship uniformly across all
+24 models (see `SUBMISSION_MANIFEST.md`).
 
 ---
 
@@ -187,6 +188,27 @@ bash geneset-extractor-dev/run/submit_kidsfirst_models_cluster.sh --submit --ref
 An Apptainer-backed variant (`submit_kidsfirst_models_cluster_apptainer.sh`) is provided for
 container execution. Use `--model_id HZ1|HZ2` and `--comparison <id>` to filter.
 
+**Publish-refresh (final publication step)** makes the assembled tree publication-safe and is the
+last step before packaging. It sanitizes every sidecar so no collaborator-local path survives
+(executables → bare command names; in-bundle intermediates → relative bundle paths; external raw
+inputs → public source URIs `drs://nci-crdc.datacommons.io/dg.4DFC/…` and
+`gs://adult-gtex/bulk-gex/v10/rna-seq/…`; `working_directory` → `.`) and rebuilds each HZ2
+provenance graph to carry its full upstream chain (`kidsfirst_prepare` → `rna_de_prepare` →
+`deg_long` → `kidsfirst_curate`). It is idempotent, touches only JSON sidecars (never the gene-set
+GMT/TSV), and exits non-zero if any acceptance check fails. Run it under the DIG environment (it
+reads `kidsfirst_curate.DISEASE_CONFIG` for the HZ2 source mapping):
+
+```bash
+python KidsFirst/src/publish_refresh.py \
+  --tree geneset-extractor-dev/KidsFirst/submission_stage/kidsfirst_all_models
+# re-check only, without modifying:
+python KidsFirst/src/publish_refresh.py --tree <tree>/kidsfirst_all_models --verify-only
+```
+
+After this step, `grep -R '/Users/\|/lab-share/\|/home/'` over the final `geneset.meta.json` /
+`geneset.provenance.json` / `geneset.model.json` (and `.orig`) returns nothing and
+`geneset-extractors validate-submission <tree>` passes.
+
 Supporting scripts are in `src/`. The core prep + curation logic is **DIG-owned**: the prep
 scripts are thin shims over `geneset_extractors.workflows.kidsfirst_prepare` and the curation
 entrypoint delegates to `kidsfirst_curate` (branch two-repo standard). They require the DIG
@@ -201,3 +223,5 @@ and `... kidsfirst_curate`.
 | `merge_study_matrices.py` | Wrapper orchestration: combine multi-study matrices (e.g. KF-BLOOD = TALL + MMC) |
 | `curate_disease_genesets.py` | Legacy compatibility entrypoint that delegates to DIG `kidsfirst_curate` |
 | `expand_gene_map_cbtn.py` | Expand ENSG→HGNC gene map for CBTN using mygene.info |
+| `run_kidsfirst_hz_model.py` | Write the `geneset.model.json` sidecar for an HZ1/HZ2 model (config-driven) |
+| `publish_refresh.py` | Final publication step: sanitize sidecar paths to public/portable form + graft the HZ2 upstream provenance chain; verifies the acceptance checks |
