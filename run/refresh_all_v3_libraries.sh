@@ -45,21 +45,22 @@ MOTRPAC_DESC_TEMPLATE="${MOTRPAC_DESC_TEMPLATE:-${REPO_ROOT}/geneset-extractor-d
 HUBMAP_DESC_TEMPLATE="${HUBMAP_DESC_TEMPLATE:-${REPO_ROOT}/geneset-extractor-dev/HuBMAP/config/model_description_templates.tsv}"
 LINCS_DESC_TEMPLATE="${LINCS_DESC_TEMPLATE:-${REPO_ROOT}/geneset-extractor-dev/LINCS_L1000/config/model_description_templates.tsv}"
 
-# Provenance mirror: rewrites cluster-local output paths to public cfde:// URIs.
-# LOCAL_PREFIX = the cluster output root (same as *_OUT_ROOT above).
-# REMOTE_PREFIX = the cfde:// URI root that replaces it in provenance files.
-# Leave both empty to skip path rewriting (outputs will retain cluster paths).
-GTEX_PROVENANCE_MIRROR_LOCAL="${GTEX_PROVENANCE_MIRROR_LOCAL:-${GTEX_OUT_ROOT}}"
-GTEX_PROVENANCE_MIRROR_REMOTE="${GTEX_PROVENANCE_MIRROR_REMOTE:-cfde://GTEx}"
+# Provenance mirror: rewrites cluster-local output paths to published URLs.
+# LOCAL_PREFIX = cluster output root (same as *_OUT_ROOT above).
+# REMOTE_PREFIX = the public URL root that replaces it in provenance files.
+# Leave both empty (default) to keep the actual cluster path in provenance.
+# Only set REMOTE_PREFIX once you know the published location (e.g. S3 bucket URL).
+GTEX_PROVENANCE_MIRROR_LOCAL="${GTEX_PROVENANCE_MIRROR_LOCAL:-}"
+GTEX_PROVENANCE_MIRROR_REMOTE="${GTEX_PROVENANCE_MIRROR_REMOTE:-}"
 
-MOTRPAC_PROVENANCE_MIRROR_LOCAL="${MOTRPAC_PROVENANCE_MIRROR_LOCAL:-${MOTRPAC_OUT_ROOT}}"
-MOTRPAC_PROVENANCE_MIRROR_REMOTE="${MOTRPAC_PROVENANCE_MIRROR_REMOTE:-cfde://MoTrPAC}"
+MOTRPAC_PROVENANCE_MIRROR_LOCAL="${MOTRPAC_PROVENANCE_MIRROR_LOCAL:-}"
+MOTRPAC_PROVENANCE_MIRROR_REMOTE="${MOTRPAC_PROVENANCE_MIRROR_REMOTE:-}"
 
-HUBMAP_PROVENANCE_MIRROR_LOCAL="${HUBMAP_PROVENANCE_MIRROR_LOCAL:-${HUBMAP_OUT_ROOT}}"
-HUBMAP_PROVENANCE_MIRROR_REMOTE="${HUBMAP_PROVENANCE_MIRROR_REMOTE:-cfde://HuBMAP}"
+HUBMAP_PROVENANCE_MIRROR_LOCAL="${HUBMAP_PROVENANCE_MIRROR_LOCAL:-}"
+HUBMAP_PROVENANCE_MIRROR_REMOTE="${HUBMAP_PROVENANCE_MIRROR_REMOTE:-}"
 
-LINCS_PROVENANCE_MIRROR_LOCAL="${LINCS_PROVENANCE_MIRROR_LOCAL:-${LINCS_OUT_ROOT}}"
-LINCS_PROVENANCE_MIRROR_REMOTE="${LINCS_PROVENANCE_MIRROR_REMOTE:-cfde://LINCS_L1000}"
+LINCS_PROVENANCE_MIRROR_LOCAL="${LINCS_PROVENANCE_MIRROR_LOCAL:-}"
+LINCS_PROVENANCE_MIRROR_REMOTE="${LINCS_PROVENANCE_MIRROR_REMOTE:-}"
 
 # Optional: TSV mapping local input file paths to public URLs, one per library.
 # Columns: local_path<TAB>public_url
