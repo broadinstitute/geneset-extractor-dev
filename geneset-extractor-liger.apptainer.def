@@ -28,10 +28,10 @@ From: ubuntu:22.04
 %environment
     export LANG=C.UTF-8
     export LC_ALL=C.UTF-8
-    export PATH=/opt/conda/envs/harmonizome/bin:/opt/conda/bin:$PATH
-    export CONDA_DEFAULT_ENV=harmonizome
+    export PATH=/opt/conda/envs/geneset-extractor/bin:/opt/conda/bin:$PATH
+    export CONDA_DEFAULT_ENV=geneset-extractor
     export PYTHONNOUSERSITE=1
-    export RETICULATE_PYTHON=/opt/conda/envs/harmonizome/bin/python
+    export RETICULATE_PYTHON=/opt/conda/envs/geneset-extractor/bin/python
 
 %post
     set -eux
@@ -108,7 +108,7 @@ From: ubuntu:22.04
     conda config --system --add channels conda-forge
     conda config --system --add channels bioconda
 
-    mamba create -y -n harmonizome \
+    mamba create -y -n geneset-extractor \
         python=3.10 \
         pip \
         c-compiler \
@@ -219,40 +219,40 @@ From: ubuntu:22.04
         bioconductor-scater \
         bioconductor-celldex
 
-    export PATH=/opt/conda/envs/harmonizome/bin:/opt/conda/bin:$PATH
+    export PATH=/opt/conda/envs/geneset-extractor/bin:/opt/conda/bin:$PATH
 
-    if [[ ! -x /opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-cc ]]; then
-        cc_path="$(find /opt/conda/envs/harmonizome/bin -maxdepth 1 -type f \( -name '*conda*cc' -o -name '*linux*cc' \) | head -n 1 || true)"
+    if [[ ! -x /opt/conda/envs/geneset-extractor/bin/x86_64-conda-linux-gnu-cc ]]; then
+        cc_path="$(find /opt/conda/envs/geneset-extractor/bin -maxdepth 1 -type f \( -name '*conda*cc' -o -name '*linux*cc' \) | head -n 1 || true)"
         if [[ -n "${cc_path}" ]]; then
-            ln -sf "${cc_path}" /opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-cc
+            ln -sf "${cc_path}" /opt/conda/envs/geneset-extractor/bin/x86_64-conda-linux-gnu-cc
         fi
     fi
-    if [[ ! -x /opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-c++ ]]; then
-        cxx_path="$(find /opt/conda/envs/harmonizome/bin -maxdepth 1 -type f \( -name '*conda*c++' -o -name '*linux*c++' -o -name '*conda*g++' -o -name '*linux*g++' \) | head -n 1 || true)"
+    if [[ ! -x /opt/conda/envs/geneset-extractor/bin/x86_64-conda-linux-gnu-c++ ]]; then
+        cxx_path="$(find /opt/conda/envs/geneset-extractor/bin -maxdepth 1 -type f \( -name '*conda*c++' -o -name '*linux*c++' -o -name '*conda*g++' -o -name '*linux*g++' \) | head -n 1 || true)"
         if [[ -n "${cxx_path}" ]]; then
-            ln -sf "${cxx_path}" /opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-c++
+            ln -sf "${cxx_path}" /opt/conda/envs/geneset-extractor/bin/x86_64-conda-linux-gnu-c++
         fi
     fi
-    if [[ ! -x /opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-gfortran ]]; then
-        fc_path="$(find /opt/conda/envs/harmonizome/bin -maxdepth 1 -type f \( -name '*conda*gfortran' -o -name '*linux*gfortran' \) | head -n 1 || true)"
+    if [[ ! -x /opt/conda/envs/geneset-extractor/bin/x86_64-conda-linux-gnu-gfortran ]]; then
+        fc_path="$(find /opt/conda/envs/geneset-extractor/bin -maxdepth 1 -type f \( -name '*conda*gfortran' -o -name '*linux*gfortran' \) | head -n 1 || true)"
         if [[ -n "${fc_path}" ]]; then
-            ln -sf "${fc_path}" /opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-gfortran
+            ln -sf "${fc_path}" /opt/conda/envs/geneset-extractor/bin/x86_64-conda-linux-gnu-gfortran
         fi
     fi
 
-    export CC=/opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-cc
-    export CXX=/opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-c++
-    export FC=/opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-gfortran
-    export F77=/opt/conda/envs/harmonizome/bin/x86_64-conda-linux-gnu-gfortran
+    export CC=/opt/conda/envs/geneset-extractor/bin/x86_64-conda-linux-gnu-cc
+    export CXX=/opt/conda/envs/geneset-extractor/bin/x86_64-conda-linux-gnu-c++
+    export FC=/opt/conda/envs/geneset-extractor/bin/x86_64-conda-linux-gnu-gfortran
+    export F77=/opt/conda/envs/geneset-extractor/bin/x86_64-conda-linux-gnu-gfortran
 
     conda clean -afy
 
-    /opt/conda/envs/harmonizome/bin/pip install --no-cache-dir \
+    /opt/conda/envs/geneset-extractor/bin/pip install --no-cache-dir \
         GEOparse \
         pyreadr \
         gprofiler-official
 
-    /opt/conda/envs/harmonizome/bin/Rscript - <<'RS'
+    /opt/conda/envs/geneset-extractor/bin/Rscript - <<'RS'
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 
 install_if_missing <- function(pkg) {

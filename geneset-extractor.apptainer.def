@@ -3,31 +3,31 @@ From: ubuntu:22.04
 
 %labels
     Author Ryan Koesterer
-    Description "Broad Python/R container for MaayanLab HarmonizomePythonScripts: LINCS, HuBMAP, GTEx, MoTrPAC"
+    Description "Broad Python/R container for gene set extractor workflows: LINCS, HuBMAP, GTEx, MoTrPAC"
     Base ubuntu:22.04
 
 %help
-    Broad container for running MaayanLab/HarmonizomePythonScripts workflows,
+    Broad container for running gene set extractor workflows,
     including LINCS, HuBMAP, GTEx, and MoTrPAC-style Python/R notebooks/scripts.
 
     Build:
-        apptainer build harmonizome_maayan.sif harmonizome_maayan.def
+        apptainer build geneset-extractor.sif geneset-extractor.apptainer.def
 
     Shell:
-        apptainer shell harmonizome_maayan.sif
+        apptainer shell geneset-extractor.sif
 
     Example:
-        apptainer exec harmonizome_maayan.sif python --version
-        apptainer exec harmonizome_maayan.sif R --version
-        apptainer exec harmonizome_maayan.sif bash
+        apptainer exec geneset-extractor.sif python --version
+        apptainer exec geneset-extractor.sif R --version
+        apptainer exec geneset-extractor.sif bash
 
 %environment
     export LANG=C.UTF-8
     export LC_ALL=C.UTF-8
-    export PATH=/opt/conda/envs/harmonizome/bin:/opt/conda/bin:$PATH
-    export CONDA_DEFAULT_ENV=harmonizome
+    export PATH=/opt/conda/envs/geneset-extractor/bin:/opt/conda/bin:$PATH
+    export CONDA_DEFAULT_ENV=geneset-extractor
     export PYTHONNOUSERSITE=1
-    export RETICULATE_PYTHON=/opt/conda/envs/harmonizome/bin/python
+    export RETICULATE_PYTHON=/opt/conda/envs/geneset-extractor/bin/python
     export HARMONIZOME_REPO=/opt/HarmonizomePythonScripts
 
 %post
@@ -110,7 +110,7 @@ From: ubuntu:22.04
     conda config --system --add channels bioconda
 
     # Python 3.10 is a safer compatibility target than 3.11 for older notebooks/scripts.
-    mamba create -y -n harmonizome \
+    mamba create -y -n geneset-extractor \
         python=3.10 \
         pip \
         numpy \
@@ -204,7 +204,7 @@ From: ubuntu:22.04
 
     conda clean -afy
 
-    /opt/conda/envs/harmonizome/bin/pip install --no-cache-dir \
+    /opt/conda/envs/geneset-extractor/bin/pip install --no-cache-dir \
         GEOparse \
         pyreadr \
         gprofiler-official
@@ -217,10 +217,10 @@ From: ubuntu:22.04
     git clone https://github.com/MaayanLab/Harmonizome-Data-Processing-Appyters.git || true
 
     # Register the R kernel inside the env.
-    /opt/conda/envs/harmonizome/bin/Rscript -e "IRkernel::installspec(name='harmonizome-r', displayname='R harmonizome', user=FALSE)" || true
+    /opt/conda/envs/geneset-extractor/bin/Rscript -e "IRkernel::installspec(name='geneset-extractor-r', displayname='R geneset-extractor', user=FALSE)" || true
 
     # Smoke tests.
-    /opt/conda/envs/harmonizome/bin/python - <<'PY'
+    /opt/conda/envs/geneset-extractor/bin/python - <<'PY'
 import sys
 import numpy
 import pandas
@@ -230,7 +230,7 @@ print("Python OK:", sys.version)
 print("h5py OK:", h5py.__version__)
 PY
 
-    /opt/conda/envs/harmonizome/bin/Rscript - <<'RS'
+    /opt/conda/envs/geneset-extractor/bin/Rscript - <<'RS'
 cat("R OK:", R.version.string, "\n")
 suppressPackageStartupMessages({
   library(data.table)
