@@ -9,7 +9,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from library_onboard import ARCHETYPES, ensure_dir, extract_bundle_zip, read_json, read_tsv
+from library_onboard import (
+    ARCHETYPES,
+    ENVIRONMENT_PROFILES,
+    WORKFLOW_ARCHETYPES,
+    ensure_dir,
+    extract_bundle_zip,
+    infer_environment_profile,
+    infer_extractor_archetype,
+    infer_workflow_archetype,
+    read_json,
+    read_tsv,
+)
 
 
 LOCAL_PATH_PATTERNS = (
@@ -39,6 +50,9 @@ class ReviewContext:
     model_rows: list[dict[str, str]]
     partition_rows: list[dict[str, str]]
     archetype: str
+    workflow_archetype: str
+    extractor_archetype: str
+    environment_profile: str
 
 
 def parse_args() -> argparse.Namespace:
@@ -155,11 +169,11 @@ def gather_context(args: argparse.Namespace) -> ReviewContext:
     bundle_manifest = load_optional_json(package_root / "config" / "bundle_manifest.json" if package_root else None)
     model_rows = load_optional_tsv(package_root / "config" / "model_list.tsv" if package_root else None)
     partition_rows = load_optional_tsv(package_root / "config" / "partition_list.tsv" if package_root else None)
-    archetype = ""
-    if library_config:
-        archetype = str(library_config.get("archetype", "")).strip()
-    elif bundle_manifest:
-        archetype = str(bundle_manifest.get("archetype", "")).strip()
+    manifest_like = library_config or bundle_manifest or {}
+    archetype = str(manifest_like.get("archetype", "")).strip()
+    workflow_archetype = infer_workflow_archetype(manifest_like) if manifest_like else ""
+    extractor_archetype = infer_extractor_archetype(manifest_like) if manifest_like else ""
+    environment_profile = infer_environment_profile(manifest_like) if manifest_like else ""
     return ReviewContext(
         submission_zip=submission_zip,
         review_root=review_root,
@@ -173,6 +187,9 @@ def gather_context(args: argparse.Namespace) -> ReviewContext:
         model_rows=model_rows,
         partition_rows=partition_rows,
         archetype=archetype,
+        workflow_archetype=workflow_archetype,
+        extractor_archetype=extractor_archetype,
+        environment_profile=environment_profile,
     )
 
 
@@ -199,6 +216,9 @@ def stage_intake(ctx: ReviewContext) -> dict[str, Any]:
         "library_name": str((ctx.library_config or {}).get("library_name", "")),
         "library_slug": str((ctx.library_config or {}).get("library_slug", "")),
         "archetype": ctx.archetype,
+        "workflow_archetype": ctx.workflow_archetype,
+        "extractor_archetype": ctx.extractor_archetype,
+        "environment_profile": ctx.environment_profile,
         "n_models": len(ctx.model_rows),
         "n_partitions": len(ctx.partition_rows),
     }
@@ -218,7 +238,9 @@ def stage_intake(ctx: ReviewContext) -> dict[str, Any]:
             f"Archive root: {ctx.archive_root}",
             f"Package root: {ctx.package_root or 'missing'}",
             f"Outputs root: {ctx.outputs_root or 'missing'}",
-            f"Archetype: {ctx.archetype or 'missing'}",
+            f"Workflow archetype: {ctx.workflow_archetype or 'missing'}",
+            f"Extractor archetype: {ctx.extractor_archetype or ctx.archetype or 'missing'}",
+            f"Environment profile: {ctx.environment_profile or 'missing'}",
             f"Models: {len(ctx.model_rows)}",
             f"Partitions: {len(ctx.partition_rows)}",
         ],
@@ -241,10 +263,16 @@ def stage_structure(ctx: ReviewContext) -> dict[str, Any]:
             "run",
             "src",
         )
+        optional_package_paths = (
+            "config/workflow_manifest.json",
+            "config/environment_profile.json",
+        )
         for relative in expected_package_paths:
             package_checks[relative] = (ctx.package_root / relative).exists()
+        for relative in optional_package_paths:
+            package_checks[relative] = (ctx.package_root / relative).exists()
         missing = [name for name, present in package_checks.items() if not present]
-        findings.extend(f"Missing package path: {name}" for name in missing)
+        findings.extend(f"Missing package path: {name}" for name in missing if name in expected_package_paths)
     else:
         findings.append("Generated package root missing.")
     if ctx.outputs_root:
@@ -279,34 +307,68 @@ def stage_structure(ctx: ReviewContext) -> dict[str, Any]:
 def stage_archetype(ctx: ReviewContext) -> dict[str, Any]:
     findings: list[str] = []
     checks: dict[str, bool] = {}
-    checks["archetype_present"] = bool(ctx.archetype)
-    checks["archetype_supported"] = ctx.archetype in ARCHETYPES
+    checks["workflow_archetype_present"] = bool(ctx.workflow_archetype)
+    checks["workflow_archetype_supported"] = ctx.workflow_archetype in WORKFLOW_ARCHETYPES
+    checks["extractor_archetype_present"] = bool(ctx.extractor_archetype or ctx.archetype)
+    checks["extractor_archetype_supported"] = (ctx.extractor_archetype or ctx.archetype) in ARCHETYPES
+    checks["environment_profile_present"] = bool(ctx.environment_profile)
+    checks["environment_profile_supported"] = ctx.environment_profile in ENVIRONMENT_PROFILES
     if ctx.model_rows:
         unique_families = sorted({row.get("model_family", "") for row in ctx.model_rows if row.get("model_family", "")})
         checks["model_rows_present"] = True
     else:
         unique_families = []
         checks["model_rows_present"] = False
-    if not checks["archetype_present"]:
-        findings.append("No archetype declared in library_config.json or bundle_manifest.json.")
-    elif not checks["archetype_supported"]:
-        findings.append(f"Unsupported archetype: {ctx.archetype}")
+    if not checks["workflow_archetype_present"]:
+        findings.append("No workflow_archetype declared or inferred in library_config.json or bundle_manifest.json.")
+    elif not checks["workflow_archetype_supported"]:
+        findings.append(f"Unsupported workflow_archetype: {ctx.workflow_archetype}")
+    if not checks["extractor_archetype_present"]:
+        findings.append("No extractor_archetype declared or inferred in library_config.json or bundle_manifest.json.")
+    elif not checks["extractor_archetype_supported"]:
+        findings.append(f"Unsupported extractor_archetype: {ctx.extractor_archetype or ctx.archetype}")
+    if not checks["environment_profile_present"]:
+        findings.append("No environment_profile declared or inferred in library_config.json.")
+    elif not checks["environment_profile_supported"]:
+        findings.append(f"Unsupported environment_profile: {ctx.environment_profile}")
+    if (
+        checks["workflow_archetype_supported"]
+        and checks["extractor_archetype_supported"]
+        and ctx.workflow_archetype in WORKFLOW_ARCHETYPES
+    ):
+        supported_extractors = set(WORKFLOW_ARCHETYPES[ctx.workflow_archetype]["supported_extractor_archetypes"])
+        resolved_extractor = ctx.extractor_archetype or ctx.archetype
+        checks["workflow_extractor_pair_supported"] = resolved_extractor in supported_extractors
+        if resolved_extractor not in supported_extractors:
+            findings.append(
+                f"workflow_archetype {ctx.workflow_archetype} does not support extractor_archetype {resolved_extractor}"
+            )
     else:
-        expected_family = str(ARCHETYPES[ctx.archetype]["model_family"])
+        checks["workflow_extractor_pair_supported"] = False
+    if ctx.model_rows and checks["extractor_archetype_supported"]:
+        resolved_extractor = ctx.extractor_archetype or ctx.archetype
+        expected_family = str(ARCHETYPES[resolved_extractor]["model_family"])
         mismatched_models = [
             row.get("model_id", "")
             for row in ctx.model_rows
-            if str(row.get("model_family", "")).strip() != expected_family
+            if str((row.get("extractor_archetype", "") or resolved_extractor)).strip() == resolved_extractor
+            and str(row.get("model_family", "")).strip() != expected_family
         ]
-        checks["model_family_matches_archetype"] = not mismatched_models
+        checks["model_family_matches_extractor_archetype"] = not mismatched_models
         if mismatched_models:
             findings.append(
-                "Model rows do not match the expected archetype model_family: "
+                "Model rows do not match the expected extractor archetype model_family: "
                 + ", ".join(sorted(mismatched_models))
             )
+    else:
+        checks["model_family_matches_extractor_archetype"] = False
     payload = {
-        "archetype": ctx.archetype,
+        "workflow_archetype": ctx.workflow_archetype,
+        "extractor_archetype": ctx.extractor_archetype or ctx.archetype,
+        "environment_profile": ctx.environment_profile,
         "supported_archetypes": sorted(ARCHETYPES),
+        "supported_workflow_archetypes": sorted(WORKFLOW_ARCHETYPES),
+        "supported_environment_profiles": sorted(ENVIRONMENT_PROFILES),
         "model_families_present": unique_families,
         "checks": checks,
         "findings": findings,
@@ -319,7 +381,9 @@ def stage_archetype(ctx: ReviewContext) -> dict[str, Any]:
         "Archetype Report",
         status,
         [
-            f"Declared archetype: {ctx.archetype or 'missing'}",
+            f"Declared workflow archetype: {ctx.workflow_archetype or 'missing'}",
+            f"Declared extractor archetype: {ctx.extractor_archetype or ctx.archetype or 'missing'}",
+            f"Declared environment profile: {ctx.environment_profile or 'missing'}",
             f"Model families present: {', '.join(unique_families) if unique_families else 'none'}",
         ],
         findings,

@@ -34,10 +34,12 @@ INPUT_HEADERS = (
     "input_id",
     "path_or_uri",
     "input_role",
+    "workflow_stage",
     "format",
     "is_external_input",
     "required_for_rerun",
     "source_url_or_uri",
+    "partition_scope",
     "notes",
 )
 
@@ -45,6 +47,7 @@ PARTITION_HEADERS = (
     "partition_id",
     "partition_label",
     "partition_type",
+    "partition_group",
     "input_id",
     "enabled",
     "notes",
@@ -55,8 +58,11 @@ MODEL_HEADERS = (
     "model_family",
     "model_label",
     "input_mode",
+    "workflow_variant",
+    "extractor_archetype",
     "signed_output",
     "gene_set_pattern",
+    "comparison_style",
     "distinct_algorithmic_feature",
     "description",
     "options_json",
@@ -67,6 +73,8 @@ DEFAULT_LIBRARY_MANIFEST = {
     "library_name": "",
     "library_slug": "",
     "archetype": "",
+    "workflow_archetype": "",
+    "extractor_archetype": "",
     "source_project": "",
     "assay_type": "",
     "data_type": "",
@@ -76,6 +84,7 @@ DEFAULT_LIBRARY_MANIFEST = {
     "output_granularity": "",
     "signed_output": "",
     "natural_parallel_unit": "",
+    "environment_profile": "",
     "expected_workflow_category": "",
     "output_mirror_uri": "",
     "notes": "",
@@ -184,6 +193,110 @@ ARCHETYPES: dict[str, dict[str, Any]] = {
     },
 }
 
+WORKFLOW_ARCHETYPES: dict[str, dict[str, Any]] = {
+    "simple_converter": {
+        "display_name": "Simple converter-only workflow",
+        "description": "One input per partition is sent directly to a DIG converter without a separate workflow stage.",
+        "supported_extractor_archetypes": ("released_de_rna", "unsigned_term_gene", "signed_term_gene"),
+        "environment_profile": "geneset_extractor_standard",
+        "partition_axis": "partition",
+        "comparison_axis": "model",
+        "emits_intermediate_tables": False,
+        "intermediate_file_roles": (),
+    },
+    "bulk_counts_multi_model": {
+        "display_name": "Bulk counts with multiple model families",
+        "description": "Counts plus metadata workflow that supports several model families over the same biological partitions.",
+        "supported_extractor_archetypes": ("released_de_rna", "signed_term_gene"),
+        "environment_profile": "geneset_extractor_standard",
+        "partition_axis": "tissue",
+        "comparison_axis": "model_or_comparison",
+        "emits_intermediate_tables": True,
+        "intermediate_file_roles": ("de_tsv", "signed_term_gene_tsv"),
+    },
+    "released_de_multi_partition": {
+        "display_name": "Released differential-expression tables across partitions",
+        "description": "One or more released DE tables are normalized and converted across biological partitions.",
+        "supported_extractor_archetypes": ("released_de_rna", "signed_term_gene"),
+        "environment_profile": "geneset_extractor_standard",
+        "partition_axis": "partition",
+        "comparison_axis": "model",
+        "emits_intermediate_tables": False,
+        "intermediate_file_roles": (),
+    },
+    "raw_counts_training_timecourse": {
+        "display_name": "Raw counts training or timecourse workflow",
+        "description": "Raw counts plus metadata workflow that computes contrasts before conversion.",
+        "supported_extractor_archetypes": ("released_de_rna", "signed_term_gene"),
+        "environment_profile": "geneset_extractor_r_heavy",
+        "partition_axis": "tissue",
+        "comparison_axis": "model_or_comparison",
+        "emits_intermediate_tables": True,
+        "intermediate_file_roles": ("de_tsv", "signed_term_gene_tsv"),
+    },
+    "matrix_signature_library": {
+        "display_name": "Matrix signature library",
+        "description": "A perturbation or signature matrix is reshaped into signed term-gene form before extraction.",
+        "supported_extractor_archetypes": ("signed_term_gene",),
+        "environment_profile": "geneset_extractor_standard",
+        "partition_axis": "global_or_collection",
+        "comparison_axis": "model",
+        "emits_intermediate_tables": True,
+        "intermediate_file_roles": ("signed_term_gene_tsv",),
+    },
+    "table_directory_marker_library": {
+        "display_name": "Directory of marker tables to library",
+        "description": "A directory of source tables is merged or normalized into an unsigned term-gene table before extraction.",
+        "supported_extractor_archetypes": ("unsigned_term_gene",),
+        "environment_profile": "geneset_extractor_standard",
+        "partition_axis": "global_or_collection",
+        "comparison_axis": "model",
+        "emits_intermediate_tables": True,
+        "intermediate_file_roles": ("unsigned_term_gene_tsv",),
+    },
+    "custom_hybrid": {
+        "display_name": "Custom hybrid workflow",
+        "description": "Controlled fallback for partially custom workflows that still use the standard bundle structure.",
+        "supported_extractor_archetypes": ("released_de_rna", "unsigned_term_gene", "signed_term_gene"),
+        "environment_profile": "maintainer_only",
+        "partition_axis": "library_defined",
+        "comparison_axis": "library_defined",
+        "emits_intermediate_tables": True,
+        "intermediate_file_roles": ("library_defined",),
+    },
+}
+
+ENVIRONMENT_PROFILES: dict[str, dict[str, Any]] = {
+    "geneset_extractor_standard": {
+        "display_name": "Standard geneset-extractor environment",
+        "apptainer_image_required": True,
+        "python_required": True,
+        "r_required": False,
+        "allowed_wrapper_modes": ("direct", "apptainer", "cluster_apptainer"),
+    },
+    "geneset_extractor_r_heavy": {
+        "display_name": "R-heavy geneset-extractor environment",
+        "apptainer_image_required": True,
+        "python_required": True,
+        "r_required": True,
+        "allowed_wrapper_modes": ("direct", "apptainer", "cluster_apptainer"),
+    },
+    "custom_approved_image": {
+        "display_name": "Custom approved image",
+        "apptainer_image_required": True,
+        "python_required": True,
+        "r_required": True,
+        "allowed_wrapper_modes": ("apptainer", "cluster_apptainer"),
+    },
+    "maintainer_only": {
+        "display_name": "Maintainer-side environment only",
+        "apptainer_image_required": False,
+        "python_required": True,
+        "r_required": False,
+        "allowed_wrapper_modes": ("direct",),
+    },
+}
+
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -197,6 +310,40 @@ def slugify(value: str) -> str:
 
 def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
+
+
+def legacy_workflow_archetype_for_extractor(extractor_archetype: str) -> str:
+    if extractor_archetype in ARCHETYPES:
+        return "simple_converter"
+    return ""
+
+
+def infer_workflow_archetype(library_manifest: dict[str, Any]) -> str:
+    workflow_archetype = str(library_manifest.get("workflow_archetype", "")).strip()
+    if workflow_archetype:
+        return workflow_archetype
+    extractor_archetype = (
+        str(library_manifest.get("extractor_archetype", "")).strip()
+        or str(library_manifest.get("archetype", "")).strip()
+    )
+    return legacy_workflow_archetype_for_extractor(extractor_archetype)
+
+
+def infer_extractor_archetype(library_manifest: dict[str, Any]) -> str:
+    extractor_archetype = str(library_manifest.get("extractor_archetype", "")).strip()
+    if extractor_archetype:
+        return extractor_archetype
+    return str(library_manifest.get("archetype", "")).strip()
+
+
+def infer_environment_profile(library_manifest: dict[str, Any]) -> str:
+    environment_profile = str(library_manifest.get("environment_profile", "")).strip()
+    if environment_profile:
+        return environment_profile
+    workflow_archetype = infer_workflow_archetype(library_manifest)
+    if workflow_archetype in WORKFLOW_ARCHETYPES:
+        return str(WORKFLOW_ARCHETYPES[workflow_archetype]["environment_profile"])
+    return ""
 
 
 def read_json(path: Path) -> Any:
@@ -298,6 +445,13 @@ def init_bundle(args: argparse.Namespace) -> int:
     ensure_dir(out_dir)
     library_slug = slugify(args.library_name)
     archetype = args.archetype or ""
+    workflow_archetype = args.workflow_archetype or legacy_workflow_archetype_for_extractor(archetype)
+    extractor_archetype = archetype
+    environment_profile = args.environment_profile or (
+        WORKFLOW_ARCHETYPES[workflow_archetype]["environment_profile"]
+        if workflow_archetype in WORKFLOW_ARCHETYPES
+        else ""
+    )
     files = bundle_file_map(out_dir)
 
     bundle_manifest = {
@@ -306,6 +460,8 @@ def init_bundle(args: argparse.Namespace) -> int:
         "library_name": args.library_name,
         "library_slug": library_slug,
         "archetype": archetype,
+        "workflow_archetype": workflow_archetype,
+        "extractor_archetype": extractor_archetype,
         "collaborator_name": "",
         "contact_email": "",
         "bundle_tool_version": TOOL_VERSION,
@@ -316,9 +472,12 @@ def init_bundle(args: argparse.Namespace) -> int:
     library_manifest["library_name"] = args.library_name
     library_manifest["library_slug"] = library_slug
     library_manifest["archetype"] = archetype
-    if archetype and archetype in ARCHETYPES:
-        library_manifest["signed_output"] = stringify_tsv_value(ARCHETYPES[archetype]["signed_output"])
-        library_manifest["expected_workflow_category"] = ARCHETYPES[archetype]["workflow_category"]
+    library_manifest["workflow_archetype"] = workflow_archetype
+    library_manifest["extractor_archetype"] = extractor_archetype
+    library_manifest["environment_profile"] = environment_profile
+    if extractor_archetype and extractor_archetype in ARCHETYPES:
+        library_manifest["signed_output"] = stringify_tsv_value(ARCHETYPES[extractor_archetype]["signed_output"])
+        library_manifest["expected_workflow_category"] = ARCHETYPES[extractor_archetype]["workflow_category"]
         library_manifest["output_mirror_uri"] = f"submission://{library_slug}_all_models"
 
     write_json(files["bundle_manifest.json"], bundle_manifest)
@@ -380,10 +539,12 @@ def add_input(args: argparse.Namespace) -> int:
             "input_id": args.input_id,
             "path_or_uri": args.path_or_uri,
             "input_role": args.input_role,
+            "workflow_stage": args.workflow_stage,
             "format": args.format,
             "is_external_input": stringify_tsv_value(parse_bool(args.is_external_input, True)),
             "required_for_rerun": stringify_tsv_value(parse_bool(args.required_for_rerun, True)),
             "source_url_or_uri": args.source_url_or_uri or "",
+            "partition_scope": args.partition_scope or "",
             "notes": args.notes or "",
         }
     )
@@ -404,6 +565,7 @@ def add_partition(args: argparse.Namespace) -> int:
             "partition_id": args.partition_id,
             "partition_label": args.partition_label,
             "partition_type": args.partition_type,
+            "partition_group": args.partition_group or "",
             "input_id": args.input_id,
             "enabled": stringify_tsv_value(parse_bool(args.enabled, True)),
             "notes": args.notes or "",
@@ -433,8 +595,11 @@ def add_model(args: argparse.Namespace) -> int:
             "model_family": args.model_family,
             "model_label": args.model_label,
             "input_mode": args.input_mode,
+            "workflow_variant": args.workflow_variant or "",
+            "extractor_archetype": args.extractor_archetype or "",
             "signed_output": stringify_tsv_value(parse_bool(args.signed_output, None)),
             "gene_set_pattern": args.gene_set_pattern,
+            "comparison_style": args.comparison_style or "",
             "distinct_algorithmic_feature": args.distinct_algorithmic_feature,
             "description": args.description,
             "options_json": options_payload,
@@ -472,6 +637,9 @@ def validate_bundle_dir(bundle_dir: Path) -> tuple[list[str], list[str], dict[st
 
     library_name = str(library_manifest.get("library_name", "")).strip()
     archetype = str(library_manifest.get("archetype", "")).strip()
+    workflow_archetype = infer_workflow_archetype(library_manifest)
+    extractor_archetype = infer_extractor_archetype(library_manifest)
+    environment_profile = infer_environment_profile(library_manifest)
     organism = str(library_manifest.get("organism", "")).strip()
     if not library_name:
         errors.append("library_manifest.json missing library_name")
@@ -479,7 +647,19 @@ def validate_bundle_dir(bundle_dir: Path) -> tuple[list[str], list[str], dict[st
         errors.append("library_manifest.json missing organism")
     if archetype and archetype not in ARCHETYPES:
         errors.append(f"Unsupported archetype: {archetype}")
-    if archetype and not str(library_manifest.get("expected_workflow_category", "")).strip():
+    if workflow_archetype and workflow_archetype not in WORKFLOW_ARCHETYPES:
+        errors.append(f"Unsupported workflow_archetype: {workflow_archetype}")
+    if extractor_archetype and extractor_archetype not in ARCHETYPES:
+        errors.append(f"Unsupported extractor_archetype: {extractor_archetype}")
+    if environment_profile and environment_profile not in ENVIRONMENT_PROFILES:
+        errors.append(f"Unsupported environment_profile: {environment_profile}")
+    if workflow_archetype and extractor_archetype and workflow_archetype in WORKFLOW_ARCHETYPES:
+        supported = set(WORKFLOW_ARCHETYPES[workflow_archetype]["supported_extractor_archetypes"])
+        if extractor_archetype not in supported:
+            errors.append(
+                f"workflow_archetype {workflow_archetype} does not support extractor_archetype {extractor_archetype}"
+            )
+    if extractor_archetype and not str(library_manifest.get("expected_workflow_category", "")).strip():
         warnings.append("library_manifest.json missing expected_workflow_category for selected archetype")
     if not inputs_rows:
         errors.append("inputs_manifest.tsv must contain at least one input")
@@ -508,6 +688,8 @@ def validate_bundle_dir(bundle_dir: Path) -> tuple[list[str], list[str], dict[st
             errors.append(f"Input {input_id} is required_for_rerun but has no path_or_uri or source_url_or_uri")
         if not source_uri:
             warnings.append(f"Input {input_id} has no source_url_or_uri")
+        if not str(row.get("workflow_stage", "")).strip():
+            warnings.append(f"Input {input_id} has no workflow_stage")
 
     if external_inputs == 0:
         errors.append("At least one external input must be recorded")
@@ -548,11 +730,14 @@ def validate_bundle_dir(bundle_dir: Path) -> tuple[list[str], list[str], dict[st
                     options_payload = {}
             except json.JSONDecodeError as exc:
                 errors.append(f"Model {model_id} has invalid options_json: {exc}")
-        if archetype in ARCHETYPES:
-            archetype_spec = ARCHETYPES[archetype]
+        model_extractor = str(row.get("extractor_archetype", "")).strip() or extractor_archetype
+        if model_extractor in ARCHETYPES:
+            archetype_spec = ARCHETYPES[model_extractor]
             for option_name in archetype_spec["required_options"]:
                 if option_name not in options_payload and option_name not in archetype_spec["default_options"]:
                     errors.append(f"Model {model_id} missing required options_json field: {option_name}")
+        elif extractor_archetype:
+            warnings.append(f"Model {model_id} does not resolve to a supported extractor archetype")
         if len(str(row.get("description", "")).strip()) < 10:
             warnings.append(f"Model {model_id} description is very short")
 
@@ -568,6 +753,9 @@ def validate_bundle_dir(bundle_dir: Path) -> tuple[list[str], list[str], dict[st
         "inputs_rows": inputs_rows,
         "partition_rows": partition_rows,
         "model_rows": model_rows,
+        "workflow_archetype": workflow_archetype,
+        "extractor_archetype": extractor_archetype,
+        "environment_profile": environment_profile,
     }
     return errors, warnings, context
 
@@ -642,6 +830,9 @@ def inspect_bundle(args: argparse.Namespace) -> int:
                 "library_name": library_manifest.get("library_name", ""),
                 "library_slug": library_manifest.get("library_slug", ""),
                 "archetype": library_manifest.get("archetype", ""),
+                "workflow_archetype": infer_workflow_archetype(library_manifest),
+                "extractor_archetype": infer_extractor_archetype(library_manifest),
+                "environment_profile": infer_environment_profile(library_manifest),
                 "organism": library_manifest.get("organism", ""),
                 "genome_build": library_manifest.get("genome_build", ""),
                 "n_inputs": len(context["inputs_rows"]),
@@ -700,6 +891,9 @@ def write_scaffold_files(out_dir: Path, context: dict[str, Any], runnable: bool)
     model_rows = context["model_rows"]
     partition_rows = context["partition_rows"]
     archetype = str(library_manifest["archetype"]).strip()
+    workflow_archetype = infer_workflow_archetype(library_manifest)
+    extractor_archetype = infer_extractor_archetype(library_manifest)
+    environment_profile = infer_environment_profile(library_manifest)
     library_name = str(library_manifest["library_name"]).strip()
     library_slug = str(library_manifest["library_slug"]).strip() or slugify(library_name)
     package_root = out_dir.resolve()
@@ -716,18 +910,40 @@ def write_scaffold_files(out_dir: Path, context: dict[str, Any], runnable: bool)
     write_json(config_dir / "library_config.json", library_manifest)
     write_json(config_dir / "bundle_manifest.json", context["bundle_manifest"])
     write_json(config_dir / "questionnaire.json", context["questionnaire"])
+    write_json(
+        config_dir / "workflow_manifest.json",
+        {
+            "workflow_archetype": workflow_archetype,
+            "extractor_archetype": extractor_archetype,
+            "entrypoint_template": f"src/build_{library_slug}_genesets.py",
+            "partition_axis": WORKFLOW_ARCHETYPES[workflow_archetype]["partition_axis"],
+            "comparison_axis": WORKFLOW_ARCHETYPES[workflow_archetype]["comparison_axis"],
+            "emits_intermediate_tables": WORKFLOW_ARCHETYPES[workflow_archetype]["emits_intermediate_tables"],
+            "intermediate_file_roles": list(WORKFLOW_ARCHETYPES[workflow_archetype]["intermediate_file_roles"]),
+            "requires_refresh": True,
+            "supports_apptainer": environment_profile != "maintainer_only",
+            "environment_profile": environment_profile,
+        },
+    )
+    write_json(
+        config_dir / "environment_profile.json",
+        {
+            "environment_profile": environment_profile,
+            **ENVIRONMENT_PROFILES[environment_profile],
+        },
+    )
     write_tsv(config_dir / "inputs_manifest.tsv", context["inputs_rows"], INPUT_HEADERS)
     write_tsv(config_dir / "partition_list.tsv", partition_rows, PARTITION_HEADERS)
     write_tsv(config_dir / "model_list.tsv", model_rows, MODEL_HEADERS)
 
     model_manifest_rows: list[dict[str, Any]] = []
     template_rows: list[dict[str, Any]] = []
-    description_template = ARCHETYPES[archetype]["description_template"]
+    description_template = ARCHETYPES[extractor_archetype]["description_template"]
     for row in model_rows:
         options_payload = {}
         if str(row.get("options_json", "")).strip():
             options_payload = json.loads(str(row["options_json"]))
-        merged_options = archetype_defaults(archetype)
+        merged_options = archetype_defaults(str(row.get("extractor_archetype", "")).strip() or extractor_archetype)
         merged_options.update(options_payload)
         model_manifest_rows.append(
             {
@@ -735,7 +951,10 @@ def write_scaffold_files(out_dir: Path, context: dict[str, Any], runnable: bool)
                 "model_family": row["model_family"],
                 "model_label": row["model_label"],
                 "input_mode": row["input_mode"],
+                "workflow_variant": row.get("workflow_variant", ""),
+                "extractor_archetype": str(row.get("extractor_archetype", "")).strip() or extractor_archetype,
                 "signed_output": row["signed_output"],
+                "comparison_style": row.get("comparison_style", ""),
                 "options_json": merged_options,
                 "enabled": row["enabled"],
             }
@@ -750,7 +969,18 @@ def write_scaffold_files(out_dir: Path, context: dict[str, Any], runnable: bool)
     write_tsv(
         config_dir / "model_manifest.tsv",
         model_manifest_rows,
-        ("model_id", "model_family", "model_label", "input_mode", "signed_output", "options_json", "enabled"),
+        (
+            "model_id",
+            "model_family",
+            "model_label",
+            "input_mode",
+            "workflow_variant",
+            "extractor_archetype",
+            "signed_output",
+            "comparison_style",
+            "options_json",
+            "enabled",
+        ),
     )
     write_tsv(config_dir / "model_description_templates.tsv", template_rows, ("model_id", "description_template"))
 
@@ -761,7 +991,9 @@ def write_scaffold_files(out_dir: Path, context: dict[str, Any], runnable: bool)
             # Pipeline Inputs
 
             Library: `{library_name}`
-            Archetype: `{archetype}`
+            Workflow archetype: `{workflow_archetype}`
+            Extractor archetype: `{extractor_archetype}`
+            Environment profile: `{environment_profile}`
 
             External inputs are defined in `config/inputs_manifest.tsv`.
             Partitions are defined in `config/partition_list.tsv`.
@@ -775,9 +1007,14 @@ def write_scaffold_files(out_dir: Path, context: dict[str, Any], runnable: bool)
             f"""\
             # Archetype Selection
 
-            Selected archetype: `{archetype}`
+            Selected workflow archetype: `{workflow_archetype}`
+            Selected extractor archetype: `{extractor_archetype}`
 
-            {ARCHETYPES[archetype]["description"]}
+            Workflow:
+            {WORKFLOW_ARCHETYPES[workflow_archetype]["description"]}
+
+            Extractor:
+            {ARCHETYPES[extractor_archetype]["description"]}
             """
         ),
     )
@@ -791,13 +1028,15 @@ def write_scaffold_files(out_dir: Path, context: dict[str, Any], runnable: bool)
 
             Library: `{library_name}`
             Slug: `{library_slug}`
-            Archetype: `{archetype}`
+            Workflow archetype: `{workflow_archetype}`
+            Extractor archetype: `{extractor_archetype}`
+            Environment profile: `{environment_profile}`
             Runnable package: `{str(runnable).lower()}`
             """
         ),
     )
 
-    runtime_code = build_generated_runtime_code(library_name, library_slug, archetype)
+    runtime_code = build_generated_runtime_code(library_name, library_slug, archetype, workflow_archetype)
     build_code = build_generated_build_script(library_name, library_slug)
     run_model_code = build_generated_run_model_script(library_name, library_slug)
     validate_code = build_generated_validate_script(library_name, library_slug)
@@ -906,7 +1145,9 @@ def write_scaffold_files(out_dir: Path, context: dict[str, Any], runnable: bool)
 
             This package was generated by `library_onboard` version `{TOOL_VERSION}`.
 
-            Archetype: `{archetype}`
+            Workflow archetype: `{workflow_archetype}`
+            Extractor archetype: `{extractor_archetype}`
+            Environment profile: `{environment_profile}`
 
             Build locally:
 
@@ -932,14 +1173,16 @@ def write_scaffold_files(out_dir: Path, context: dict[str, Any], runnable: bool)
     )
 
 
-def build_generated_runtime_code(library_name: str, library_slug: str, archetype: str) -> str:
+def build_generated_runtime_code(library_name: str, library_slug: str, archetype: str, workflow_archetype: str) -> str:
     spec = ARCHETYPES[archetype]
+    workflow_spec = WORKFLOW_ARCHETYPES[workflow_archetype]
     return textwrap.dedent(
         f"""\
         #!/usr/bin/env python3
         from __future__ import annotations
 
         import csv
+        import gzip
         import json
         import os
         import re
@@ -952,6 +1195,8 @@ def build_generated_runtime_code(library_name: str, library_slug: str, archetype
         LIBRARY_SLUG = {library_slug!r}
         ARCHETYPE = {archetype!r}
         ARCHETYPE_SPEC = {json.dumps(spec, sort_keys=True, indent=2)}
+        WORKFLOW_ARCHETYPE = {workflow_archetype!r}
+        WORKFLOW_SPEC = {json.dumps(workflow_spec, sort_keys=True, indent=2)}
 
 
         def read_tsv(path: Path):
@@ -965,6 +1210,12 @@ def build_generated_runtime_code(library_name: str, library_slug: str, archetype
 
         def write_json(path: Path, payload):
             path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\\n", encoding="utf-8")
+
+
+        def open_text_auto(path: Path):
+            if path.suffix == ".gz":
+                return gzip.open(path, "rt", encoding="utf-8", newline="")
+            return path.open("r", encoding="utf-8", newline="")
 
 
         def stringify(value):
@@ -1008,6 +1259,8 @@ def build_generated_runtime_code(library_name: str, library_slug: str, archetype
                 "library_config": read_json(config_dir() / "library_config.json"),
                 "bundle_manifest": read_json(config_dir() / "bundle_manifest.json"),
                 "questionnaire": read_json(config_dir() / "questionnaire.json"),
+                "workflow_manifest": read_json(config_dir() / "workflow_manifest.json"),
+                "environment_profile": read_json(config_dir() / "environment_profile.json"),
                 "inputs": read_tsv(config_dir() / "inputs_manifest.tsv"),
                 "partitions": read_tsv(config_dir() / "partition_list.tsv"),
                 "models": read_tsv(config_dir() / "model_list.tsv"),
@@ -1247,6 +1500,9 @@ def build_generated_runtime_code(library_name: str, library_slug: str, archetype
                 "library": library_config["library_name"],
                 "library_slug": library_config["library_slug"],
                 "archetype": library_config["archetype"],
+                "workflow_archetype": library_config.get("workflow_archetype", ""),
+                "extractor_archetype": model.get("extractor_archetype") or library_config.get("extractor_archetype", library_config["archetype"]),
+                "environment_profile": library_config.get("environment_profile", ""),
                 "model_id": model["model_id"],
                 "model_group": model["model_family"],
                 "model_label": model["model_label"],
@@ -1260,15 +1516,161 @@ def build_generated_runtime_code(library_name: str, library_slug: str, archetype
                     "genome_build": library_config["genome_build"],
                     "input_id": input_row["input_id"],
                     "input_role": input_row["input_role"],
+                    "workflow_stage": input_row.get("workflow_stage", ""),
                     "source_url_or_uri": input_row["source_url_or_uri"],
                     "format": input_row["format"],
                 }},
                 "naming": {{
-                    "comparison_style": ARCHETYPE,
+                    "comparison_style": model.get("comparison_style", "") or ARCHETYPE,
                     "partition_label": partition["partition_label"],
                     "gene_set_pattern": pattern,
                 }},
             }}
+
+
+        def detect_delimiter(path: Path, explicit_delimiter: str | None = None) -> str:
+            if explicit_delimiter:
+                return explicit_delimiter
+            name = path.name.lower()
+            if name.endswith(".csv") or name.endswith(".csv.gz"):
+                return ","
+            return "\\t"
+
+
+        def filename_stem(path: Path) -> str:
+            name = path.name
+            for suffix in (".tsv.gz", ".csv.gz", ".txt.gz", ".tsv", ".csv", ".txt"):
+                if name.endswith(suffix):
+                    return name[: -len(suffix)]
+            return path.stem
+
+
+        def normalize_term_label(value: str) -> str:
+            text = re.sub(r"[^A-Za-z0-9]+", "_", value.strip())
+            text = re.sub(r"_+", "_", text).strip("_")
+            return text or "term"
+
+
+        def prepare_table_directory_marker_library(*, input_path: Path, workflow_dir: Path, model, options, partition):
+            if not input_path.is_dir():
+                raise SystemExit(f"table_directory_marker_library expects a directory input, got: {{input_path}}")
+            workflow_dir.mkdir(parents=True, exist_ok=True)
+            glob_pattern = str(options.get("workflow_glob", "*"))
+            explicit_delimiter = str(options.get("workflow_delimiter", "")).strip() or None
+            workflow_output = workflow_dir / "prepared_unsigned_term_gene.tsv"
+            manifest_path = workflow_dir / "workflow_manifest.json"
+            gene_id_column = str(options.get("workflow_gene_id_column", options.get("gene_id_column", "gene_id")))
+            gene_symbol_column = str(options.get("workflow_gene_symbol_column", options.get("gene_symbol_column", "gene_symbol")))
+            score_column = str(options.get("workflow_score_column", options.get("score_column", ""))).strip()
+            term_column = str(options.get("workflow_term_column", "")).strip()
+            term_prefix = str(options.get("workflow_term_prefix", options.get("term_prefix", ""))).strip()
+            file_term_strategy = str(options.get("workflow_term_strategy", "filename")).strip() or "filename"
+            source_files = sorted(path for path in input_path.rglob(glob_pattern) if path.is_file())
+            if not source_files:
+                raise SystemExit(f"No source files matched workflow_glob={{glob_pattern!r}} under {{input_path}}")
+            n_rows = 0
+            with workflow_output.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    delimiter="\\t",
+                    fieldnames=["term", "gene_id", "gene_symbol", "score"],
+                    lineterminator="\\n",
+                )
+                writer.writeheader()
+                for source_path in source_files:
+                    delimiter = detect_delimiter(source_path, explicit_delimiter)
+                    with open_text_auto(source_path) as source_handle:
+                        reader = csv.DictReader(source_handle, delimiter=delimiter)
+                        if reader.fieldnames is None:
+                            continue
+                        fieldnames = set(reader.fieldnames)
+                        if gene_id_column not in fieldnames:
+                            raise SystemExit(
+                                f"Missing workflow gene_id column {{gene_id_column!r}} in {{source_path}}. "
+                                f"Columns: {{sorted(fieldnames)}}"
+                            )
+                        if gene_symbol_column not in fieldnames:
+                            raise SystemExit(
+                                f"Missing workflow gene_symbol column {{gene_symbol_column!r}} in {{source_path}}. "
+                                f"Columns: {{sorted(fieldnames)}}"
+                            )
+                        if score_column and score_column not in fieldnames:
+                            raise SystemExit(
+                                f"Missing workflow score column {{score_column!r}} in {{source_path}}. "
+                                f"Columns: {{sorted(fieldnames)}}"
+                            )
+                        if term_column and term_column not in fieldnames:
+                            raise SystemExit(
+                                f"Missing workflow term column {{term_column!r}} in {{source_path}}. "
+                                f"Columns: {{sorted(fieldnames)}}"
+                            )
+                        base_term = filename_stem(source_path)
+                        for row in reader:
+                            if term_column:
+                                term_value = str(row.get(term_column, "")).strip()
+                            elif file_term_strategy == "filename":
+                                term_value = base_term
+                            else:
+                                term_value = base_term
+                            term_value = normalize_term_label(term_value)
+                            if term_prefix:
+                                term_value = f"{{term_prefix}}_{{term_value}}"
+                            gene_id = str(row.get(gene_id_column, "")).strip()
+                            gene_symbol = str(row.get(gene_symbol_column, "")).strip()
+                            if not gene_id and not gene_symbol:
+                                continue
+                            score_value = str(row.get(score_column, "")).strip() if score_column else ""
+                            if not score_value:
+                                score_value = "1"
+                            writer.writerow(
+                                {{
+                                    "term": term_value,
+                                    "gene_id": gene_id,
+                                    "gene_symbol": gene_symbol,
+                                    "score": score_value,
+                                }}
+                            )
+                            n_rows += 1
+            write_json(
+                manifest_path,
+                {{
+                    "workflow_archetype": WORKFLOW_ARCHETYPE,
+                    "partition_id": partition["partition_id"],
+                    "model_id": model["model_id"],
+                    "input_path": str(input_path),
+                    "source_files": [str(path) for path in source_files],
+                    "workflow_output": str(workflow_output),
+                    "n_source_files": len(source_files),
+                    "n_rows": n_rows,
+                    "workflow_options": {{
+                        "workflow_glob": glob_pattern,
+                        "workflow_term_strategy": file_term_strategy,
+                        "workflow_term_column": term_column,
+                        "workflow_gene_id_column": gene_id_column,
+                        "workflow_gene_symbol_column": gene_symbol_column,
+                        "workflow_score_column": score_column,
+                        "workflow_term_prefix": term_prefix,
+                    }},
+                }},
+            )
+            return workflow_output
+
+
+        def prepare_workflow_input(*, workflow_archetype, input_path: Path, workflow_dir: Path, model, options, partition):
+            if workflow_archetype == "simple_converter":
+                return input_path
+            if workflow_archetype == "table_directory_marker_library":
+                return prepare_table_directory_marker_library(
+                    input_path=input_path,
+                    workflow_dir=workflow_dir,
+                    model=model,
+                    options=options,
+                    partition=partition,
+                )
+            raise SystemExit(
+                f"Generated package does not yet implement workflow_archetype={{workflow_archetype!r}}. "
+                "Use a simple-converter archetype or extend the workflow generator."
+            )
 
 
         def find_artifacts(extractor_dir: Path):
@@ -1392,6 +1794,7 @@ def build_generated_run_model_script(library_name: str, library_slug: str) -> st
             patch_gmt,
             patch_meta,
             patch_provenance,
+            prepare_workflow_input,
             render_template,
             resolve_input_path,
             run_command,
@@ -1418,6 +1821,7 @@ def build_generated_run_model_script(library_name: str, library_slug: str) -> st
             model_manifest = model_manifest_map(bundle)
             templates = description_template_map(bundle)
             library_config = bundle["library_config"]
+            workflow_manifest = bundle["workflow_manifest"]
             out_root = Path(args.out_root).expanduser().resolve()
             partition = next((row for row in bundle["partitions"] if row["partition_id"] == args.partition_id), None)
             if partition is None:
@@ -1443,12 +1847,20 @@ def build_generated_run_model_script(library_name: str, library_slug: str) -> st
             env = os.environ.copy()
             env["PYTHONPATH"] = str(dig_dir / "src")
             log_path = model_root / "run.log"
+            converter_input_path = prepare_workflow_input(
+                workflow_archetype=str(workflow_manifest.get("workflow_archetype", library_config.get("workflow_archetype", "simple_converter"))),
+                input_path=input_path,
+                workflow_dir=workflow_dir,
+                model=model,
+                options=options,
+                partition=partition,
+            )
             command = build_converter_command(
                 python_bin=Path(args.python_bin).expanduser().resolve(),
                 dig_dir=dig_dir,
                 archetype=ARCHETYPE,
                 options=options,
-                input_path=input_path,
+                input_path=converter_input_path,
                 out_dir=extractor_dir,
                 library_config=library_config,
                 partition=partition,
@@ -1503,6 +1915,7 @@ def build_generated_run_model_script(library_name: str, library_slug: str) -> st
                     "partition_id": partition["partition_id"],
                     "model_id": model["model_id"],
                     "input_path": str(input_path),
+                    "converter_input_path": str(converter_input_path),
                     "command": command,
                 }},
             )
@@ -1604,11 +2017,11 @@ def generate_package(args: argparse.Namespace) -> int:
             print(f"ERROR: {error}")
         return 1
     assert context is not None
-    archetype = str(context["library_manifest"].get("archetype", "")).strip()
+    archetype = infer_extractor_archetype(context["library_manifest"])
     if archetype not in ARCHETYPES:
         raise SystemExit(
             "This bundle is not template-compatible for one-shot package generation.\n"
-            "Set library_manifest.json archetype to one of: " + ", ".join(sorted(ARCHETYPES))
+            "Set library_manifest.json extractor_archetype (or legacy archetype) to one of: " + ", ".join(sorted(ARCHETYPES))
         )
     out_dir = Path(args.out_dir).expanduser().resolve()
     if out_dir.exists() and any(out_dir.iterdir()) and not args.force:
@@ -1628,10 +2041,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser_list = subparsers.add_parser("list-archetypes", help="List supported template-compatible archetypes.")
     parser_list.set_defaults(func=list_archetypes)
 
+    parser_list_workflow = subparsers.add_parser("list-workflow-archetypes", help="List supported workflow archetypes.")
+    parser_list_workflow.set_defaults(func=list_workflow_archetypes)
+
+    parser_list_env = subparsers.add_parser("list-environment-profiles", help="List supported environment profiles.")
+    parser_list_env.set_defaults(func=list_environment_profiles)
+
     parser_init = subparsers.add_parser("init", help="Initialize a new onboarding bundle.")
     parser_init.add_argument("--library_name", required=True)
     parser_init.add_argument("--out_dir", required=True)
     parser_init.add_argument("--archetype", choices=sorted(ARCHETYPES), default="")
+    parser_init.add_argument("--workflow_archetype", choices=sorted(WORKFLOW_ARCHETYPES), default="")
+    parser_init.add_argument("--environment_profile", choices=sorted(ENVIRONMENT_PROFILES), default="")
     parser_init.add_argument("--force", action="store_true")
     parser_init.set_defaults(func=init_bundle)
 
@@ -1645,10 +2066,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser_input.add_argument("--input_id", required=True)
     parser_input.add_argument("--path_or_uri", required=True)
     parser_input.add_argument("--input_role", required=True)
+    parser_input.add_argument("--workflow_stage", default="workflow_input")
     parser_input.add_argument("--format", required=True)
     parser_input.add_argument("--is_external_input", default="true")
     parser_input.add_argument("--required_for_rerun", default="true")
     parser_input.add_argument("--source_url_or_uri", default="")
+    parser_input.add_argument("--partition_scope", default="")
     parser_input.add_argument("--notes", default="")
     parser_input.set_defaults(func=add_input)
 
@@ -1657,6 +2080,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser_partition.add_argument("--partition_id", required=True)
     parser_partition.add_argument("--partition_label", required=True)
     parser_partition.add_argument("--partition_type", required=True)
+    parser_partition.add_argument("--partition_group", default="")
     parser_partition.add_argument("--input_id", required=True)
     parser_partition.add_argument("--enabled", default="true")
     parser_partition.add_argument("--notes", default="")
@@ -1668,8 +2092,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser_model.add_argument("--model_family", required=True)
     parser_model.add_argument("--model_label", required=True)
     parser_model.add_argument("--input_mode", required=True)
+    parser_model.add_argument("--workflow_variant", default="")
+    parser_model.add_argument("--extractor_archetype", default="")
     parser_model.add_argument("--signed_output", required=True)
     parser_model.add_argument("--gene_set_pattern", required=True)
+    parser_model.add_argument("--comparison_style", default="")
     parser_model.add_argument("--distinct_algorithmic_feature", required=True)
     parser_model.add_argument("--description", required=True)
     parser_model.add_argument("--options_json", default="{}")
@@ -1713,6 +2140,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 def list_archetypes(args: argparse.Namespace) -> int:
     print(json.dumps(ARCHETYPES, indent=2, sort_keys=True))
+    return 0
+
+
+def list_workflow_archetypes(args: argparse.Namespace) -> int:
+    print(json.dumps(WORKFLOW_ARCHETYPES, indent=2, sort_keys=True))
+    return 0
+
+
+def list_environment_profiles(args: argparse.Namespace) -> int:
+    print(json.dumps(ENVIRONMENT_PROFILES, indent=2, sort_keys=True))
     return 0
 
 
