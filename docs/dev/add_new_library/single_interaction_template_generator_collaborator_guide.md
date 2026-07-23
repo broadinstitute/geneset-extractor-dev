@@ -12,15 +12,58 @@ This guide explains how a collaborator can use the template-driven `library_onbo
 
 This workflow is intended for **template-compatible libraries** only.
 
+## Recommended Starting Point
+
+If you are starting from a dataset and do not yet know which onboarding path fits, read the quickstart first:
+
+- `geneset-extractor-dev/docs/dev/add_new_library/collaborator_onboarding_quickstart.md`
+
+That document explains:
+
+1. how to inspect the supported workflow archetypes
+2. how to inspect the supported extractor archetypes
+3. how to inspect the supported environment profiles
+4. how to choose the best matching workflow shape
+5. how to run the first `init` command
+
+The short version is:
+
+```bash
+bash geneset-extractor-dev/run/library_onboard.sh list-workflow-archetypes
+bash geneset-extractor-dev/run/library_onboard.sh list-archetypes
+bash geneset-extractor-dev/run/library_onboard.sh list-environment-profiles
+```
+
+Then choose the closest match and initialize a bundle like this:
+
+```bash
+bash geneset-extractor-dev/run/library_onboard.sh init \
+  --library_name MyLibrary \
+  --out_dir ./MyLibrary_onboarding \
+  --archetype unsigned_term_gene \
+  --workflow_archetype table_directory_marker_library \
+  --environment_profile geneset_extractor_standard
+```
+
 ## Important Limitation
 
 This process only works for libraries that fit an already supported archetype.
 
-Examples of currently supported archetypes:
+Examples of currently supported extractor archetypes:
 
 - released differential-expression table -> `rna_deg`
 - unsigned term-gene table -> `unsigned_term_gene`
 - signed term-gene table -> `signed_term_gene`
+
+Examples of currently supported workflow archetypes:
+
+- `simple_converter`
+- `released_de_multi_partition`
+- `bulk_counts_multi_model`
+- `raw_counts_training_timecourse`
+- `matrix_signature_library`
+- `table_directory_marker_library`
+- `custom_hybrid`
 
 If your library requires:
 
@@ -48,18 +91,52 @@ The onboarding tool is currently run from:
 
 The process has eight steps:
 
-1. initialize an onboarding bundle
-2. record the library inputs
-3. define partitions and models
-4. validate the bundle
-5. generate a runnable package
-6. run the package locally or with Apptainer
-7. validate the outputs
-8. package the final submission and send it back
+1. inspect the supported workflow, extractor, and environment options
+2. initialize an onboarding bundle
+3. record the library inputs
+4. define partitions and models
+5. validate the bundle
+6. generate a runnable package
+7. run the package locally or with Apptainer
+8. validate the outputs
+9. package the final submission and send it back
 
-## 1. Initialize An Onboarding Bundle
+## 1. Inspect The Supported Options
 
-Choose a supported archetype and create a bundle directory.
+Before creating a bundle, determine which workflow shape best matches your data.
+
+Run:
+
+```bash
+bash geneset-extractor-dev/run/library_onboard.sh list-workflow-archetypes
+bash geneset-extractor-dev/run/library_onboard.sh list-archetypes
+bash geneset-extractor-dev/run/library_onboard.sh list-environment-profiles
+```
+
+At this stage, decide:
+
+1. the `workflow_archetype`
+2. the final extractor archetype
+3. the environment profile
+
+Common examples:
+
+- directory of marker tables:
+  `workflow_archetype = table_directory_marker_library`
+  `extractor_archetype = unsigned_term_gene`
+- signature matrix:
+  `workflow_archetype = matrix_signature_library`
+  `extractor_archetype = signed_term_gene`
+- released differential-expression tables:
+  `workflow_archetype = released_de_multi_partition`
+  `extractor_archetype = released_de_rna`
+- counts plus metadata:
+  `workflow_archetype = bulk_counts_multi_model`
+  `extractor_archetype = released_de_rna`
+
+## 2. Initialize An Onboarding Bundle
+
+Choose a supported workflow and extractor combination and create a bundle directory.
 
 Example:
 
@@ -67,7 +144,9 @@ Example:
 bash geneset-extractor-dev/run/library_onboard.sh init \
   --library_name MyLibrary \
   --out_dir ./MyLibrary_onboarding \
-  --archetype unsigned_term_gene
+  --archetype unsigned_term_gene \
+  --workflow_archetype table_directory_marker_library \
+  --environment_profile geneset_extractor_standard
 ```
 
 This creates:
@@ -81,7 +160,7 @@ This creates:
 - `run_examples.md`
 - `notes.md`
 
-## 2. Record The Library Inputs
+## 3. Record The Library Inputs
 
 Add each required external input.
 
@@ -93,6 +172,7 @@ bash geneset-extractor-dev/run/library_onboard.sh add-input \
   --input_id main_table \
   --path_or_uri /path/to/local/input.tsv \
   --input_role table_tsv \
+  --workflow_stage workflow_input \
   --format tsv \
   --is_external_input true \
   --required_for_rerun true \
@@ -105,7 +185,7 @@ Key points:
 - `source_url_or_uri` is the stable external source URI or URL that should appear in final provenance
 - every input required for rerunning the analysis should be recorded
 
-## 3. Define Partitions And Models
+## 4. Define Partitions And Models
 
 ### Add partitions
 
@@ -119,6 +199,7 @@ bash geneset-extractor-dev/run/library_onboard.sh add-partition \
   --partition_id StudyA \
   --partition_label StudyA \
   --partition_type study \
+  --partition_group primary \
   --input_id main_table
 ```
 
@@ -135,8 +216,11 @@ bash geneset-extractor-dev/run/library_onboard.sh add-model \
   --model_family unsigned_term_gene \
   --model_label canonical \
   --input_mode released_table \
+  --workflow_variant default \
+  --extractor_archetype unsigned_term_gene \
   --signed_output false \
   --gene_set_pattern 'MyLibrary_<term>' \
+  --comparison_style library \
   --distinct_algorithmic_feature 'unsigned conversion' \
   --description 'MyLibrary unsigned term-gene library using model U1.' \
   --options_json '{"term_column":"term","gene_id_column":"gene_id","gene_symbol_column":"gene_symbol","score_column":"score","term_prefix":"MyLibrary"}'
@@ -153,7 +237,7 @@ bash geneset-extractor-dev/run/library_onboard.sh questionnaire \
   --set workflow_shape.parallel_unit='partition'
 ```
 
-## 4. Validate The Bundle
+## 5. Validate The Bundle
 
 Before generating code, validate the bundle:
 
@@ -174,7 +258,7 @@ This checks:
 
 If validation fails, fix the bundle first.
 
-## 5. Generate A Runnable Package
+## 6. Generate A Runnable Package
 
 If the library is template-compatible, generate the runnable package:
 
@@ -200,7 +284,7 @@ The generated package contains:
 - packaging scripts
 - Apptainer run wrapper
 
-## 6. Run The Generated Package
+## 7. Run The Generated Package
 
 From this point on, you work from the generated package.
 
