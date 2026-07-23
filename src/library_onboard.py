@@ -30,6 +30,22 @@ REQUIRED_BUNDLE_FILES = (
     "notes.md",
 )
 
+WORKFLOW_CANDIDATE_REQUIRED_FILES = (
+    "workflow_spec.json",
+    "environment_profile.json",
+    "entrypoint_contract.json",
+    "implementation/run_workflow_candidate.py",
+    "implementation/README.md",
+    "tests/fixture_manifest.json",
+    "tests/expected_outputs_manifest.json",
+    "tests/run_candidate_smoke_test.sh",
+    "examples/sample_input_manifest.tsv",
+    "examples/sample_output_manifest.tsv",
+    "docs/workflow_rationale.md",
+    "docs/provenance_expectations.md",
+    "docs/naming_contract.md",
+)
+
 INPUT_HEADERS = (
     "input_id",
     "path_or_uri",
@@ -346,6 +362,232 @@ def infer_environment_profile(library_manifest: dict[str, Any]) -> str:
     return ""
 
 
+def workflow_candidate_root(bundle_dir: Path) -> Path:
+    return bundle_dir / "workflow_candidate"
+
+
+def workflow_candidate_enabled(bundle_manifest: dict[str, Any], bundle_dir: Path | None = None) -> bool:
+    if parse_bool(bundle_manifest.get("workflow_candidate_enabled"), False):
+        return True
+    if bundle_dir is not None and workflow_candidate_root(bundle_dir).is_dir():
+        return True
+    return False
+
+
+def write_workflow_candidate_scaffold(bundle_dir: Path, library_name: str, library_slug: str, extractor_archetype: str, environment_profile: str) -> None:
+    candidate_root = workflow_candidate_root(bundle_dir)
+    implementation_dir = candidate_root / "implementation"
+    tests_dir = candidate_root / "tests"
+    examples_dir = candidate_root / "examples"
+    docs_dir = candidate_root / "docs"
+    ensure_dir(implementation_dir)
+    ensure_dir(tests_dir)
+    ensure_dir(examples_dir)
+    ensure_dir(docs_dir)
+
+    workflow_spec = {
+        "workflow_candidate_name": f"{library_slug}_workflow_candidate",
+        "version": "0.1.0",
+        "library_name": library_name,
+        "candidate_status": "proposed",
+        "intended_scope": "",
+        "final_extractor_archetypes": [extractor_archetype] if extractor_archetype else [],
+        "partition_axis": "",
+        "model_axis": "",
+        "supports_apptainer": environment_profile != "maintainer_only",
+        "environment_profile": environment_profile,
+        "intermediate_outputs": [],
+    }
+    write_json(candidate_root / "workflow_spec.json", workflow_spec)
+    write_json(
+        candidate_root / "environment_profile.json",
+        {
+            "environment_profile": environment_profile,
+            **(deepcopy(ENVIRONMENT_PROFILES.get(environment_profile, {}))),
+            "additional_packages": [],
+            "notes": "",
+        },
+    )
+    write_json(
+        candidate_root / "entrypoint_contract.json",
+        {
+            "entrypoint": "implementation/run_workflow_candidate.py",
+            "language": "python",
+            "required_arguments": [
+                "--input_manifest_tsv",
+                "--partition_id",
+                "--model_id",
+                "--out_dir",
+            ],
+            "optional_arguments": [
+                "--work_dir",
+                "--overwrite",
+            ],
+            "input_roles_consumed": [],
+            "output_files_emitted": [
+                "workflow_manifest.json",
+            ],
+            "exit_behavior": "nonzero on failure",
+        },
+    )
+    write_text(
+        implementation_dir / "run_workflow_candidate.py",
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env python3
+            from __future__ import annotations
+
+            import argparse
+            import csv
+            import json
+            from pathlib import Path
+
+
+            def build_parser() -> argparse.ArgumentParser:
+                parser = argparse.ArgumentParser()
+                parser.add_argument("--input_manifest_tsv", required=True)
+                parser.add_argument("--partition_id", required=True)
+                parser.add_argument("--model_id", required=True)
+                parser.add_argument("--out_dir", required=True)
+                parser.add_argument("--work_dir")
+                parser.add_argument("--overwrite", action="store_true")
+                return parser
+
+
+            def main() -> int:
+                args = build_parser().parse_args()
+                out_dir = Path(args.out_dir).expanduser().resolve()
+                out_dir.mkdir(parents=True, exist_ok=True)
+                manifest_path = out_dir / "workflow_manifest.json"
+                manifest_path.write_text(
+                    json.dumps(
+                        {
+                            "status": "placeholder",
+                            "partition_id": args.partition_id,
+                            "model_id": args.model_id,
+                            "input_manifest_tsv": str(Path(args.input_manifest_tsv).expanduser().resolve()),
+                        },
+                        indent=2,
+                        sort_keys=True,
+                    )
+                    + "\\n",
+                    encoding="utf-8",
+                )
+                return 0
+
+
+            if __name__ == "__main__":
+                raise SystemExit(main())
+            """
+        ),
+    )
+    make_executable(implementation_dir / "run_workflow_candidate.py")
+    write_text(
+        implementation_dir / "README.md",
+        textwrap.dedent(
+            """\
+            # Workflow Candidate Implementation
+
+            Replace `run_workflow_candidate.py` with the collaborator-supplied workflow preparation code.
+
+            Requirements:
+
+            - honor the CLI contract in `../entrypoint_contract.json`
+            - emit the declared intermediate outputs under the supplied `--out_dir`
+            - do not rely on shell startup files or hidden local state
+            """
+        ),
+    )
+    write_json(
+        tests_dir / "fixture_manifest.json",
+        {
+            "description": "Minimal fixture inputs for workflow candidate smoke testing.",
+            "inputs": [],
+        },
+    )
+    write_json(
+        tests_dir / "expected_outputs_manifest.json",
+        {
+            "description": "Expected outputs for the workflow candidate smoke test.",
+            "outputs": [],
+        },
+    )
+    write_text(
+        tests_dir / "run_candidate_smoke_test.sh",
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env bash
+            set -euo pipefail
+
+            # Manual instruction:
+            # Replace the placeholder arguments below with real fixture paths.
+
+            SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+            CANDIDATE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+            python3 "${CANDIDATE_ROOT}/implementation/run_workflow_candidate.py" \
+              --input_manifest_tsv /path/to/fixture_inputs.tsv \
+              --partition_id example_partition \
+              --model_id example_model \
+              --out_dir /tmp/workflow_candidate_smoke_out
+            """
+        ),
+    )
+    make_executable(tests_dir / "run_candidate_smoke_test.sh")
+    write_text(
+        examples_dir / "sample_input_manifest.tsv",
+        "input_id\tpath_or_uri\tinput_role\tnotes\n",
+    )
+    write_text(
+        examples_dir / "sample_output_manifest.tsv",
+        "path\trole\tnotes\n",
+    )
+    write_text(
+        docs_dir / "workflow_rationale.md",
+        textwrap.dedent(
+            """\
+            # Workflow Rationale
+
+            Describe:
+
+            - why this workflow exists
+            - why the current canonical workflow archetypes are insufficient
+            - why this candidate could be reusable for future libraries
+            """
+        ),
+    )
+    write_text(
+        docs_dir / "provenance_expectations.md",
+        textwrap.dedent(
+            """\
+            # Provenance Expectations
+
+            Describe:
+
+            - the true starting inputs for provenance
+            - the intermediate files this workflow should emit
+            - the final DIG converter expected downstream
+            - any local-path sanitization expectations
+            """
+        ),
+    )
+    write_text(
+        docs_dir / "naming_contract.md",
+        textwrap.dedent(
+            """\
+            # Naming Contract
+
+            Describe:
+
+            - GMT row naming pattern
+            - metadata description variables
+            - provenance description variables
+            - model-sidecar variables
+            """
+        ),
+    )
+
+
 def read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -467,6 +709,7 @@ def init_bundle(args: argparse.Namespace) -> int:
         "bundle_tool_version": TOOL_VERSION,
         "contains_sample_inputs": False,
         "contains_sample_outputs": False,
+        "workflow_candidate_enabled": bool(args.workflow_candidate),
     }
     library_manifest = deepcopy(DEFAULT_LIBRARY_MANIFEST)
     library_manifest["library_name"] = args.library_name
@@ -513,6 +756,14 @@ def init_bundle(args: argparse.Namespace) -> int:
             """
         ),
     )
+    if args.workflow_candidate:
+        write_workflow_candidate_scaffold(
+            out_dir,
+            library_name=args.library_name,
+            library_slug=library_slug,
+            extractor_archetype=extractor_archetype,
+            environment_profile=environment_profile,
+        )
     print(f"Initialized onboarding bundle: {out_dir}")
     return 0
 
@@ -631,6 +882,34 @@ def validate_bundle_dir(bundle_dir: Path) -> tuple[list[str], list[str], dict[st
     if not isinstance(questionnaire_payload, dict):
         errors.append("questionnaire.json must be a JSON object")
 
+    candidate_enabled = workflow_candidate_enabled(bundle_manifest if isinstance(bundle_manifest, dict) else {}, bundle_dir)
+    candidate_root = workflow_candidate_root(bundle_dir)
+    candidate_payloads: dict[str, Any] = {}
+    if candidate_enabled:
+        if not candidate_root.is_dir():
+            errors.append("workflow_candidate_enabled is true but workflow_candidate/ directory is missing")
+        else:
+            for name in WORKFLOW_CANDIDATE_REQUIRED_FILES:
+                if not (candidate_root / name).exists():
+                    errors.append(f"Missing workflow candidate file: workflow_candidate/{name}")
+            if not errors:
+                try:
+                    candidate_payloads["workflow_spec"] = read_json(candidate_root / "workflow_spec.json")
+                    candidate_payloads["environment_profile"] = read_json(candidate_root / "environment_profile.json")
+                    candidate_payloads["entrypoint_contract"] = read_json(candidate_root / "entrypoint_contract.json")
+                except Exception as exc:
+                    errors.append(f"Unable to read workflow candidate JSON files: {exc}")
+                implementation_entrypoint = candidate_root / "implementation" / "run_workflow_candidate.py"
+                if implementation_entrypoint.exists():
+                    implementation_text = implementation_entrypoint.read_text(encoding="utf-8", errors="ignore")
+                    for required_token in ("--input_manifest_tsv", "--partition_id", "--model_id", "--out_dir"):
+                        if required_token not in implementation_text:
+                            warnings.append(
+                                "workflow_candidate implementation may not visibly honor the expected CLI contract; "
+                                "review implementation/run_workflow_candidate.py"
+                            )
+                            break
+
     inputs_rows = read_tsv(files["inputs_manifest.tsv"])
     partition_rows = read_tsv(files["partition_plan.tsv"])
     model_rows = read_tsv(files["model_plan.tsv"])
@@ -659,6 +938,36 @@ def validate_bundle_dir(bundle_dir: Path) -> tuple[list[str], list[str], dict[st
             errors.append(
                 f"workflow_archetype {workflow_archetype} does not support extractor_archetype {extractor_archetype}"
             )
+    if candidate_enabled and workflow_archetype != "custom_hybrid":
+        warnings.append(
+            "workflow candidate bundle is enabled but workflow_archetype is not custom_hybrid; this is allowed but should be intentional"
+        )
+    if candidate_enabled and isinstance(candidate_payloads.get("workflow_spec"), dict):
+        workflow_spec = candidate_payloads["workflow_spec"]
+        candidate_name = str(workflow_spec.get("workflow_candidate_name", "")).strip()
+        if not candidate_name:
+            errors.append("workflow_candidate/workflow_spec.json missing workflow_candidate_name")
+        final_extractors = workflow_spec.get("final_extractor_archetypes", [])
+        if not isinstance(final_extractors, list) or not final_extractors:
+            errors.append("workflow_candidate/workflow_spec.json must declare non-empty final_extractor_archetypes")
+        elif extractor_archetype and extractor_archetype not in {str(item) for item in final_extractors}:
+            warnings.append(
+                f"workflow candidate final_extractor_archetypes does not include bundle extractor_archetype {extractor_archetype}"
+            )
+    if candidate_enabled and isinstance(candidate_payloads.get("entrypoint_contract"), dict):
+        contract = candidate_payloads["entrypoint_contract"]
+        required_args = contract.get("required_arguments", [])
+        if not isinstance(required_args, list):
+            errors.append("workflow_candidate/entrypoint_contract.json required_arguments must be a list")
+        else:
+            for required_arg in ("--input_manifest_tsv", "--partition_id", "--model_id", "--out_dir"):
+                if required_arg not in required_args:
+                    errors.append(
+                        f"workflow_candidate/entrypoint_contract.json missing required argument {required_arg}"
+                    )
+        entrypoint = str(contract.get("entrypoint", "")).strip()
+        if entrypoint and not (candidate_root / entrypoint).exists():
+            errors.append(f"workflow_candidate entrypoint does not exist: workflow_candidate/{entrypoint}")
     if extractor_archetype and not str(library_manifest.get("expected_workflow_category", "")).strip():
         warnings.append("library_manifest.json missing expected_workflow_category for selected archetype")
     if not inputs_rows:
@@ -747,6 +1056,7 @@ def validate_bundle_dir(bundle_dir: Path) -> tuple[list[str], list[str], dict[st
         errors.append("bundle_manifest.json missing library_name")
 
     context = {
+        "bundle_dir": str(bundle_dir),
         "bundle_manifest": bundle_manifest,
         "library_manifest": library_manifest,
         "questionnaire": questionnaire_payload,
@@ -756,6 +1066,9 @@ def validate_bundle_dir(bundle_dir: Path) -> tuple[list[str], list[str], dict[st
         "workflow_archetype": workflow_archetype,
         "extractor_archetype": extractor_archetype,
         "environment_profile": environment_profile,
+        "workflow_candidate_enabled": candidate_enabled,
+        "workflow_candidate_root": str(candidate_root) if candidate_enabled else "",
+        "workflow_candidate_payloads": candidate_payloads,
     }
     return errors, warnings, context
 
@@ -833,6 +1146,7 @@ def inspect_bundle(args: argparse.Namespace) -> int:
                 "workflow_archetype": infer_workflow_archetype(library_manifest),
                 "extractor_archetype": infer_extractor_archetype(library_manifest),
                 "environment_profile": infer_environment_profile(library_manifest),
+                "workflow_candidate_enabled": workflow_candidate_enabled(context["bundle_manifest"], bundle_root),
                 "organism": library_manifest.get("organism", ""),
                 "genome_build": library_manifest.get("genome_build", ""),
                 "n_inputs": len(context["inputs_rows"]),
@@ -906,6 +1220,7 @@ def write_scaffold_files(out_dir: Path, context: dict[str, Any], runnable: bool)
     ensure_dir(src_dir)
     ensure_dir(run_dir)
     ensure_dir(planning_dir)
+    candidate_enabled = bool(context.get("workflow_candidate_enabled", False))
 
     write_json(config_dir / "library_config.json", library_manifest)
     write_json(config_dir / "bundle_manifest.json", context["bundle_manifest"])
@@ -1035,6 +1350,10 @@ def write_scaffold_files(out_dir: Path, context: dict[str, Any], runnable: bool)
             """
         ),
     )
+    if candidate_enabled:
+        source_candidate_root = workflow_candidate_root(Path(str(context["bundle_dir"])))
+        if source_candidate_root.is_dir():
+            shutil.copytree(source_candidate_root, package_root / "workflow_candidate", dirs_exist_ok=True)
 
     runtime_code = build_generated_runtime_code(library_name, library_slug, archetype, workflow_archetype)
     build_code = build_generated_build_script(library_name, library_slug)
@@ -1131,6 +1450,9 @@ def write_scaffold_files(out_dir: Path, context: dict[str, Any], runnable: bool)
             cp -R "${{PACKAGE_ROOT}}/src" "${{SUBMISSION_DIR}}/code"
             cp -R "${{PACKAGE_ROOT}}/run" "${{SUBMISSION_DIR}}/code"
             cp -R "${{PACKAGE_ROOT}}/planning" "${{SUBMISSION_DIR}}/code"
+            if [[ -d "${{PACKAGE_ROOT}}/workflow_candidate" ]]; then
+              cp -R "${{PACKAGE_ROOT}}/workflow_candidate" "${{SUBMISSION_DIR}}/code"
+            fi
             cp -R "${{OUT_ROOT}}" "${{SUBMISSION_DIR}}/outputs"
             (cd "${{SUBMISSION_DIR}}" && zip -r "${{ARCHIVE_PATH}}" .)
             """
@@ -2657,6 +2979,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser_init.add_argument("--archetype", choices=sorted(ARCHETYPES), default="")
     parser_init.add_argument("--workflow_archetype", choices=sorted(WORKFLOW_ARCHETYPES), default="")
     parser_init.add_argument("--environment_profile", choices=sorted(ENVIRONMENT_PROFILES), default="")
+    parser_init.add_argument("--workflow_candidate", action="store_true")
     parser_init.add_argument("--force", action="store_true")
     parser_init.set_defaults(func=init_bundle)
 

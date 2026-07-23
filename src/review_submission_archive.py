@@ -20,6 +20,8 @@ from library_onboard import (
     infer_workflow_archetype,
     read_json,
     read_tsv,
+    WORKFLOW_CANDIDATE_REQUIRED_FILES,
+    workflow_candidate_enabled,
 )
 
 
@@ -53,6 +55,7 @@ class ReviewContext:
     workflow_archetype: str
     extractor_archetype: str
     environment_profile: str
+    workflow_candidate_enabled: bool
 
 
 def parse_args() -> argparse.Namespace:
@@ -174,6 +177,7 @@ def gather_context(args: argparse.Namespace) -> ReviewContext:
     workflow_archetype = infer_workflow_archetype(manifest_like) if manifest_like else ""
     extractor_archetype = infer_extractor_archetype(manifest_like) if manifest_like else ""
     environment_profile = infer_environment_profile(manifest_like) if manifest_like else ""
+    candidate_enabled = workflow_candidate_enabled(bundle_manifest or {}, package_root if package_root else None)
     return ReviewContext(
         submission_zip=submission_zip,
         review_root=review_root,
@@ -190,6 +194,7 @@ def gather_context(args: argparse.Namespace) -> ReviewContext:
         workflow_archetype=workflow_archetype,
         extractor_archetype=extractor_archetype,
         environment_profile=environment_profile,
+        workflow_candidate_enabled=candidate_enabled,
     )
 
 
@@ -219,6 +224,7 @@ def stage_intake(ctx: ReviewContext) -> dict[str, Any]:
         "workflow_archetype": ctx.workflow_archetype,
         "extractor_archetype": ctx.extractor_archetype,
         "environment_profile": ctx.environment_profile,
+        "workflow_candidate_enabled": ctx.workflow_candidate_enabled,
         "n_models": len(ctx.model_rows),
         "n_partitions": len(ctx.partition_rows),
     }
@@ -241,6 +247,7 @@ def stage_intake(ctx: ReviewContext) -> dict[str, Any]:
             f"Workflow archetype: {ctx.workflow_archetype or 'missing'}",
             f"Extractor archetype: {ctx.extractor_archetype or ctx.archetype or 'missing'}",
             f"Environment profile: {ctx.environment_profile or 'missing'}",
+            f"Workflow candidate enabled: {str(ctx.workflow_candidate_enabled).lower()}",
             f"Models: {len(ctx.model_rows)}",
             f"Partitions: {len(ctx.partition_rows)}",
         ],
@@ -267,6 +274,8 @@ def stage_structure(ctx: ReviewContext) -> dict[str, Any]:
             "config/workflow_manifest.json",
             "config/environment_profile.json",
         )
+        if ctx.workflow_candidate_enabled:
+            optional_package_paths += tuple(f"workflow_candidate/{name}" for name in WORKFLOW_CANDIDATE_REQUIRED_FILES)
         for relative in expected_package_paths:
             package_checks[relative] = (ctx.package_root / relative).exists()
         for relative in optional_package_paths:
@@ -366,6 +375,7 @@ def stage_archetype(ctx: ReviewContext) -> dict[str, Any]:
         "workflow_archetype": ctx.workflow_archetype,
         "extractor_archetype": ctx.extractor_archetype or ctx.archetype,
         "environment_profile": ctx.environment_profile,
+        "workflow_candidate_enabled": ctx.workflow_candidate_enabled,
         "supported_archetypes": sorted(ARCHETYPES),
         "supported_workflow_archetypes": sorted(WORKFLOW_ARCHETYPES),
         "supported_environment_profiles": sorted(ENVIRONMENT_PROFILES),
@@ -385,6 +395,70 @@ def stage_archetype(ctx: ReviewContext) -> dict[str, Any]:
             f"Declared extractor archetype: {ctx.extractor_archetype or ctx.archetype or 'missing'}",
             f"Declared environment profile: {ctx.environment_profile or 'missing'}",
             f"Model families present: {', '.join(unique_families) if unique_families else 'none'}",
+        ],
+        findings,
+    )
+    return payload
+
+
+def stage_workflow_candidate(ctx: ReviewContext) -> dict[str, Any]:
+    findings: list[str] = []
+    payload: dict[str, Any] = {
+        "workflow_candidate_enabled": ctx.workflow_candidate_enabled,
+        "present_files": {},
+        "missing_files": [],
+        "workflow_spec_summary": {},
+    }
+    if not ctx.workflow_candidate_enabled:
+        write_report_pair(
+            ctx.reports_root,
+            "workflow_candidate_report",
+            payload,
+            "Workflow Candidate Report",
+            "pass",
+            ["Workflow candidate bundle: false"],
+            [],
+        )
+        return payload
+    if ctx.package_root is None:
+        findings.append("Generated package root missing; cannot inspect workflow_candidate/ contents.")
+    else:
+        candidate_root = ctx.package_root / "workflow_candidate"
+        if not candidate_root.is_dir():
+            findings.append("workflow_candidate/ directory is missing from package root.")
+        else:
+            for relative in WORKFLOW_CANDIDATE_REQUIRED_FILES:
+                present = (candidate_root / relative).exists()
+                payload["present_files"][relative] = present
+                if not present:
+                    payload["missing_files"].append(relative)
+            workflow_spec_path = candidate_root / "workflow_spec.json"
+            if workflow_spec_path.is_file():
+                try:
+                    workflow_spec = read_json(workflow_spec_path)
+                except Exception as exc:
+                    findings.append(f"Unable to read workflow_candidate/workflow_spec.json: {exc}")
+                else:
+                    payload["workflow_spec_summary"] = {
+                        "workflow_candidate_name": str(workflow_spec.get("workflow_candidate_name", "")),
+                        "candidate_status": str(workflow_spec.get("candidate_status", "")),
+                        "final_extractor_archetypes": workflow_spec.get("final_extractor_archetypes", []),
+                        "environment_profile": str(workflow_spec.get("environment_profile", "")),
+                    }
+            if payload["missing_files"]:
+                findings.append(
+                    "Missing workflow candidate files: " + ", ".join(payload["missing_files"])
+                )
+    status = "pass" if not findings else "fail"
+    write_report_pair(
+        ctx.reports_root,
+        "workflow_candidate_report",
+        payload,
+        "Workflow Candidate Report",
+        status,
+        [
+            f"Workflow candidate bundle: {str(ctx.workflow_candidate_enabled).lower()}",
+            f"Missing files: {len(payload['missing_files'])}",
         ],
         findings,
     )
@@ -643,6 +717,7 @@ def stage_publishability(
     ctx: ReviewContext,
     structure_report: dict[str, Any],
     archetype_report: dict[str, Any],
+    workflow_candidate_report: dict[str, Any],
     artifact_report: dict[str, Any],
     provenance_report: dict[str, Any],
     gmt_report: dict[str, Any],
@@ -652,6 +727,8 @@ def stage_publishability(
         major_failures.extend(structure_report["findings"])
     if archetype_report.get("findings"):
         major_failures.extend(archetype_report["findings"])
+    if workflow_candidate_report.get("findings"):
+        major_failures.extend(workflow_candidate_report["findings"])
     if artifact_report.get("counts", {}).get("gmt_files", 0) == 0:
         major_failures.append("No GMT files found.")
     if artifact_report.get("counts", {}).get("provenance_files", 0) == 0:
@@ -703,6 +780,7 @@ def main() -> int:
     stage_intake(ctx)
     structure_report = stage_structure(ctx)
     archetype_report = stage_archetype(ctx)
+    workflow_candidate_report = stage_workflow_candidate(ctx)
     artifact_report = stage_artifacts(ctx)
     provenance_report = stage_provenance(ctx)
     gmt_report = stage_gmt(ctx)
@@ -710,6 +788,7 @@ def main() -> int:
         ctx,
         structure_report,
         archetype_report,
+        workflow_candidate_report,
         artifact_report,
         provenance_report,
         gmt_report,
