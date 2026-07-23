@@ -1184,6 +1184,7 @@ def build_generated_runtime_code(library_name: str, library_slug: str, archetype
         import csv
         import gzip
         import json
+        import math
         import os
         import re
         import shutil
@@ -1581,6 +1582,394 @@ def build_generated_runtime_code(library_name: str, library_slug: str, archetype
             return mapping
 
 
+        def parse_float(value, default=0.0):
+            try:
+                return float(str(value).strip())
+            except Exception:
+                return default
+
+
+        def mean(values):
+            if not values:
+                return 0.0
+            return sum(values) / len(values)
+
+
+        def variance(values, sample_mean=None):
+            if len(values) < 2:
+                return 0.0
+            mu = mean(values) if sample_mean is None else sample_mean
+            return sum((value - mu) ** 2 for value in values) / (len(values) - 1)
+
+
+        def normal_pvalue_from_z(z_value):
+            return max(0.0, min(1.0, math.erfc(abs(z_value) / math.sqrt(2.0))))
+
+
+        def benjamini_hochberg(pvalues):
+            indexed = sorted(enumerate(pvalues), key=lambda item: item[1])
+            adjusted = [1.0] * len(pvalues)
+            running = 1.0
+            total = len(pvalues)
+            for rank, (index, pvalue) in enumerate(reversed(indexed), start=1):
+                original_rank = total - rank + 1
+                candidate = pvalue * total / original_rank
+                running = min(running, candidate)
+                adjusted[index] = min(1.0, running)
+            return adjusted
+
+
+        def read_metadata_rows(path: Path, delimiter: str | None = None):
+            detected_delimiter = detect_matrix_delimiter(path, delimiter)
+            with open_text_auto(path) as handle:
+                reader = csv.DictReader(handle, delimiter=detected_delimiter)
+                if reader.fieldnames is None:
+                    raise SystemExit(f"Metadata input has no header: {{path}}")
+                return list(reader)
+
+
+        def read_counts_rows(path: Path, delimiter: str | None = None):
+            detected_delimiter = detect_matrix_delimiter(path, delimiter)
+            with open_text_auto(path) as handle:
+                reader = csv.DictReader(handle, delimiter=detected_delimiter)
+                if reader.fieldnames is None:
+                    raise SystemExit(f"Counts input has no header: {{path}}")
+                return reader.fieldnames, list(reader)
+
+
+        def build_metadata_lookup(rows, sample_id_column):
+            lookup = {{}}
+            for row in rows:
+                sample_id = str(row.get(sample_id_column, "")).strip()
+                if sample_id:
+                    lookup[sample_id] = row
+            return lookup
+
+
+        def resolve_additional_input(bundle, input_id):
+            input_lookup = input_map(bundle)
+            if input_id not in input_lookup:
+                raise SystemExit(f"Unknown input_id referenced in workflow options: {{input_id}}")
+            return input_lookup[input_id], resolve_input_path(input_lookup[input_id])
+
+
+        def infer_sample_columns(fieldnames, gene_id_column, gene_symbol_column):
+            reserved = {{gene_id_column, gene_symbol_column}}
+            return [name for name in fieldnames if name not in reserved]
+
+
+        def write_prepared_de_tsv(path: Path, rows):
+            with path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    delimiter="\\t",
+                    fieldnames=["gene_id", "gene_symbol", "logFC", "pvalue", "padj"],
+                    lineterminator="\\n",
+                )
+                writer.writeheader()
+                for row in rows:
+                    writer.writerow(row)
+
+
+        def write_prepared_signed_term_gene_tsv(path: Path, rows):
+            with path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    delimiter="\\t",
+                    fieldnames=["term", "gene_id", "gene_symbol", "score", "sign"],
+                    lineterminator="\\n",
+                )
+                writer.writeheader()
+                for row in rows:
+                    writer.writerow(row)
+
+
+        def prepare_released_de_multi_partition(*, input_path: Path, workflow_dir: Path, model, options, partition):
+            if not input_path.is_file():
+                raise SystemExit(f"released_de_multi_partition expects a file input, got: {{input_path}}")
+            workflow_dir.mkdir(parents=True, exist_ok=True)
+            manifest_path = workflow_dir / "workflow_manifest.json"
+            delimiter = detect_matrix_delimiter(input_path, str(options.get("workflow_delimiter", "")).strip() or None)
+            gene_id_column = str(options.get("workflow_gene_id_column", "gene_id"))
+            gene_symbol_column = str(options.get("workflow_gene_symbol_column", "gene_symbol"))
+            logfc_column = str(options.get("workflow_logfc_column", "logFC"))
+            pvalue_column = str(options.get("workflow_pvalue_column", "pvalue"))
+            padj_column = str(options.get("workflow_padj_column", "padj"))
+            rows_out = []
+            with open_text_auto(input_path) as handle:
+                reader = csv.DictReader(handle, delimiter=delimiter)
+                if reader.fieldnames is None:
+                    raise SystemExit(f"Released DE input has no header: {{input_path}}")
+                fieldnames = set(reader.fieldnames)
+                required = [gene_id_column, gene_symbol_column, logfc_column, pvalue_column, padj_column]
+                missing = [name for name in required if name not in fieldnames]
+                if missing:
+                    raise SystemExit(
+                        f"Released DE input {{input_path}} missing required columns: {{missing}}. "
+                        f"Columns: {{sorted(fieldnames)}}"
+                    )
+                for row in reader:
+                    gene_id = str(row.get(gene_id_column, "")).strip()
+                    gene_symbol = str(row.get(gene_symbol_column, "")).strip()
+                    if not gene_id and not gene_symbol:
+                        continue
+                    rows_out.append(
+                        {{
+                            "gene_id": gene_id,
+                            "gene_symbol": gene_symbol,
+                            "logFC": str(row.get(logfc_column, "")).strip(),
+                            "pvalue": str(row.get(pvalue_column, "")).strip() or "1",
+                            "padj": str(row.get(padj_column, "")).strip() or "1",
+                        }}
+                    )
+            emit_signed_term_gene = parse_bool(options.get("workflow_emit_signed_term_gene"), False)
+            if emit_signed_term_gene:
+                workflow_output = workflow_dir / "prepared_signed_term_gene.tsv"
+                sign_threshold = parse_float(options.get("workflow_sign_threshold"), 0.0)
+                positive_label = str(options.get("workflow_positive_label", "+")).strip() or "+"
+                negative_label = str(options.get("workflow_negative_label", "-")).strip() or "-"
+                term_template = str(options.get("workflow_term_template", "{{partition_label}}_{{model_id}}")).strip()
+                term_name = normalize_term_label(
+                    render_template(
+                        term_template,
+                        {{
+                            "partition_id": partition["partition_id"],
+                            "partition_label": partition["partition_label"],
+                            "model_id": model["model_id"],
+                            "model_label": model["model_label"],
+                        }},
+                    )
+                )
+                signed_rows = []
+                for row in rows_out:
+                    score_value = parse_float(row["logFC"], 0.0)
+                    if score_value > sign_threshold:
+                        sign_value = positive_label
+                    elif score_value < -sign_threshold:
+                        sign_value = negative_label
+                    else:
+                        continue
+                    signed_rows.append(
+                        {{
+                            "term": term_name,
+                            "gene_id": row["gene_id"],
+                            "gene_symbol": row["gene_symbol"],
+                            "score": f"{{abs(score_value):.10g}}",
+                            "sign": sign_value,
+                        }}
+                    )
+                write_prepared_signed_term_gene_tsv(workflow_output, signed_rows)
+            else:
+                workflow_output = workflow_dir / "prepared_de.tsv"
+                write_prepared_de_tsv(workflow_output, rows_out)
+            write_json(
+                manifest_path,
+                {{
+                    "workflow_archetype": WORKFLOW_ARCHETYPE,
+                    "partition_id": partition["partition_id"],
+                    "model_id": model["model_id"],
+                    "input_path": str(input_path),
+                    "workflow_output": str(workflow_output),
+                    "n_rows": len(rows_out),
+                    "emit_signed_term_gene": emit_signed_term_gene,
+                    "workflow_options": {{
+                        "workflow_gene_id_column": gene_id_column,
+                        "workflow_gene_symbol_column": gene_symbol_column,
+                        "workflow_logfc_column": logfc_column,
+                        "workflow_pvalue_column": pvalue_column,
+                        "workflow_padj_column": padj_column,
+                    }},
+                }},
+            )
+            return workflow_output
+
+
+        def prepare_counts_based_workflow(*, input_path: Path, workflow_dir: Path, model, options, partition, workflow_archetype):
+            if not input_path.is_file():
+                raise SystemExit(f"{{workflow_archetype}} expects a counts matrix file input, got: {{input_path}}")
+            workflow_dir.mkdir(parents=True, exist_ok=True)
+            bundle = load_bundle()
+            sample_metadata_input_id = str(options.get("workflow_sample_metadata_input_id", "")).strip()
+            if not sample_metadata_input_id:
+                raise SystemExit(f"{{workflow_archetype}} requires workflow_sample_metadata_input_id")
+            sample_row, sample_metadata_path = resolve_additional_input(bundle, sample_metadata_input_id)
+            counts_delimiter = detect_matrix_delimiter(input_path, str(options.get("workflow_counts_delimiter", "")).strip() or None)
+            metadata_delimiter = detect_matrix_delimiter(sample_metadata_path, str(options.get("workflow_metadata_delimiter", "")).strip() or None)
+            sample_id_column = str(options.get("workflow_sample_id_column", "sample_id")).strip()
+            gene_id_column = str(options.get("workflow_gene_id_column", "gene_id")).strip()
+            gene_symbol_column = str(options.get("workflow_gene_symbol_column", "gene_symbol")).strip()
+            metadata_rows = read_metadata_rows(sample_metadata_path, metadata_delimiter)
+            metadata_lookup = build_metadata_lookup(metadata_rows, sample_id_column)
+            fieldnames, count_rows = read_counts_rows(input_path, counts_delimiter)
+            sample_columns = infer_sample_columns(fieldnames, gene_id_column, gene_symbol_column)
+            valid_samples = [sample for sample in sample_columns if sample in metadata_lookup]
+            if not valid_samples:
+                raise SystemExit(
+                    f"No sample columns in counts matrix matched metadata sample IDs via {{sample_id_column!r}}"
+                )
+
+            workflow_mode = str(options.get("workflow_mode", "binary")).strip() or "binary"
+            prepared_rows = []
+            summary = {{
+                "workflow_archetype": workflow_archetype,
+                "partition_id": partition["partition_id"],
+                "model_id": model["model_id"],
+                "input_path": str(input_path),
+                "sample_metadata_input_path": str(sample_metadata_path),
+                "n_samples": len(valid_samples),
+                "n_genes": 0,
+                "workflow_mode": workflow_mode,
+            }}
+
+            if workflow_mode == "binary":
+                group_column = str(options.get("workflow_group_column", "")).strip()
+                reference_value = str(options.get("workflow_reference_value", "")).strip()
+                comparison_value = str(options.get("workflow_comparison_value", "")).strip()
+                if not group_column or not reference_value or not comparison_value:
+                    raise SystemExit(
+                        f"{{workflow_archetype}} binary mode requires workflow_group_column, workflow_reference_value, and workflow_comparison_value"
+                    )
+                reference_samples = [sample for sample in valid_samples if str(metadata_lookup[sample].get(group_column, "")).strip() == reference_value]
+                comparison_samples = [sample for sample in valid_samples if str(metadata_lookup[sample].get(group_column, "")).strip() == comparison_value]
+                if not reference_samples or not comparison_samples:
+                    raise SystemExit(
+                        f"{{workflow_archetype}} could not find samples for binary comparison {{comparison_value!r}} vs {{reference_value!r}}"
+                    )
+                pvalues = []
+                temp_rows = []
+                pseudocount = parse_float(options.get("workflow_pseudocount"), 1.0)
+                for row in count_rows:
+                    gene_id = str(row.get(gene_id_column, "")).strip()
+                    gene_symbol = str(row.get(gene_symbol_column, "")).strip()
+                    ref_values = [parse_float(row.get(sample, 0.0)) for sample in reference_samples]
+                    cmp_values = [parse_float(row.get(sample, 0.0)) for sample in comparison_samples]
+                    ref_mean = mean(ref_values)
+                    cmp_mean = mean(cmp_values)
+                    logfc = math.log2((cmp_mean + pseudocount) / (ref_mean + pseudocount))
+                    ref_var = variance(ref_values, ref_mean)
+                    cmp_var = variance(cmp_values, cmp_mean)
+                    denom = math.sqrt((cmp_var / max(len(cmp_values), 1)) + (ref_var / max(len(ref_values), 1)))
+                    z_value = 0.0 if denom == 0 else (cmp_mean - ref_mean) / denom
+                    pvalue = normal_pvalue_from_z(z_value)
+                    temp_rows.append((gene_id, gene_symbol, logfc, pvalue))
+                    pvalues.append(pvalue)
+                padj_values = benjamini_hochberg(pvalues) if pvalues else []
+                for (gene_id, gene_symbol, logfc, pvalue), padj in zip(temp_rows, padj_values):
+                    prepared_rows.append(
+                        {{
+                            "gene_id": gene_id,
+                            "gene_symbol": gene_symbol,
+                            "logFC": f"{{logfc:.10g}}",
+                            "pvalue": f"{{pvalue:.10g}}",
+                            "padj": f"{{padj:.10g}}",
+                        }}
+                    )
+                summary["reference_samples"] = reference_samples
+                summary["comparison_samples"] = comparison_samples
+            elif workflow_mode == "continuous":
+                value_column = str(options.get("workflow_value_column", "")).strip()
+                if not value_column:
+                    raise SystemExit(f"{{workflow_archetype}} continuous mode requires workflow_value_column")
+                scored_samples = []
+                for sample in valid_samples:
+                    raw_value = str(metadata_lookup[sample].get(value_column, "")).strip()
+                    if raw_value == "":
+                        continue
+                    try:
+                        scored_samples.append((sample, float(raw_value)))
+                    except ValueError:
+                        continue
+                if len(scored_samples) < 3:
+                    raise SystemExit(f"{{workflow_archetype}} continuous mode requires at least 3 samples with {{value_column!r}}")
+                samples = [sample for sample, _ in scored_samples]
+                phenotype_values = [value for _, value in scored_samples]
+                phenotype_mean = mean(phenotype_values)
+                phenotype_var = variance(phenotype_values, phenotype_mean)
+                pvalues = []
+                temp_rows = []
+                for row in count_rows:
+                    gene_id = str(row.get(gene_id_column, "")).strip()
+                    gene_symbol = str(row.get(gene_symbol_column, "")).strip()
+                    gene_values = [parse_float(row.get(sample, 0.0)) for sample in samples]
+                    gene_mean = mean(gene_values)
+                    gene_var = variance(gene_values, gene_mean)
+                    cov = 0.0
+                    for gene_value, pheno_value in zip(gene_values, phenotype_values):
+                        cov += (gene_value - gene_mean) * (pheno_value - phenotype_mean)
+                    if len(gene_values) > 1:
+                        cov /= (len(gene_values) - 1)
+                    corr_denom = math.sqrt(max(gene_var, 0.0) * max(phenotype_var, 0.0))
+                    corr = 0.0 if corr_denom == 0 else cov / corr_denom
+                    corr = max(min(corr, 1.0), -1.0)
+                    if len(gene_values) > 2 and abs(corr) < 1.0:
+                        z_value = abs(corr) * math.sqrt(len(gene_values) - 2) / math.sqrt(max(1e-12, 1 - corr**2))
+                    else:
+                        z_value = 0.0
+                    pvalue = normal_pvalue_from_z(z_value)
+                    temp_rows.append((gene_id, gene_symbol, corr, pvalue))
+                    pvalues.append(pvalue)
+                padj_values = benjamini_hochberg(pvalues) if pvalues else []
+                for (gene_id, gene_symbol, corr, pvalue), padj in zip(temp_rows, padj_values):
+                    prepared_rows.append(
+                        {{
+                            "gene_id": gene_id,
+                            "gene_symbol": gene_symbol,
+                            "logFC": f"{{corr:.10g}}",
+                            "pvalue": f"{{pvalue:.10g}}",
+                            "padj": f"{{padj:.10g}}",
+                        }}
+                    )
+                summary["continuous_samples"] = samples
+                summary["continuous_value_column"] = value_column
+            else:
+                raise SystemExit(f"Unsupported workflow_mode for counts-based workflow: {{workflow_mode!r}}")
+
+            summary["n_genes"] = len(prepared_rows)
+            emit_signed_term_gene = parse_bool(options.get("workflow_emit_signed_term_gene"), False)
+            if emit_signed_term_gene:
+                workflow_output = workflow_dir / "prepared_signed_term_gene.tsv"
+                sign_threshold = parse_float(options.get("workflow_sign_threshold"), 0.0)
+                positive_label = str(options.get("workflow_positive_label", "+")).strip() or "+"
+                negative_label = str(options.get("workflow_negative_label", "-")).strip() or "-"
+                term_template = str(options.get("workflow_term_template", "{{partition_label}}_{{model_id}}")).strip()
+                term_name = normalize_term_label(
+                    render_template(
+                        term_template,
+                        {{
+                            "partition_id": partition["partition_id"],
+                            "partition_label": partition["partition_label"],
+                            "model_id": model["model_id"],
+                            "model_label": model["model_label"],
+                        }},
+                    )
+                )
+                signed_rows = []
+                for row in prepared_rows:
+                    score_value = parse_float(row["logFC"], 0.0)
+                    if score_value > sign_threshold:
+                        sign_value = positive_label
+                    elif score_value < -sign_threshold:
+                        sign_value = negative_label
+                    else:
+                        continue
+                    signed_rows.append(
+                        {{
+                            "term": term_name,
+                            "gene_id": row["gene_id"],
+                            "gene_symbol": row["gene_symbol"],
+                            "score": f"{{abs(score_value):.10g}}",
+                            "sign": sign_value,
+                        }}
+                    )
+                write_prepared_signed_term_gene_tsv(workflow_output, signed_rows)
+                summary["n_signed_rows"] = len(signed_rows)
+            else:
+                workflow_output = workflow_dir / "prepared_de.tsv"
+                write_prepared_de_tsv(workflow_output, prepared_rows)
+            write_json(workflow_dir / "workflow_manifest.json", summary)
+            return workflow_output
+
+
         def prepare_table_directory_marker_library(*, input_path: Path, workflow_dir: Path, model, options, partition):
             if not input_path.is_dir():
                 raise SystemExit(f"table_directory_marker_library expects a directory input, got: {{input_path}}")
@@ -1855,6 +2244,32 @@ def build_generated_runtime_code(library_name: str, library_slug: str, archetype
                     model=model,
                     options=options,
                     partition=partition,
+                )
+            if workflow_archetype == "released_de_multi_partition":
+                return prepare_released_de_multi_partition(
+                    input_path=input_path,
+                    workflow_dir=workflow_dir,
+                    model=model,
+                    options=options,
+                    partition=partition,
+                )
+            if workflow_archetype == "bulk_counts_multi_model":
+                return prepare_counts_based_workflow(
+                    input_path=input_path,
+                    workflow_dir=workflow_dir,
+                    model=model,
+                    options=options,
+                    partition=partition,
+                    workflow_archetype=workflow_archetype,
+                )
+            if workflow_archetype == "raw_counts_training_timecourse":
+                return prepare_counts_based_workflow(
+                    input_path=input_path,
+                    workflow_dir=workflow_dir,
+                    model=model,
+                    options=options,
+                    partition=partition,
+                    workflow_archetype=workflow_archetype,
                 )
             raise SystemExit(
                 f"Generated package does not yet implement workflow_archetype={{workflow_archetype!r}}. "
