@@ -1551,6 +1551,36 @@ def build_generated_runtime_code(library_name: str, library_slug: str, archetype
             return text or "term"
 
 
+        def detect_matrix_delimiter(path: Path, explicit_delimiter: str | None = None) -> str:
+            if explicit_delimiter:
+                return explicit_delimiter
+            name = path.name.lower()
+            if name.endswith(".csv") or name.endswith(".csv.gz"):
+                return ","
+            return "\\t"
+
+
+        def load_mapping_table(path: Path, *, key_column: str, value_column: str, delimiter: str | None = None):
+            mapping = {{}}
+            detected_delimiter = detect_matrix_delimiter(path, delimiter)
+            with open_text_auto(path) as handle:
+                reader = csv.DictReader(handle, delimiter=detected_delimiter)
+                if reader.fieldnames is None:
+                    raise SystemExit(f"Mapping file has no header: {{path}}")
+                fieldnames = set(reader.fieldnames)
+                if key_column not in fieldnames or value_column not in fieldnames:
+                    raise SystemExit(
+                        f"Mapping file {{path}} missing required columns {{key_column!r}}/{{value_column!r}}. "
+                        f"Columns: {{sorted(fieldnames)}}"
+                    )
+                for row in reader:
+                    key = str(row.get(key_column, "")).strip()
+                    value = str(row.get(value_column, "")).strip()
+                    if key and value and key not in mapping:
+                        mapping[key] = value
+            return mapping
+
+
         def prepare_table_directory_marker_library(*, input_path: Path, workflow_dir: Path, model, options, partition):
             if not input_path.is_dir():
                 raise SystemExit(f"table_directory_marker_library expects a directory input, got: {{input_path}}")
@@ -1656,11 +1686,170 @@ def build_generated_runtime_code(library_name: str, library_slug: str, archetype
             return workflow_output
 
 
+        def prepare_matrix_signature_library(*, input_path: Path, workflow_dir: Path, model, options, partition):
+            if not input_path.is_file():
+                raise SystemExit(f"matrix_signature_library expects a file input, got: {{input_path}}")
+            workflow_dir.mkdir(parents=True, exist_ok=True)
+            matrix_delimiter = detect_matrix_delimiter(input_path, str(options.get("workflow_delimiter", "")).strip() or None)
+            feature_id_column = str(options.get("workflow_feature_id_column", "")).strip()
+            direct_gene_symbol_column = str(options.get("workflow_gene_symbol_column", "")).strip()
+            direct_gene_id_column = str(options.get("workflow_gene_id_output_column", "gene_id")).strip() or "gene_id"
+            sign_threshold = float(options.get("workflow_sign_threshold", 0))
+            abs_score_min = float(options.get("workflow_abs_score_min", 0))
+            emit_zero_rows = parse_bool(options.get("workflow_emit_zero_rows"), False)
+            positive_label = str(options.get("workflow_positive_label", "+")).strip() or "+"
+            negative_label = str(options.get("workflow_negative_label", "-")).strip() or "-"
+            term_prefix = str(options.get("workflow_term_prefix", options.get("term_prefix", ""))).strip()
+
+            mapping_input_id = str(options.get("workflow_mapping_input_id", "")).strip()
+            mapping_key_column = str(options.get("workflow_mapping_key_column", "")).strip()
+            mapping_value_column = str(options.get("workflow_mapping_value_column", "")).strip()
+            mapping_delimiter = str(options.get("workflow_mapping_delimiter", "")).strip() or None
+            mapping_table = {{}}
+            mapping_path = None
+            if mapping_input_id:
+                bundle = load_bundle()
+                input_lookup = input_map(bundle)
+                if mapping_input_id not in input_lookup:
+                    raise SystemExit(f"workflow_mapping_input_id not found in bundle inputs: {{mapping_input_id}}")
+                mapping_row = input_lookup[mapping_input_id]
+                mapping_path = resolve_input_path(mapping_row)
+                if not mapping_key_column or not mapping_value_column:
+                    raise SystemExit(
+                        "matrix_signature_library with workflow_mapping_input_id also requires "
+                        "workflow_mapping_key_column and workflow_mapping_value_column"
+                    )
+                mapping_table = load_mapping_table(
+                    mapping_path,
+                    key_column=mapping_key_column,
+                    value_column=mapping_value_column,
+                    delimiter=mapping_delimiter,
+                )
+
+            workflow_output = workflow_dir / "prepared_signed_term_gene.tsv"
+            manifest_path = workflow_dir / "workflow_manifest.json"
+            n_rows = 0
+            n_terms = 0
+            missing_mapping_values = 0
+            with open_text_auto(input_path) as handle, workflow_output.open("w", encoding="utf-8", newline="") as out_handle:
+                reader = csv.DictReader(handle, delimiter=matrix_delimiter)
+                if reader.fieldnames is None:
+                    raise SystemExit(f"Matrix input has no header: {{input_path}}")
+                fieldnames = list(reader.fieldnames)
+                if feature_id_column:
+                    if feature_id_column not in fieldnames:
+                        raise SystemExit(
+                            f"Matrix input {{input_path}} missing workflow_feature_id_column {{feature_id_column!r}}. "
+                            f"Columns: {{fieldnames}}"
+                        )
+                    signature_columns = [name for name in fieldnames if name != feature_id_column]
+                elif direct_gene_symbol_column:
+                    if direct_gene_symbol_column not in fieldnames:
+                        raise SystemExit(
+                            f"Matrix input {{input_path}} missing workflow_gene_symbol_column {{direct_gene_symbol_column!r}}. "
+                            f"Columns: {{fieldnames}}"
+                        )
+                    signature_columns = [name for name in fieldnames if name != direct_gene_symbol_column]
+                else:
+                    raise SystemExit(
+                        "matrix_signature_library requires either workflow_feature_id_column plus mapping input, "
+                        "or workflow_gene_symbol_column for direct matrix parsing"
+                    )
+                writer = csv.DictWriter(
+                    out_handle,
+                    delimiter="\\t",
+                    fieldnames=["term", "gene_id", "gene_symbol", "score", "sign"],
+                    lineterminator="\\n",
+                )
+                writer.writeheader()
+                normalized_terms = []
+                for signature_name in signature_columns:
+                    term_name = normalize_term_label(signature_name)
+                    if term_prefix:
+                        term_name = f"{{term_prefix}}_{{term_name}}"
+                    normalized_terms.append((signature_name, term_name))
+                n_terms = len(normalized_terms)
+                for row in reader:
+                    if feature_id_column:
+                        feature_id = str(row.get(feature_id_column, "")).strip()
+                        gene_symbol = mapping_table.get(feature_id, "")
+                        gene_id = feature_id
+                        if not gene_symbol:
+                            missing_mapping_values += 1
+                            continue
+                    else:
+                        gene_symbol = str(row.get(direct_gene_symbol_column, "")).strip()
+                        gene_id = gene_symbol
+                    if not gene_symbol:
+                        continue
+                    for raw_term, normalized_term in normalized_terms:
+                        raw_value = str(row.get(raw_term, "")).strip()
+                        if raw_value == "":
+                            continue
+                        try:
+                            numeric_value = float(raw_value)
+                        except ValueError:
+                            continue
+                        if abs(numeric_value) < abs_score_min:
+                            continue
+                        if numeric_value > sign_threshold:
+                            sign_value = positive_label
+                        elif numeric_value < -sign_threshold:
+                            sign_value = negative_label
+                        elif emit_zero_rows:
+                            sign_value = positive_label
+                        else:
+                            continue
+                        writer.writerow(
+                            {{
+                                "term": normalized_term,
+                                "gene_id": gene_id,
+                                "gene_symbol": gene_symbol,
+                                "score": str(abs(numeric_value)),
+                                "sign": sign_value,
+                            }}
+                        )
+                        n_rows += 1
+            write_json(
+                manifest_path,
+                {{
+                    "workflow_archetype": WORKFLOW_ARCHETYPE,
+                    "partition_id": partition["partition_id"],
+                    "model_id": model["model_id"],
+                    "input_path": str(input_path),
+                    "mapping_input_path": str(mapping_path) if mapping_path else "",
+                    "workflow_output": str(workflow_output),
+                    "n_terms": n_terms,
+                    "n_rows": n_rows,
+                    "missing_mapping_values": missing_mapping_values,
+                    "workflow_options": {{
+                        "workflow_feature_id_column": feature_id_column,
+                        "workflow_gene_symbol_column": direct_gene_symbol_column,
+                        "workflow_mapping_input_id": mapping_input_id,
+                        "workflow_mapping_key_column": mapping_key_column,
+                        "workflow_mapping_value_column": mapping_value_column,
+                        "workflow_sign_threshold": sign_threshold,
+                        "workflow_abs_score_min": abs_score_min,
+                        "workflow_term_prefix": term_prefix,
+                    }},
+                }},
+            )
+            return workflow_output
+
+
         def prepare_workflow_input(*, workflow_archetype, input_path: Path, workflow_dir: Path, model, options, partition):
             if workflow_archetype == "simple_converter":
                 return input_path
             if workflow_archetype == "table_directory_marker_library":
                 return prepare_table_directory_marker_library(
+                    input_path=input_path,
+                    workflow_dir=workflow_dir,
+                    model=model,
+                    options=options,
+                    partition=partition,
+                )
+            if workflow_archetype == "matrix_signature_library":
+                return prepare_matrix_signature_library(
                     input_path=input_path,
                     workflow_dir=workflow_dir,
                     model=model,
