@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/broadinstitute/geneset-extractor-dev/schemas/submission-system-v1.schema.json",
+  "title": "New-library submission metadata",
+  "type": "object",
+  "required": ["schema_version", "library", "sources", "dig", "configs", "reproduction", "expected_outputs", "environment", "deviations", "paired_pull_requests"],
+  "properties": {
+    "schema_version": {"type": "string", "pattern": "^1\\.[0-9]+\\.[0-9]+$"},
+    "submission_status": {"enum": ["draft", "ready"]},
+    "library": {"type": "object", "required": ["id", "display_name", "organism", "assay_types", "closest_reference_pattern", "wrapper_directory"]},
+    "sources": {"type": "array", "minItems": 1},
+    "dig": {"type": "object", "required": ["repository_url", "commit", "entrypoints"]},
+    "configs": {"type": "object", "required": ["model_config", "partition_config", "description_config"]},
+    "reproduction": {"type": "object", "required": ["entry_point", "input_manifest", "smoke_test_command"]},
+    "expected_outputs": {"type": "object", "required": ["manifest"]},
+    "environment": {"type": "object", "required": ["declaration"]},
+    "deviations": {"type": "object", "required": ["from_standard_architecture", "allow_wrapper_findings"]},
+    "paired_pull_requests": {"type": "object", "required": ["geneset_extractor_dev", "dig_gene_set_extractors"]}
+  }
+}
