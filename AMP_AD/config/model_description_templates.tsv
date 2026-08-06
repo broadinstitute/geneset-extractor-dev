@@ -1,0 +1,2 @@
+model_id	description_template
+AD1	AMP-AD bulk brain RNA differential-expression gene set for {comparison_label} using model {model.model_id}: library built from the AD Knowledge Portal released merged differential-expression summary table, grouped by study, tissue, model, comparison, and sex.

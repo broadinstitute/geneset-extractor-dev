@@ -26,8 +26,12 @@
 !HuBMAP/config/model_list.tsv
 !HuBMAP/config/model_manifest.tsv
 !HuBMAP/config/model_description_templates.tsv
+!AMP_AD/config/model_list.tsv
+!AMP_AD/config/model_manifest.tsv
+!AMP_AD/config/model_description_templates.tsv
 
 # Allow traversing these subdirectories
+!AMP_AD/
 !LINCS_L1000/
 !RummaGEO/
 !ExRNA/
@@ -43,6 +47,7 @@
 !proposals/
 !docs/
 
+!AMP_AD/**/
 !LINCS_L1000/**/
 !RummaGEO/**/
 !ExRNA/**/
@@ -79,6 +84,9 @@
 
 !docs/**/*.md
 
+!AMP_AD/src/**/*.py
+!AMP_AD/run/**/*.sh
+!AMP_AD/planning/**/*.md
 !LINCS_L1000/**/*.py
 !LINCS_L1000/**/*.r
 !LINCS_L1000/**/*.R
