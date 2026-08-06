@@ -1,0 +1,2 @@
+output_id	relative_path	role	required	model_id	partition_id
+synthetic_metadata	genesets/synthetic_partition/models/SYN1/extractor/geneset.meta.json	metadata	true	SYN1	synthetic_partition

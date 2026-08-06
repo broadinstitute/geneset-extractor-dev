@@ -19,3 +19,7 @@ bash run/test_submission_tools.sh
 Read [architecture.md](architecture.md), [submission-schema.md](submission-schema.md),
 [reproduction-contract.md](reproduction-contract.md), and
 [review-policy.md](review-policy.md) before filling a scaffold.
+
+See the explicitly non-biological, test-only
+[`examples/synthetic_submission`](../../examples/synthetic_submission/README.md)
+for a complete small package.

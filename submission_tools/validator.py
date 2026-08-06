@@ -9,7 +9,7 @@ from typing import Any
 
 from .yaml_loader import load
 
-INPUT_HEADERS = {"input_id", "source_uri_or_access_instructions", "version_release", "checksum", "access_method", "smoke_full", "workflow_stage", "redistribution_status"}
+INPUT_HEADERS = {"input_id", "source_uri_or_access_instructions", "version_release", "checksum", "access_method", "smoke_full", "workflow_stage", "redistribution_status", "committed_fixture", "fixture_path"}
 OUTPUT_HEADERS = {"output_id", "relative_path", "role", "required", "model_id", "partition_id"}
 MODEL_HEADERS = {"model_id"}
 PARTITION_HEADERS = {"partition_id", "tissue_id", "dataset_id", "signature_id"}
@@ -157,7 +157,10 @@ def _wrapper_scan(root: Path, wrapper: Path, data: dict[str, Any], result: Valid
 
 
 def _script_checks(root: Path, entry: Path, result: ValidationResult) -> None:
-    for script in (entry, root / "reproduction" / "download_inputs.sh"):
+    download_script = root / "reproduction" / "download_inputs.sh"
+    if not download_script.exists():
+        result.add("error", "missing_script", "required reproduction/download_inputs.sh does not exist")
+    for script in (entry, download_script):
         if not script.exists():
             continue
         if not os.access(script, os.X_OK):
@@ -174,6 +177,29 @@ def _script_checks(root: Path, entry: Path, result: ValidationResult) -> None:
             result.add("error", "manual_transform", f"{script.relative_to(root)} documents a manual spreadsheet transformation")
     if "--smoke" not in entry.read_text(encoding="utf-8", errors="ignore"):
         result.add("error", "smoke_mode", "reproduction entry point must support --smoke or document an equivalent")
+
+
+def _fixture_checks(root: Path, input_rows: list[dict[str, str]], result: ValidationResult) -> None:
+    declared: set[Path] = set()
+    for row in input_rows:
+        fixture_path = row.get("fixture_path", "").strip()
+        committed = row.get("committed_fixture", "").strip().lower()
+        if fixture_path:
+            if not _safe_relative(fixture_path):
+                result.add("error", "fixture_path", f"unsafe fixture_path for {row.get('input_id')}: {fixture_path}")
+                continue
+            candidate = root / fixture_path
+            if not candidate.is_file():
+                result.add("error", "fixture_path", f"declared fixture does not exist: {fixture_path}")
+                continue
+            declared.add(candidate.resolve())
+        if committed in {"true", "yes", "1"} and not fixture_path:
+            result.add("error", "fixture_path", f"committed fixture {row.get('input_id')} requires fixture_path")
+    fixture_root = root / "tests" / "fixtures"
+    if fixture_root.is_dir():
+        for candidate in fixture_root.rglob("*"):
+            if candidate.is_file() and candidate.name.lower() not in {"readme.md", ".gitkeep"} and candidate.resolve() not in declared:
+                result.add("error", "undeclared_input", f"committed fixture is not declared in input_manifest.tsv: {candidate.relative_to(root)}")
 
 
 def validate_submission(submission: Path) -> ValidationResult:
@@ -224,4 +250,5 @@ def validate_submission(submission: Path) -> ValidationResult:
         _wrapper_scan(root, paths["wrapper_directory"], data, result)
     if paths["reproduction_entry_point"]:
         _script_checks(root, paths["reproduction_entry_point"], result)
+    _fixture_checks(root, input_rows, result)
     return result

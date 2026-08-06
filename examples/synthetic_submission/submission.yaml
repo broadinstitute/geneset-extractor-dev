@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0.0",
+  "submission_status": "draft",
+  "library": {
+    "id": "synthetic_submission_example",
+    "display_name": "Synthetic Submission Example (test-only)",
+    "organism": "synthetic",
+    "genome_build": "not_applicable",
+    "assay_types": ["synthetic_test_data"],
+    "closest_reference_pattern": "generic",
+    "wrapper_directory": "."
+  },
+  "sources": [{
+    "name": "synthetic_fixture_input",
+    "uri_or_identifier": "urn:example:synthetic-submission-fixture:v1",
+    "release": "v1",
+    "access_restrictions": "none; test-only synthetic data",
+    "license": "CC0-1.0"
+  }],
+  "dig": {
+    "repository_url": "https://github.com/flannick/dig-gene-set-extractors",
+    "commit": "TODO",
+    "entrypoints": ["geneset-extractors list"]
+  },
+  "configs": {
+    "model_config": "config/model_list.tsv",
+    "partition_config": "config/partition_list.tsv",
+    "description_config": "config/model_description_templates.tsv"
+  },
+  "reproduction": {
+    "entry_point": "reproduction/reproduce.sh",
+    "input_manifest": "reproduction/input_manifest.tsv",
+    "smoke_test_command": "bash reproduction/reproduce.sh --smoke"
+  },
+  "expected_outputs": {"manifest": "expected/output_manifest.tsv"},
+  "environment": {"declaration": "Python 3 standard library; DIG command is simulated in smoke tests."},
+  "deviations": {"from_standard_architecture": ["Test-only synthetic example; no real workflow is executed."], "allow_wrapper_findings": []},
+  "paired_pull_requests": {"geneset_extractor_dev": "TBD", "dig_gene_set_extractors": "TBD"}
+}

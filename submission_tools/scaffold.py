@@ -14,7 +14,7 @@ PATTERNS = {
     "generic": ("library-specific DIG workflow", "partition_id"),
 }
 
-INPUT_HEADERS = ["input_id", "source_uri_or_access_instructions", "version_release", "checksum", "access_method", "smoke_full", "workflow_stage", "redistribution_status", "committed_fixture"]
+INPUT_HEADERS = ["input_id", "source_uri_or_access_instructions", "version_release", "checksum", "access_method", "smoke_full", "workflow_stage", "redistribution_status", "committed_fixture", "fixture_path"]
 OUTPUT_HEADERS = ["output_id", "relative_path", "role", "required", "model_id", "partition_id"]
 
 
@@ -52,7 +52,7 @@ def scaffold(root: Path, library_id: str, display_name: str, pattern: str) -> No
     _write(root / "config/model_list.tsv", "model_id\tenabled\nM1\tfalse\n")
     _write(root / "config/partition_list.tsv", f"{partition_field}\nexample\n")
     _write(root / "config/model_description_templates.tsv", "model_id\tdescription_template\nM1\tTODO\n")
-    _write(root / "reproduction/input_manifest.tsv", "\t".join(INPUT_HEADERS) + "\nexample_input\tTODO\tTODO\t\tmanual\tsmoke,full\tworkflow_input\tnot_redistributable\tfalse\n")
+    _write(root / "reproduction/input_manifest.tsv", "\t".join(INPUT_HEADERS) + "\nexample_input\tTODO\tTODO\t\tmanual\tsmoke,full\tworkflow_input\tnot_redistributable\tfalse\t\n")
     _write(root / "expected/output_manifest.tsv", "\t".join(OUTPUT_HEADERS) + "\nexample_output\tgenesets/example/models/M1/extractor/geneset.meta.json\tmetadata\ttrue\tM1\texample\n")
     _write(root / "reproduction/download_inputs.sh", "#!/usr/bin/env bash\nset -euo pipefail\necho 'TODO: obtain inputs described in input_manifest.tsv'\n", executable=True)
     _write(root / "reproduction/reproduce.sh", "#!/usr/bin/env bash\nset -euo pipefail\nmode=${1:-full}\ncase \"${mode}\" in --smoke|full) ;; *) echo 'usage: reproduce.sh [--smoke|full]' >&2; exit 2;; esac\nbash reproduction/download_inputs.sh\necho \"TODO: dispatch the declared DIG entry point (${mode})\"\n", executable=True)
