@@ -98,6 +98,7 @@
 !examples/**/*.sh
 !examples/**/*.md
 !.github/**/*.yml
+!.github/**/*.md
 
 !LINCS_L1000/**/*.py
 !LINCS_L1000/**/*.r
