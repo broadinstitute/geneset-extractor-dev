@@ -1,0 +1,108 @@
+name: New gene-set source proposal
+description: Propose a source before implementing a new gene-set library.
+title: "New library source: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form before implementation. A proposal is not approval to use
+        restricted data or to publish a library.
+  - type: input
+    id: source_name
+    attributes:
+      label: Source name
+      description: Name of the source dataset, consortium, or release.
+    validations:
+      required: true
+  - type: input
+    id: source_release
+    attributes:
+      label: Source release or version
+      description: Give a version, release date, accession, or other stable identifier.
+    validations:
+      required: true
+  - type: input
+    id: source_url
+    attributes:
+      label: Source URL or stable identifier
+      description: Provide a landing-page URL, DOI, accession, or other durable identifier.
+    validations:
+      required: true
+  - type: textarea
+    id: access_restrictions
+    attributes:
+      label: Access restrictions
+      description: Describe public, registration, controlled-access, or other access requirements.
+      placeholder: Public download, dbGaP application, data-use agreement, or not yet known.
+    validations:
+      required: true
+  - type: textarea
+    id: license
+    attributes:
+      label: License or terms of use
+      description: Link the license or terms and state any anticipated redistribution limits.
+    validations:
+      required: true
+  - type: dropdown
+    id: assay_type
+    attributes:
+      label: Assay type
+      options:
+        - bulk RNA-seq
+        - single-cell RNA-seq
+        - ATAC-seq
+        - proteomics
+        - perturbational signature
+        - other
+    validations:
+      required: true
+  - type: input
+    id: organism
+    attributes:
+      label: Organism
+      placeholder: Homo sapiens
+    validations:
+      required: true
+  - type: textarea
+    id: gene_set_meaning
+    attributes:
+      label: Expected biological meaning of one gene set
+      description: Explain what a representative set represents and how its genes will be selected.
+    validations:
+      required: true
+  - type: input
+    id: model_count
+    attributes:
+      label: Approximate model count
+      placeholder: "For example: 50 tissue-by-method models"
+    validations:
+      required: true
+  - type: dropdown
+    id: closest_pattern
+    attributes:
+      label: Closest existing pattern
+      options:
+        - GTEx
+        - MoTrPAC
+        - HuBMAP
+        - LINCS_L1000
+        - Generic / no close pattern
+    validations:
+      required: true
+  - type: dropdown
+    id: new_dig_logic
+    attributes:
+      label: Is new DIG logic expected?
+      options:
+        - Yes
+        - No, an existing DIG workflow/converter should be sufficient
+        - Unknown; needs design review
+    validations:
+      required: true
+  - type: textarea
+    id: computational_requirements
+    attributes:
+      label: Anticipated computational requirements
+      description: Include expected input scale, memory/CPU, runtime, cluster needs, and special environments.
+    validations:
+      required: true

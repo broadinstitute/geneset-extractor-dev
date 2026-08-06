@@ -32,7 +32,9 @@ no secrets; it never runs submission download or reproduction scripts.
 
 Read [architecture.md](architecture.md), [submission-schema.md](submission-schema.md),
 [reproduction-contract.md](reproduction-contract.md), and
-[review-policy.md](review-policy.md) before filling a scaffold.
+[review-policy.md](review-policy.md) before filling a scaffold. Contributors
+should start with [contributor-workflow.md](contributor-workflow.md), including
+the proposal issue and paired-PR sequence.
 
 See the explicitly non-biological, test-only
 [`examples/synthetic_submission`](../../examples/synthetic_submission/README.md)
