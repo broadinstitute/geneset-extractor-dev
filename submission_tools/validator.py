@@ -95,8 +95,8 @@ def _validate_schema(data: dict[str, Any], result: ValidationResult) -> None:
             if not isinstance(source, dict) or any(not source.get(k) for k in ("name", "uri_or_identifier", "release", "access_restrictions", "license")):
                 result.add("error", "schema", f"sources[{index}] requires name, uri_or_identifier, release, access_restrictions, license")
     dig = _required_mapping(data, "dig", result)
-    if not str(dig.get("repository_url", "")).startswith(("https://", "git@")) or not isinstance(dig.get("entrypoints"), list) or not dig.get("entrypoints"):
-        result.add("error", "schema", "dig requires repository_url and non-empty entrypoints")
+    if not str(dig.get("repository_url", "")).startswith(("https://", "git@")) or not isinstance(dig.get("entrypoints"), list) or not dig.get("entrypoints") or not isinstance(dig.get("identifiers"), list) or not dig.get("identifiers"):
+        result.add("error", "schema", "dig requires repository_url, non-empty entrypoints, and identifiers")
     for section, keys in (("configs", ("model_config", "partition_config", "description_config")), ("reproduction", ("entry_point", "input_manifest", "smoke_test_command")), ("expected_outputs", ("manifest",)), ("environment", ("declaration",))):
         mapping = _required_mapping(data, section, result)
         for key in keys:

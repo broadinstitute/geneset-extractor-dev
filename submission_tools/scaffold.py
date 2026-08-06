@@ -39,7 +39,7 @@ def scaffold(root: Path, library_id: str, display_name: str, pattern: str) -> No
         "submission_status": "draft",
         "library": {"id": library_id, "display_name": display_name, "organism": "human", "genome_build": "hg38", "assay_types": ["rna_seq"], "closest_reference_pattern": pattern, "wrapper_directory": "."},
         "sources": [{"name": "TODO source", "uri_or_identifier": "TODO", "release": "TODO", "access_restrictions": "TODO", "license": "TODO"}],
-        "dig": {"repository_url": "https://github.com/flannick/dig-gene-set-extractors", "commit": "TODO", "entrypoints": ["geneset-extractors workflows TODO"]},
+        "dig": {"repository_url": "https://github.com/flannick/dig-gene-set-extractors", "commit": "TODO", "entrypoints": ["geneset-extractors workflows TODO"], "identifiers": ["TODO"]},
         "configs": {"model_config": "config/model_list.tsv", "partition_config": "config/partition_list.tsv", "description_config": "config/model_description_templates.tsv"},
         "reproduction": {"entry_point": "reproduction/reproduce.sh", "input_manifest": "reproduction/input_manifest.tsv", "smoke_test_command": "bash reproduction/reproduce.sh --smoke"},
         "expected_outputs": {"manifest": "expected/output_manifest.tsv"},

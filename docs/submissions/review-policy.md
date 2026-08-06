@@ -13,3 +13,7 @@ not permission to move substantive logic out of DIG.
 The scanner deliberately skips a directory without `submission.yaml`, so it
 does not retroactively fail GTEx, MoTrPAC, HuBMAP, LINCS_L1000, or another
 legacy library. New libraries must comply from their first submitted scaffold.
+
+Paired PR sequence: test the DIG code PR; create/test the wrapper/config PR;
+pin the wrapper to the exact DIG commit; run integration at that commit; merge
+DIG; update the wrapper pin if needed; then merge the wrapper PR.

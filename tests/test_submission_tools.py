@@ -9,6 +9,8 @@ import unittest
 from pathlib import Path
 
 from submission_tools.discovery import discover_submissions
+from submission_tools.coordinated import coordinated_validate, inspect_dig_checkout
+from submission_tools.receipt import validate_receipt, write_receipt
 from submission_tools.scaffold import scaffold
 from submission_tools.validator import validate_submission
 
@@ -155,6 +157,58 @@ class SubmissionToolsTest(unittest.TestCase):
         (root / "config/model_list.tsv").unlink()
         bad = subprocess.run(["python3", "-m", "submission_tools", "validate", "--submission", str(root)], env=env, capture_output=True, text=True)
         self.assertEqual(bad.returncode, 1)
+
+    def test_dig_checkout_match_mismatch_and_dirty(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp)
+            subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.email", "test@example.org"], cwd=repo, check=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+            (repo / "file.txt").write_text("x")
+            subprocess.run(["git", "add", "."], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "test"], cwd=repo, check=True, capture_output=True)
+            commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True).stdout.strip()
+            self.assertEqual(inspect_dig_checkout(repo, commit, False), [])
+            self.assertTrue(inspect_dig_checkout(repo, "0" * 40, False))
+            (repo / "file.txt").write_text("dirty")
+            self.assertTrue(inspect_dig_checkout(repo, commit, False))
+
+    def test_draft_placeholder_and_receipt(self) -> None:
+        root = self.scaffold()
+        result = coordinated_validate(root, Path(__file__).resolve().parents[2] / "dig-gene-set-extractors", development_dig_checkout=True)
+        self.assertTrue(result.ok)
+        receipt = root / "run_receipt.json"
+        write_receipt(root / "submission.yaml", Path("."), {"ok": result.ok}, receipt, ["test"])
+        self.assertTrue(validate_receipt(receipt))
+        payload = json.loads(receipt.read_text())
+        for key in ("library_id", "wrapper_commit", "dig_commit", "input_manifest_digest", "output_manifest_digest", "validation_result"):
+            self.assertIn(key, payload)
+
+    def test_coordinated_unknown_identifier_and_ready_smoke(self) -> None:
+        root = self.scaffold()
+        dig_repo = Path(__file__).resolve().parents[2] / "dig-gene-set-extractors"
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=dig_repo, check=True, capture_output=True, text=True).stdout.strip()
+        payload = self.payload(root)
+        payload["submission_status"] = "ready"
+        payload["dig"]["commit"] = commit
+        payload["dig"]["identifiers"] = ["rna_deg"]
+        self.write_payload(root, payload)
+        python_bin = "/home/ryank/software/miniconda3/envs/work/bin/python"
+        successful = coordinated_validate(root, dig_repo, dig_python=python_bin, smoke=True)
+        self.assertTrue(successful.ok)
+        payload["dig"]["identifiers"] = ["unknown_dig_identifier"]
+        self.write_payload(root, payload)
+        unknown = coordinated_validate(root, dig_repo, dig_python=python_bin, smoke=False)
+        self.assertFalse(unknown.ok)
+        self.assertTrue(any(item.code == "dig_identifier" for item in unknown.issues))
+
+    def test_ci_coordination_is_fork_safe_by_design(self) -> None:
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/validate-submissions.yml").read_text()
+        self.assertIn("pull_request:", workflow)
+        self.assertNotIn("pull_request_target", workflow)
+        self.assertIn("contents: read", workflow)
+        self.assertNotIn("secrets.", workflow)
+        self.assertNotIn("download_inputs.sh", workflow)
 
 
 if __name__ == "__main__":

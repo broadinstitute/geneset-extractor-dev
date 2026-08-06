@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"Submission run receipt","type":"object","required":["schema_version","library_id","wrapper_commit","dig_commit","submission_schema_version","input_manifest_digest","output_manifest_digest","environment","command","started_at","completed_at","models_expected","models_completed","validation_result"]}

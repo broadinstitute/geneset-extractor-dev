@@ -25,6 +25,11 @@ failure locally with `bash run/test_submission_tools.sh`, then run
 reported package. CI never downloads biological data or runs Docker,
 Apptainer, S3, scheduler, or controlled-access workflows.
 
+For ready submissions, CI checks out only the allowlisted DIG repository at
+the full SHA declared in `submission.yaml`, then runs low-cost DIG checks. It
+uses `pull_request` (never `pull_request_target`), read-only permissions, and
+no secrets; it never runs submission download or reproduction scripts.
+
 Read [architecture.md](architecture.md), [submission-schema.md](submission-schema.md),
 [reproduction-contract.md](reproduction-contract.md), and
 [review-policy.md](review-policy.md) before filling a scaffold.

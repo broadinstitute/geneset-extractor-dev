@@ -25,3 +25,8 @@ Static checks cannot prove complete dependency tracing, validate scientific
 correctness, obtain controlled inputs, execute containers/schedulers, or prove
 that external commands have no hidden dependencies. Reviewers must inspect
 the rendered commands and source manifests as well.
+
+`run_receipt.json` records wrapper/DIG commits, schema version, input/output
+manifest digests, environment identifier/digest, command, timestamps, expected
+and completed models, and validation result. It does not cryptographically
+prove reproducibility.

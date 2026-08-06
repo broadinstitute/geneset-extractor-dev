@@ -20,7 +20,8 @@
   "dig": {
     "repository_url": "https://github.com/flannick/dig-gene-set-extractors",
     "commit": "TODO",
-    "entrypoints": ["geneset-extractors list"]
+    "entrypoints": ["geneset-extractors list"],
+    "identifiers": ["TODO"]
   },
   "configs": {
     "model_config": "config/model_list.tsv",

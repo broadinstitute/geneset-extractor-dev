@@ -58,3 +58,24 @@ jobs:
           for submission in "${submissions[@]}"; do
             PYTHONPATH=. python3 -m submission_tools validate --submission "${submission}"
           done
+
+      - name: Coordinate ready submissions with pinned DIG commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          changed_file="$(mktemp)"
+          trap 'rm -rf "${changed_file}" /tmp/dig-submission-*' EXIT
+          if [[ -n "${BASE_SHA}" && "${BASE_SHA}" != "0000000000000000000000000000000000000000" ]]; then git diff --name-only "${BASE_SHA}" HEAD > "${changed_file}"; else git diff-tree --no-commit-id --name-only -r HEAD > "${changed_file}"; fi
+          mapfile -t submissions < <(PYTHONPATH=. python3 -m submission_tools discover --repo-root . --changed-files "${changed_file}")
+          for submission in "${submissions[@]}"; do
+            read -r status repo_url commit < <(PYTHONPATH=. python3 -c 'from pathlib import Path; import sys; from submission_tools.yaml_loader import load; p=load(Path(sys.argv[1]) / "submission.yaml"); print(p.get("submission_status", "draft"), p["dig"]["repository_url"], p["dig"]["commit"])' "${submission}")
+            if [[ "${status}" != "ready" ]]; then echo "Skipping DIG checkout for draft ${submission}"; continue; fi
+            [[ "${repo_url}" == "https://github.com/flannick/dig-gene-set-extractors" ]] || { echo "Unsupported DIG repository URL: ${repo_url}" >&2; exit 1; }
+            [[ "${commit}" =~ ^[0-9a-f]{40}$ ]] || { echo "Ready submission has invalid DIG commit: ${commit}" >&2; exit 1; }
+            dig_dir="$(mktemp -d /tmp/dig-submission-XXXXXX)"
+            git clone --quiet --no-checkout https://github.com/flannick/dig-gene-set-extractors "${dig_dir}"
+            git -C "${dig_dir}" checkout --quiet "${commit}"
+            python3 -m pip install -e "${dig_dir}[dev]"
+            PYTHONPATH=. python3 -m submission_tools validate --submission "${submission}" --dig-repo "${dig_dir}" --smoke
+          done
