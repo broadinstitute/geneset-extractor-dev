@@ -16,6 +16,15 @@ python3 -m submission_tools validate --submission LIBRARY_X/submission.yaml
 bash run/test_submission_tools.sh
 ```
 
+CI uses the required check named **`validate-new-library-submissions`**. It
+runs the same dependency-free unit and scaffold/integration tests, validates
+the committed synthetic example, discovers changed directories exclusively by
+`submission.yaml`, and validates those discovered packages. Reproduce a CI
+failure locally with `bash run/test_submission_tools.sh`, then run
+`python3 -m submission_tools validate --submission <directory>` for the
+reported package. CI never downloads biological data or runs Docker,
+Apptainer, S3, scheduler, or controlled-access workflows.
+
 Read [architecture.md](architecture.md), [submission-schema.md](submission-schema.md),
 [reproduction-contract.md](reproduction-contract.md), and
 [review-policy.md](review-policy.md) before filling a scaffold.

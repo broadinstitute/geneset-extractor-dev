@@ -46,6 +46,7 @@
 !submission_tools/
 !tests/
 !examples/
+!.github/
 
 !LINCS_L1000/**/
 !RummaGEO/**/
@@ -65,6 +66,7 @@
 !submission_tools/**/
 !tests/**/
 !examples/**/
+!.github/**/
 
 # Allow certain filetypes
 !src/**/*.py
@@ -95,6 +97,7 @@
 !examples/**/*.py
 !examples/**/*.sh
 !examples/**/*.md
+!.github/**/*.yml
 
 !LINCS_L1000/**/*.py
 !LINCS_L1000/**/*.r

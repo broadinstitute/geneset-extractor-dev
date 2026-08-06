@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from submission_tools.discovery import discover_submissions
 from submission_tools.scaffold import scaffold
 from submission_tools.validator import validate_submission
 
@@ -99,6 +100,17 @@ class SubmissionToolsTest(unittest.TestCase):
         result = validate_submission(legacy_gtex)
         self.assertTrue(result.ok)
         self.assertTrue(any(item.code == "legacy_ignored" for item in result.issues))
+
+    def test_discovery_uses_submission_yaml_and_changed_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp)
+            new_root = repo / "NewLibrary"
+            scaffold(new_root, "NewLibrary", "New Library", "generic")
+            legacy = repo / "GTEx"
+            legacy.mkdir()
+            self.assertEqual(discover_submissions(repo), [new_root])
+            self.assertEqual(discover_submissions(repo, ["GTEx/src/legacy.py"]), [])
+            self.assertEqual(discover_submissions(repo, ["NewLibrary/config/model_list.tsv"]), [new_root])
 
     def test_synthetic_example_validates_and_smoke_runs(self) -> None:
         root = self.synthetic_example()
