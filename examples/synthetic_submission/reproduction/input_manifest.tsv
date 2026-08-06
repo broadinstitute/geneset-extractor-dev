@@ -1,0 +1,2 @@
+input_id	source_uri_or_access_instructions	version_release	checksum	access_method	smoke_full	workflow_stage	redistribution_status	committed_fixture	fixture_path
+synthetic_fixture_input	urn:example:synthetic-submission-fixture:v1	v1		committed_fixture	smoke,full	workflow_input	redistributable	true	tests/fixtures/tiny_input.tsv

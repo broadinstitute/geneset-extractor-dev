@@ -42,6 +42,11 @@
 !run/
 !proposals/
 !docs/
+!config/
+!submission_tools/
+!tests/
+!examples/
+!.github/
 
 !LINCS_L1000/**/
 !RummaGEO/**/
@@ -57,6 +62,11 @@
 !run/**/
 !proposals/**/
 !docs/**/
+!config/**/
+!submission_tools/**/
+!tests/**/
+!examples/**/
+!.github/**/
 
 # Allow certain filetypes
 !src/**/*.py
@@ -78,6 +88,17 @@
 !proposals/**/*.md
 
 !docs/**/*.md
+!config/**/*.json
+!submission_tools/**/*.py
+!tests/**/*.py
+!examples/**/*.yaml
+!examples/**/*.tsv
+!examples/**/*.txt
+!examples/**/*.py
+!examples/**/*.sh
+!examples/**/*.md
+!.github/**/*.yml
+!.github/**/*.md
 
 !LINCS_L1000/**/*.py
 !LINCS_L1000/**/*.r

@@ -1,5 +1,11 @@
 # Add a New Library
 
+For the additive new-library submission contract, see
+[`docs/submissions/README.md`](../../submissions/README.md). It supplements
+this workflow and does not change requirements for existing libraries.
+Start with the source proposal and paired-PR sequence in
+[`docs/submissions/contributor-workflow.md`](../../submissions/contributor-workflow.md).
+
 This guide describes how to add a new library to:
 
 - `geneset-extractor-dev`

@@ -1,0 +1,81 @@
+name: validate-submissions
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [rk-submission-system-v1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-new-library-submissions:
+    name: validate-new-library-submissions
+    runs-on: ubuntu-latest
+    steps:
+      # actions/checkout v4.2.2
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      # actions/setup-python v5.6.0
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Run submission-tool unit and compatibility tests
+        run: PYTHONPATH=. python3 -m unittest -v tests.test_submission_tools
+
+      - name: Run scaffold and validation integration check
+        run: bash run/test_submission_tools.sh
+
+      - name: Validate committed synthetic examples
+        run: |
+          set -euo pipefail
+          PYTHONPATH=. python3 -m submission_tools validate --submission examples/synthetic_submission
+
+      - name: Discover and validate changed new-format submissions
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          changed_file="$(mktemp)"
+          trap 'rm -f "${changed_file}"' EXIT
+          if [[ -n "${BASE_SHA}" && "${BASE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
+            git diff --name-only "${BASE_SHA}" HEAD > "${changed_file}"
+          else
+            git diff-tree --no-commit-id --name-only -r HEAD > "${changed_file}"
+          fi
+          mapfile -t submissions < <(PYTHONPATH=. python3 -m submission_tools discover --repo-root . --changed-files "${changed_file}")
+          if [[ ${#submissions[@]} -eq 0 ]]; then
+            echo "No new-format submissions changed. Discovery is based only on submission.yaml."
+            exit 0
+          fi
+          printf 'Discovered changed new-format submissions:\n%s\n' "${submissions[@]}"
+          for submission in "${submissions[@]}"; do
+            PYTHONPATH=. python3 -m submission_tools validate --submission "${submission}"
+          done
+
+      - name: Coordinate ready submissions with pinned DIG commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          changed_file="$(mktemp)"
+          trap 'rm -rf "${changed_file}" /tmp/dig-submission-*' EXIT
+          if [[ -n "${BASE_SHA}" && "${BASE_SHA}" != "0000000000000000000000000000000000000000" ]]; then git diff --name-only "${BASE_SHA}" HEAD > "${changed_file}"; else git diff-tree --no-commit-id --name-only -r HEAD > "${changed_file}"; fi
+          mapfile -t submissions < <(PYTHONPATH=. python3 -m submission_tools discover --repo-root . --changed-files "${changed_file}")
+          for submission in "${submissions[@]}"; do
+            read -r status repo_url commit < <(PYTHONPATH=. python3 -c 'from pathlib import Path; import sys; from submission_tools.yaml_loader import load; p=load(Path(sys.argv[1]) / "submission.yaml"); print(p.get("submission_status", "draft"), p["dig"]["repository_url"], p["dig"]["commit"])' "${submission}")
+            if [[ "${status}" != "ready" ]]; then echo "Skipping DIG checkout for draft ${submission}"; continue; fi
+            [[ "${repo_url}" == "https://github.com/flannick/dig-gene-set-extractors" ]] || { echo "Unsupported DIG repository URL: ${repo_url}" >&2; exit 1; }
+            [[ "${commit}" =~ ^[0-9a-f]{40}$ ]] || { echo "Ready submission has invalid DIG commit: ${commit}" >&2; exit 1; }
+            dig_dir="$(mktemp -d /tmp/dig-submission-XXXXXX)"
+            git clone --quiet --no-checkout https://github.com/flannick/dig-gene-set-extractors "${dig_dir}"
+            git -C "${dig_dir}" checkout --quiet "${commit}"
+            python3 -m pip install -e "${dig_dir}[dev]"
+            PYTHONPATH=. python3 -m submission_tools validate --submission "${submission}" --dig-repo "${dig_dir}" --smoke
+          done

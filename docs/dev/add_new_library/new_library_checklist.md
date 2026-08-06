@@ -1,5 +1,10 @@
 # New Library Checklist
 
+For static submission-package validation and reproduction requirements, also
+complete the checklist in [`docs/submissions/README.md`](../../submissions/README.md).
+For the proposal and paired-PR sequence, see
+[`docs/submissions/contributor-workflow.md`](../../submissions/contributor-workflow.md).
+
 Use this checklist before opening a PR.
 
 ## Repository Setup
