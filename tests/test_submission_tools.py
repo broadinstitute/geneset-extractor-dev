@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -152,10 +153,10 @@ class SubmissionToolsTest(unittest.TestCase):
     def test_cli_exit_codes(self) -> None:
         root = self.scaffold()
         env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1]))
-        ok = subprocess.run(["python3", "-m", "submission_tools", "validate", "--submission", str(root)], env=env, capture_output=True, text=True)
+        ok = subprocess.run([sys.executable, "-m", "submission_tools", "validate", "--submission", str(root)], env=env, capture_output=True, text=True)
         self.assertEqual(ok.returncode, 0, ok.stdout + ok.stderr)
         (root / "config/model_list.tsv").unlink()
-        bad = subprocess.run(["python3", "-m", "submission_tools", "validate", "--submission", str(root)], env=env, capture_output=True, text=True)
+        bad = subprocess.run([sys.executable, "-m", "submission_tools", "validate", "--submission", str(root)], env=env, capture_output=True, text=True)
         self.assertEqual(bad.returncode, 1)
 
     def test_dig_checkout_match_mismatch_and_dirty(self) -> None:
@@ -193,12 +194,11 @@ class SubmissionToolsTest(unittest.TestCase):
         payload["dig"]["commit"] = commit
         payload["dig"]["identifiers"] = ["rna_deg"]
         self.write_payload(root, payload)
-        python_bin = "/home/ryank/software/miniconda3/envs/work/bin/python"
-        successful = coordinated_validate(root, dig_repo, dig_python=python_bin, smoke=True)
+        successful = coordinated_validate(root, dig_repo, dig_python=sys.executable, smoke=True)
         self.assertTrue(successful.ok)
         payload["dig"]["identifiers"] = ["unknown_dig_identifier"]
         self.write_payload(root, payload)
-        unknown = coordinated_validate(root, dig_repo, dig_python=python_bin, smoke=False)
+        unknown = coordinated_validate(root, dig_repo, dig_python=sys.executable, smoke=False)
         self.assertFalse(unknown.ok)
         self.assertTrue(any(item.code == "dig_identifier" for item in unknown.issues))
 
