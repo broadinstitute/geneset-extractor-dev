@@ -155,10 +155,30 @@ def summarize_tissue(tissue, base_folder, input_folder, method="eaggl"):
     return top_df
 
 
-def mainx():
-    tissue = "adrenal_gland"
-    tissue = "whole_blood"
-    summarize_tissue(tissue)
+
+def summarize_single_file(file_path, output_folder, method="eaggl"):
+    """Process a single validation results file and generate summary."""
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
+    
+    df = pd.read_csv(file_path, sep='\t', header=None, names=['model','gene_set_name_suffix','gene_set_name', 'gene_set_size', 'rank', 'enriched_gene_sets_name', 'enriched_gene_set_size', 'enriched_gene_set_p_value'])
+    print(f"Processed file {file_path} with {len(df)} rows.")
+    # Create top enriched gene set dataframe
+    df['tissue'] = 'none'  # Since we don't have tissue information in a single file
+    df['model'] = 'none'
+    df['gene_set_name_suffix'] = df['gene_set_name']
+    top_df = create_top_enriched_df(df)
+    print("\nTop enriched gene sets:")
+    print(top_df.head(20))
+    
+    # Create output file
+    os.makedirs(output_folder, exist_ok=True)
+    output_path = os.path.join(output_folder, f"summary_{method}.tsv")
+    #remove model and tissue columns for single file summary
+    top_df = top_df.drop(columns=['model', 'tissue'])
+    top_df.to_csv(output_path, sep='\t', index=False)
+    print(f"\nSaved summary to {output_path}")
+
 
 def create_pivot_tables(df):
     """
@@ -193,10 +213,26 @@ def create_pivot_tables(df):
 
 def main():
     parser = argparse.ArgumentParser(description="Summarize validation results")
-    parser.add_argument("-b", "--base-folder", required=True, help="Base folder for genesets")
+    parser.add_argument("-b", "--base-folder", required=False, help="Base folder for genesets")
+    parser.add_argument("-f", "--file", required=False, help="Single validation results file to process")
     parser.add_argument("-o", "--output-folder", required=True, help="Output folder for results")
     parser.add_argument("-m", "--method", choices=["eaggl", "pigean"], default="eaggl", help="Enrichment method")
     args = parser.parse_args()
+    
+    # Validate that either -b or -f is provided
+    if not args.base_folder and not args.file:
+        parser.error("Either -b/--base-folder or -f/--file must be provided")
+    
+    if args.base_folder and args.file:
+        parser.error("Cannot use both -b/--base-folder and -f/--file")
+    
+    # Handle single file mode
+    if args.file:
+        try:
+            summarize_single_file(args.file, args.output_folder, method=args.method)
+        except FileNotFoundError as e:
+            parser.error(str(e))
+        return
     
     # Determine input and output folders based on method
     if args.method == "pigean":
