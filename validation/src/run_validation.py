@@ -68,23 +68,65 @@ def validate_tissue(tissue, base_folder, out_file_template, method="eaggl", forc
                 print(f"Error validating folder {folder_path}: {e}")
 
 
+def validate_single_file(file_path, output_folder, method="eaggl", force_rewrite=False):
+    """Validate gene sets from a single GMT file."""
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
+    
+    gene_sets = parse_gmt_file(file_path)
+    print(f"Parsed {len(gene_sets)} gene sets from {file_path}")
+    
+    os.makedirs(output_folder, exist_ok=True)
+    out_file = os.path.join(output_folder, f"validation_results_{method}.txt")
+    
+    # Clear output file if force-rewrite is enabled
+    if force_rewrite and os.path.exists(out_file):
+        os.remove(out_file)
+    
+    with open(out_file, 'a') as out_f:
+        for gene_set in gene_sets:
+            gene_set_name = gene_set['gene_set']
+            print("Gene set:", gene_set_name, "Number of genes:", len(gene_set['genes']))
+            if method == "eaggl":
+                results = run_eaggl(gene_set['genes'])
+            else:
+                results = run_pigean(gene_set['genes'])
+            save_results(out_f, gene_set_name, len(gene_set['genes']), results)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Validate gene sets using EAGGL/PIGEAN")
-    parser.add_argument("-b", "--base-folder", required=True, help="Base folder for genesets")
+    parser.add_argument("-b", "--base-folder", required=False, help="Base folder for genesets")
+    parser.add_argument("-f", "--file", required=False, help="Single GMT file to process")
     parser.add_argument("-o", "--output-folder", required=True, help="Output folder for results")
     parser.add_argument("-t", "--tissue", action="append", help="Tissue(s) to process (can be repeated)")
     parser.add_argument("-m", "--method", choices=["eaggl", "pigean"], default="eaggl", help="Enrichment method")
     parser.add_argument("--force-rewrite", action="store_true", help="Force rewrite of existing output files")
     args = parser.parse_args()
     
+    # Validate that either -b or -f is provided
+    if not args.base_folder and not args.file:
+        parser.error("Either -b/--base-folder or -f/--file must be provided")
+    
+    if args.base_folder and args.file:
+        parser.error("Cannot use both -b/--base-folder and -f/--file")
+    
+    # Handle single file mode
+    if args.file:
+        try:
+            validate_single_file(args.file, args.output_folder, method=args.method, force_rewrite=args.force_rewrite)
+        except FileNotFoundError as e:
+            parser.error(str(e))
+        return
+    
+    # Create output folder if it doesn't exist
+    os.makedirs(args.output_folder, exist_ok=True)
+    
     # Construct output file template based on method
     if args.method == "pigean":
         out_folder = args.output_folder.replace("output.tissue", "output.tissue.pigean")
     else:
         out_folder = args.output_folder
-    
-    # Create output folder if it doesn't exist
-    os.makedirs(out_folder, exist_ok=True)
     
     out_file_template = os.path.join(out_folder, "{}_validation_results_{}.txt".format("{}", args.method))
     
