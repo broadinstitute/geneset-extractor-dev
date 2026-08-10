@@ -188,6 +188,13 @@ class SubmissionToolsTest(unittest.TestCase):
     def test_coordinated_unknown_identifier_and_ready_smoke(self) -> None:
         root = self.scaffold()
         dig_repo = Path(__file__).resolve().parents[2] / "dig-gene-set-extractors"
+        available = subprocess.run(
+            [sys.executable, "-c", "import numpy"],
+            capture_output=True,
+            text=True,
+        )
+        if available.returncode != 0:
+            self.skipTest("DIG smoke dependencies are not installed for this Python interpreter")
         commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=dig_repo, check=True, capture_output=True, text=True).stdout.strip()
         payload = self.payload(root)
         payload["submission_status"] = "ready"

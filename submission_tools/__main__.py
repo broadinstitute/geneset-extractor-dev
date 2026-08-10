@@ -4,7 +4,9 @@ import argparse
 from pathlib import Path
 
 from .discovery import discover_submissions
+from .adoption import adopt, adoption_status
 from .coordinated import coordinated_validate
+from .legacy_compare import compare_gmt
 from .receipt import write_receipt
 from .scaffold import scaffold
 from .validator import validate_submission
@@ -29,6 +31,20 @@ def main(argv: list[str] | None = None) -> int:
     create.add_argument("--display-name", required=True)
     create.add_argument("--pattern", required=True, choices=["gtex", "motrpac", "hubmap", "lincs_l1000", "generic"])
     create.add_argument("--output", required=True, help="New library directory; it must not already exist.")
+    adopt_parser = commands.add_parser("adopt", help="Inventory a legacy library and create a separate new-format scaffold.")
+    adopt_parser.add_argument("--existing", required=True, help="Legacy directory; it is never modified.")
+    adopt_parser.add_argument("--library-id", required=True)
+    adopt_parser.add_argument("--display-name")
+    adopt_parser.add_argument("--pattern", default="generic", choices=["gtex", "motrpac", "hubmap", "lincs_l1000", "generic"])
+    adopt_parser.add_argument("--output", help="New adopted submission directory; defaults to --library-id.")
+    adopt_parser.add_argument("--dig-repo")
+    comparison = commands.add_parser("compare-legacy", help="Compare legacy and regenerated GMT outputs.")
+    comparison.add_argument("--library", help="Adopted library directory; discovers the first legacy/new GMT pair.")
+    comparison.add_argument("--legacy")
+    comparison.add_argument("--new")
+    comparison.add_argument("--mode", default="set_equivalent", choices=["exact", "set_equivalent", "report_only"])
+    status = commands.add_parser("adoption-status", help="Show adoption progress without bypassing normal validation.")
+    status.add_argument("--library", required=True)
     args = parser.parse_args(argv)
     if args.command == "scaffold":
         scaffold(Path(args.output), args.library_id, args.display_name, args.pattern)
@@ -40,6 +56,49 @@ def main(argv: list[str] | None = None) -> int:
             changed_paths = Path(args.changed_files).read_text(encoding="utf-8").splitlines()
         for root in discover_submissions(Path(args.repo_root), changed_paths):
             print(root)
+        return 0
+    if args.command == "adopt":
+        output = Path(args.output or args.library_id)
+        created = adopt(Path(args.existing), output, args.library_id, args.display_name, args.pattern, Path(args.dig_repo) if args.dig_repo else None)
+        print(f"created adopted submission {created}")
+        return 0
+    if args.command == "compare-legacy":
+        legacy = Path(args.legacy) if args.legacy else None
+        regenerated = Path(args.new) if args.new else None
+        library = Path(args.library) if args.library else None
+        if library and (legacy is None or regenerated is None):
+            inventory_path = library / "adoption/inventory.json"
+            if not inventory_path.exists():
+                parser.error("--library requires adoption/inventory.json, or pass --legacy and --new")
+            import json
+            inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+            outputs = inventory.get("gene_set_outputs", [])
+            if not outputs:
+                parser.error("no legacy GMT output was inventoried; pass --legacy and --new")
+            legacy = Path(inventory["legacy_root"]) / str(outputs[0]["path"])
+            candidates = [path for path in library.rglob("*.gmt") if "adoption" not in path.parts]
+            if not candidates:
+                parser.error("no regenerated GMT found; pass --new explicitly")
+            regenerated = candidates[0]
+        if legacy is None or regenerated is None:
+            parser.error("pass --legacy and --new, or --library")
+        report = library / "adoption/comparison_report.tsv" if library else None
+        ok, rows = compare_gmt(legacy, regenerated, args.mode, report)
+        if library:
+            summary = library / "adoption/comparison_summary.md"
+            counts = {status: sum(row["status"] == status for row in rows) for status in ("unchanged", "different", "missing", "new")}
+            summary.write_text(
+                "# Legacy comparison summary\n\n"
+                + f"- Total legacy/new set names: {len(rows)}\n"
+                + "\n".join(f"- {status}: {count}" for status, count in counts.items())
+                + "\n",
+                encoding="utf-8",
+            )
+        print(f"legacy comparison: {sum(row['status'] == 'unchanged' for row in rows)}/{len(rows)} unchanged")
+        return 0 if ok else 1
+    if args.command == "adoption-status":
+        for name, ok, detail in adoption_status(Path(args.library)):
+            print(f"{'✓' if ok else '✗'} {name}: {detail}")
         return 0
     if args.dig_repo:
         result = coordinated_validate(Path(args.submission), Path(args.dig_repo), dig_python=args.dig_python or __import__("sys").executable, smoke=args.smoke, development_dig_checkout=args.development_dig_checkout)
