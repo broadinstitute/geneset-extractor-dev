@@ -1,0 +1,3 @@
+output_id	relative_path	role	required	model_id	partition_id
+smoke_workflow_gmt	outputs/smoke/smoke/models/PS1/workflow/gene_set_library_crisp.gmt	gmt	true	PS1	smoke
+smoke_extractor_gmt	outputs/smoke/smoke/models/PS1/extractor/genesets.gmt	gmt	true	PS1	smoke

@@ -1,0 +1,3 @@
+input_id	source_uri_or_access_instructions	version_release	checksum	access_method	smoke_full	workflow_stage	redistribution_status	committed_fixture	fixture_path
+IGVF released Perturb-seq differential-expression tables	IGVF public API tabular-file download; see config/analysis_set_list.tsv	IGVF release accessed 2026-08-11		api_download	full	workflow_input	not_redistributable	false	
+igvf_smoke	committed fixture	adoption fixture		committed_fixture	smoke	workflow_input	redistributable	true	tests/fixtures/igvf_smoke.tsv

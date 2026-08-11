@@ -1,0 +1,4 @@
+term	gene	gene_id	logfc	pvalue
+pert_a	G1	ENSG1	2.0	0.01
+pert_a	G2	ENSG2	-3.0	0.02
+pert_a	G3	ENSG3	1.0	0.20

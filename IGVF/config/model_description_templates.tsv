@@ -1,0 +1,2 @@
+model_id	description_template
+PS1	IGVF Perturb-seq signed gene signatures for analysis set {model.parameters.analysis_set_id}.

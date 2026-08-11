@@ -1,0 +1,17 @@
+analysis_set_id	dataset_id	file_relpath	sep	term_column	gene_symbol_column	gene_id_column	effect_column	ratio_column	score_column	pvalue_column	pvalue_max	score_threshold	top_k_per_direction	enabled
+IGVFDS0523KGZP	IGVFFI0331FOUT	IGVFDS0523KGZP/IGVFFI0331FOUT/IGVFFI0331FOUT.tsv.gz	auto	dhs	gene_symbol	ensembl_id	log2fc	NA	NA	p_value	0.05	NA	200	true
+IGVFDS0790MEEM	IGVFFI3445AYOJ	IGVFDS0790MEEM/IGVFFI3445AYOJ/IGVFFI3445AYOJ.tsv.gz	auto	dhs	gene_symbol	ensembl_id	log2fc	NA	NA	p_value	0.05	NA	200	true
+IGVFDS3578UWZK	IGVFFI8750MLNP	IGVFDS3578UWZK/IGVFFI8750MLNP/IGVFFI8750MLNP.tsv.gz	auto	dhs	gene_symbol	ensembl_id	log2fc	NA	NA	p_value	0.05	NA	200	true
+IGVFDS3959LESA	IGVFFI4354THUZ	IGVFDS3959LESA/IGVFFI4354THUZ/IGVFFI4354THUZ.tsv.gz	auto	dhs	gene_symbol	ensembl_id	log2fc	NA	NA	p_value	0.05	NA	200	true
+IGVFDS7132YVKO	IGVFFI3272UWTY	IGVFDS7132YVKO/IGVFFI3272UWTY/IGVFFI3272UWTY.tsv.gz	auto	dhs	gene_symbol	ensembl_id	log2fc	NA	NA	p_value	0.05	NA	200	true
+IGVFDS2266YDVM	IGVFFI1867ROFS	IGVFDS2266YDVM/IGVFFI1867ROFS/IGVFFI1867ROFS.csv.gz	auto	region	gene_names	NA	NA	fc	log(pval)-hypergeom	NA	NA	NA	NA	true
+IGVFDS2873EPIU	IGVFFI0726ZROO	IGVFDS2873EPIU/IGVFFI0726ZROO/IGVFFI0726ZROO.csv.gz	auto	region	gene_names	NA	NA	fc	log(pval)-hypergeom	NA	NA	NA	NA	true
+IGVFDS4003HZAB	IGVFFI6770EFUQ	IGVFDS4003HZAB/IGVFFI6770EFUQ/IGVFFI6770EFUQ.csv.gz	auto	region	gene_names	NA	NA	fc	log(pval)-hypergeom	NA	NA	NA	NA	true
+IGVFDS4252LFRU	IGVFFI8786YBUA	IGVFDS4252LFRU/IGVFFI8786YBUA/IGVFFI8786YBUA.csv.gz	auto	region	gene_names	NA	NA	fc	log(pval)-hypergeom	NA	NA	NA	NA	true
+IGVFDS4389OUWU	IGVFFI7266NWTF	IGVFDS4389OUWU/IGVFFI7266NWTF/IGVFFI7266NWTF.csv.gz	auto	region	gene_names	NA	NA	fc	log(pval)-hypergeom	NA	NA	NA	NA	true
+IGVFDS7340YDHF	IGVFFI5883SVNN	IGVFDS7340YDHF/IGVFFI5883SVNN/IGVFFI5883SVNN.csv.gz	auto	region	gene_names	NA	NA	fc	log(pval)-hypergeom	NA	NA	NA	NA	true
+IGVFDS6924DJAZ	IGVFFI0068OWUG	IGVFDS6924DJAZ/IGVFFI0068OWUG/IGVFFI0068OWUG.csv.gz	auto	region	gene_names	NA	NA	fc	log(pval)-hypergeom	NA	NA	NA	NA	true
+IGVFDS3405NGXF	IGVFFI2903THXX	IGVFDS3405NGXF/IGVFFI2903THXX/IGVFFI2903THXX.tsv.gz	auto	grna	gene_symbol	NA	avg_logFC	NA	NA	p_val_adj	0.05	NA	200	true
+IGVFDS5239SBBT	IGVFFI6830YLEK	IGVFDS5239SBBT/IGVFFI6830YLEK/IGVFFI6830YLEK.tsv.gz	auto	grna	target_gene	NA	avg_log2FC	NA	NA	p_val_adj	0.05	NA	200	true
+IGVFDS6332VCTO	IGVFFI0830FXFI	IGVFDS6332VCTO/IGVFFI0830FXFI/IGVFFI0830FXFI.csv.gz	auto	intended_target_name	gene_names	gene_name_ensembl	NA	fc	log(pval)-hypergeom	NA	NA	NA	NA	true
+IGVFDS9445RJOU	IGVFFI5198JCCU	IGVFDS9445RJOU/IGVFFI5198JCCU/IGVFFI5198JCCU.tsv.gz	auto	grna	target_gene	NA	avg_log2FC	NA	NA	p_val_adj	0.05	NA	200	true
