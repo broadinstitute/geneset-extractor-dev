@@ -19,6 +19,9 @@ from submission_tools.validator import validate_submission
 
 
 class LegacyAdoptionTest(unittest.TestCase):
+    TEST_GIT_NAME = "Gene Set Extractor Tests"
+    TEST_GIT_EMAIL = "geneset-extractor-tests@example.invalid"
+
     def legacy_library(self, root: Path) -> Path:
         legacy = root / "legacy"
         legacy.mkdir()
@@ -84,12 +87,16 @@ class LegacyAdoptionTest(unittest.TestCase):
         completed = subprocess.run(["git", *args], cwd=root, text=True, capture_output=True)
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
+    def _configure_test_git_identity(self, repo: Path) -> None:
+        """Set a repository-local identity for disposable synthetic repos."""
+        self._git(repo, "config", "user.name", self.TEST_GIT_NAME)
+        self._git(repo, "config", "user.email", self.TEST_GIT_EMAIL)
+
     def _remote(self, root: Path, name: str, branch: str = "main", *, with_tools: bool = False, dig_interface: bool = False) -> Path:
         source = root / (name + "-source")
         source.mkdir()
         self._git(source, "init", "-b", branch)
-        self._git(source, "config", "user.email", "test@example.invalid")
-        self._git(source, "config", "user.name", "Test")
+        self._configure_test_git_identity(source)
         (source / "README.md").write_text("fixture\n", encoding="utf-8")
         (source / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
         if with_tools:
@@ -123,7 +130,11 @@ class LegacyAdoptionTest(unittest.TestCase):
             adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER = old_constants
         dig = workspace / "dig-gene-set-extractors"
         wrapper = workspace / "geneset-extractor-dev"
-        self._git(dig, "config", "user.email", "test@example.invalid"); self._git(dig, "config", "user.name", "Test")
+        # submit_workspace creates commits in both fresh clones.  Keep this
+        # fixture self-contained instead of relying on a developer or CI
+        # machine's global Git configuration.
+        self._configure_test_git_identity(dig)
+        self._configure_test_git_identity(wrapper)
         if dig_change == "committed":
             (dig / "src" / "extractor.py").write_text("VALUE = 1\n", encoding="utf-8")
             self._git(dig, "add", "."); self._git(dig, "commit", "-m", "adoption extractor")
@@ -220,6 +231,40 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertTrue(ok, messages)
             self.assertIn(dig, opened)
             self.assertTrue(adoption_workspace._ahead_of_base(dig, "release"))
+
+    def test_submit_fixture_uses_local_identity_without_global_git_config(self) -> None:
+        """Synthetic workspace commits must not rely on the runner's HOME."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            empty_home = root / "empty-home"
+            empty_home.mkdir()
+            with patch.dict(
+                os.environ,
+                {"HOME": str(empty_home), "XDG_CONFIG_HOME": str(empty_home / "config")},
+                clear=False,
+            ):
+                workspace, dig, _wrapper, _dig_fork = self._submittable_workspace(root)
+                ok, messages, _opened = self._submit_with_mock_prs(workspace, dig)
+            self.assertTrue(ok, messages)
+
+    def test_submit_reports_missing_git_author_identity(self) -> None:
+        """Production commits retain the user's identity requirement."""
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"
+            repo.mkdir()
+            self._git(repo, "init")
+            (repo / "src").mkdir()
+            (repo / "src" / "new.py").write_text("VALUE = 1\n", encoding="utf-8")
+            empty_home = Path(temp) / "empty-home"
+            empty_home.mkdir()
+            with patch.dict(
+                os.environ,
+                {"HOME": str(empty_home), "XDG_CONFIG_HOME": str(empty_home / "config")},
+                clear=False,
+            ):
+                with self.assertRaisesRegex(ValueError, "Git author identity is not configured") as caught:
+                    adoption_workspace._commit_if_changed(repo, "test commit", ("src",))
+            self.assertIn('git config --global user.name "Your Name"', str(caught.exception))
 
     def test_open_draft_pr_reuses_existing_open_pr(self) -> None:
         calls: list[list[str]] = []
@@ -402,8 +447,7 @@ class LegacyAdoptionTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp) / "repo"; repo.mkdir()
             self._git(repo, "init")
-            self._git(repo, "config", "user.email", "test@example.invalid")
-            self._git(repo, "config", "user.name", "Test")
+            self._configure_test_git_identity(repo)
             (repo / "src").mkdir(); (repo / "src" / "ok.py").write_text("x = 1\n", encoding="utf-8")
             self.assertEqual(safe_stage(repo, ("src",)), ["src/ok.py"])
             self._git(repo, "reset")
@@ -417,8 +461,7 @@ class LegacyAdoptionTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp) / "repo"; repo.mkdir()
             self._git(repo, "init")
-            self._git(repo, "config", "user.email", "test@example.invalid")
-            self._git(repo, "config", "user.name", "Test")
+            self._configure_test_git_identity(repo)
             (repo / "src").mkdir(); (repo / "src" / "old.py").write_text("x = 1\n", encoding="utf-8")
             self._git(repo, "add", "."); self._git(repo, "commit", "-m", "baseline")
             self._git(repo, "mv", "src/old.py", "src/new.py")
@@ -435,8 +478,7 @@ class LegacyAdoptionTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp) / "repo"; repo.mkdir()
             self._git(repo, "init")
-            self._git(repo, "config", "user.email", "test@example.invalid")
-            self._git(repo, "config", "user.name", "Test")
+            self._configure_test_git_identity(repo)
             (repo / ".gitignore").write_text("*/run_receipt.json\n", encoding="utf-8")
             self._git(repo, "add", ".gitignore"); self._git(repo, "commit", "-m", "ignore receipts")
             (repo / "Library").mkdir()

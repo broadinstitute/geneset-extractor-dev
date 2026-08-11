@@ -503,10 +503,36 @@ def safe_stage(repo: Path, allowed_roots: tuple[str, ...]) -> list[str]:
     return staged
 
 
+def _require_git_author_identity(repo: Path) -> None:
+    """Require a configured author identity before creating a user commit.
+
+    Adoption workspaces intentionally use the contributor's Git identity.  Do
+    not invent one here: doing so would make a real submission appear to have
+    been authored by the tooling.  Checking before ``git commit`` turns Git's
+    otherwise cryptic failure into a direct setup instruction.
+    """
+    name = _run(["git", "config", "--get", "user.name"], repo)
+    email = _run(["git", "config", "--get", "user.email"], repo)
+    if (
+        name.returncode == 0
+        and name.stdout.strip()
+        and email.returncode == 0
+        and email.stdout.strip()
+    ):
+        return
+    raise ValueError(
+        "Git author identity is not configured.\n\n"
+        "Configure it with:\n"
+        '  git config --global user.name "Your Name"\n'
+        '  git config --global user.email "you@example.com"'
+    )
+
+
 def _commit_if_changed(repo: Path, message: str, roots: tuple[str, ...]) -> str | None:
     staged = safe_stage(repo, roots)
     if not staged:
         return None
+    _require_git_author_identity(repo)
     _git(repo, "commit", "-m", message)
     return _git(repo, "rev-parse", "HEAD")
 
