@@ -40,6 +40,31 @@ class SubmissionToolsTest(unittest.TestCase):
             script.chmod(script.stat().st_mode | 0o111)
         return destination
 
+    def fake_dig_repo(self) -> tuple[Path, str]:
+        """Create the smallest local DIG checkout needed by coordination tests."""
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        repo = Path(temp.name) / "dig-gene-set-extractors"
+        package = repo / "src" / "geneset_extractors"
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text('__version__ = "test"\n', encoding="utf-8")
+        (package / "cli.py").write_text(
+            "import sys\n"
+            "if sys.argv[1:] == ['submission', 'validate', 'rna_deg']:\n"
+            "    raise SystemExit(0)\n"
+            "print('unknown workflow', file=sys.stderr)\n"
+            "raise SystemExit(1)\n",
+            encoding="utf-8",
+        )
+        (repo / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
+        subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@example.org"], cwd=repo, check=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+        subprocess.run(["git", "add", "."], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-m", "fake DIG"], cwd=repo, check=True, capture_output=True)
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True).stdout.strip()
+        return repo, commit
+
     def test_valid_minimal_submission(self) -> None:
         self.assertTrue(validate_submission(self.scaffold()).ok)
 
@@ -176,10 +201,11 @@ class SubmissionToolsTest(unittest.TestCase):
 
     def test_draft_placeholder_and_receipt(self) -> None:
         root = self.scaffold()
-        result = coordinated_validate(root, Path(__file__).resolve().parents[2] / "dig-gene-set-extractors", development_dig_checkout=True)
+        dig_repo, _commit = self.fake_dig_repo()
+        result = coordinated_validate(root, dig_repo, development_dig_checkout=True)
         self.assertTrue(result.ok)
         receipt = root / "run_receipt.json"
-        write_receipt(root / "submission.yaml", Path("."), {"ok": result.ok}, receipt, ["test"])
+        write_receipt(root / "submission.yaml", dig_repo, {"ok": result.ok}, receipt, ["test"])
         self.assertTrue(validate_receipt(receipt))
         payload = json.loads(receipt.read_text())
         for key in ("library_id", "wrapper_commit", "dig_commit", "input_manifest_digest", "output_manifest_digest", "validation_result"):
@@ -187,15 +213,7 @@ class SubmissionToolsTest(unittest.TestCase):
 
     def test_coordinated_unknown_identifier_and_ready_smoke(self) -> None:
         root = self.scaffold()
-        dig_repo = Path(__file__).resolve().parents[2] / "dig-gene-set-extractors"
-        available = subprocess.run(
-            [sys.executable, "-c", "import numpy"],
-            capture_output=True,
-            text=True,
-        )
-        if available.returncode != 0:
-            self.skipTest("DIG smoke dependencies are not installed for this Python interpreter")
-        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=dig_repo, check=True, capture_output=True, text=True).stdout.strip()
+        dig_repo, commit = self.fake_dig_repo()
         payload = self.payload(root)
         payload["submission_status"] = "ready"
         payload["dig"]["commit"] = commit
@@ -207,7 +225,7 @@ class SubmissionToolsTest(unittest.TestCase):
         self.write_payload(root, payload)
         unknown = coordinated_validate(root, dig_repo, dig_python=sys.executable, smoke=False)
         self.assertFalse(unknown.ok)
-        self.assertTrue(any(item.code == "dig_identifier" for item in unknown.issues))
+        self.assertTrue(any(item.code == "dig_identifier" for item in unknown.issues), unknown.issues)
 
     def test_ci_coordination_is_fork_safe_by_design(self) -> None:
         workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/validate-submissions.yml").read_text()
