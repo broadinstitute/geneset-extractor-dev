@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .discovery import discover_submissions
 from .adoption import adopt, adoption_status
+from .adoption_workspace import create_workspace, submit_workspace, verify_workspace
 from .coordinated import coordinated_validate
 from .legacy_compare import compare_gmt
 from .receipt import write_receipt
@@ -31,13 +32,18 @@ def main(argv: list[str] | None = None) -> int:
     create.add_argument("--display-name", required=True)
     create.add_argument("--pattern", required=True, choices=["gtex", "motrpac", "hubmap", "lincs_l1000", "generic"])
     create.add_argument("--output", required=True, help="New library directory; it must not already exist.")
-    adopt_parser = commands.add_parser("adopt", help="Inventory a legacy library and create a separate new-format scaffold.")
+    adopt_parser = commands.add_parser("adopt", help="Create an isolated workspace for adopting a legacy library.")
     adopt_parser.add_argument("--existing", required=True, help="Legacy directory; it is never modified.")
     adopt_parser.add_argument("--library-id", required=True)
     adopt_parser.add_argument("--display-name")
     adopt_parser.add_argument("--pattern", default="generic", choices=["gtex", "motrpac", "hubmap", "lincs_l1000", "generic"])
-    adopt_parser.add_argument("--output", help="New adopted submission directory; defaults to --library-id.")
+    adopt_parser.add_argument("--output", help="Legacy low-level mode: new adopted submission directory; defaults to --library-id.")
+    adopt_parser.add_argument("--workspace", help="Required for isolated adoption: fresh-clone workspace directory.")
     adopt_parser.add_argument("--dig-repo")
+    adopt_parser.add_argument("--github-user", help="GitHub username used to infer both contributor forks.")
+    adopt_parser.add_argument("--dig-fork", help="Contributor DIG fork URL.")
+    adopt_parser.add_argument("--wrapper-fork", help="Contributor wrapper fork URL.")
+    adopt_parser.add_argument("--base-branch", default="rk-submission-system-v1")
     comparison = commands.add_parser("compare-legacy", help="Compare legacy and regenerated GMT outputs.")
     comparison.add_argument("--library", help="Adopted library directory; discovers the first legacy/new GMT pair.")
     comparison.add_argument("--legacy")
@@ -45,6 +51,12 @@ def main(argv: list[str] | None = None) -> int:
     comparison.add_argument("--mode", default="set_equivalent", choices=["exact", "set_equivalent", "report_only"])
     status = commands.add_parser("adoption-status", help="Show adoption progress without bypassing normal validation.")
     status.add_argument("--library", required=True)
+    verify = commands.add_parser("verify-adoption", help="Verify an isolated adoption workspace.")
+    verify.add_argument("--workspace", required=True)
+    submit = commands.add_parser("submit-adoption", help="Commit and push a verified isolated adoption workspace.")
+    submit.add_argument("--workspace", required=True)
+    submit.add_argument("--yes", action="store_true", help="Confirm the one local commit/push operation.")
+    submit.add_argument("--allow-upstream-origin", action="store_true", help="Advanced maintainer override; never enabled implicitly.")
     args = parser.parse_args(argv)
     if args.command == "scaffold":
         scaffold(Path(args.output), args.library_id, args.display_name, args.pattern)
@@ -58,6 +70,25 @@ def main(argv: list[str] | None = None) -> int:
             print(root)
         return 0
     if args.command == "adopt":
+        if args.workspace:
+            if args.output:
+                parser.error("--workspace and --output are mutually exclusive")
+            try:
+                created = create_workspace(
+                    existing=Path(args.existing), workspace=Path(args.workspace), library_id=args.library_id,
+                    display_name=args.display_name, pattern=args.pattern, github_user=args.github_user,
+                    dig_fork=args.dig_fork, wrapper_fork=args.wrapper_fork, base_branch=args.base_branch,
+                )
+            except ValueError as exc:
+                parser.error(str(exc))
+            print("Adoption workspace ready:\n\n"
+                  f"  {created}\n\n"
+                  "Next:\n"
+                  f"  cd {created}\n"
+                  "  codex\n\n"
+                  "Then tell your agent: Follow AI_ADOPTION_PROMPT.md.\n\n"
+                  "No existing repositories or legacy files were modified.")
+            return 0
         output = Path(args.output or args.library_id)
         created = adopt(Path(args.existing), output, args.library_id, args.display_name, args.pattern, Path(args.dig_repo) if args.dig_repo else None)
         print(f"created adopted submission {created}")
@@ -100,6 +131,25 @@ def main(argv: list[str] | None = None) -> int:
         for name, ok, detail in adoption_status(Path(args.library)):
             print(f"{'✓' if ok else '✗'} {name}: {detail}")
         return 0
+    if args.command == "verify-adoption":
+        try:
+            ok, messages = verify_workspace(Path(args.workspace))
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print("Adoption verification: " + ("PASS" if ok else "FAILED"))
+        for message in messages:
+            print(message)
+        return 0 if ok else 1
+    if args.command == "submit-adoption":
+        try:
+            ok, messages = submit_workspace(Path(args.workspace), yes=args.yes, allow_upstream_origin=args.allow_upstream_origin)
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        for message in messages:
+            print(message)
+        return 0 if ok else 1
     if args.dig_repo:
         result = coordinated_validate(Path(args.submission), Path(args.dig_repo), dig_python=args.dig_python or __import__("sys").executable, smoke=args.smoke, development_dig_checkout=args.development_dig_checkout)
     else:
