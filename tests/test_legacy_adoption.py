@@ -328,6 +328,24 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertFalse(_is_fork_origin("https://github.com/flannick/dig-gene-set-extractors.git", "https://github.com/flannick/dig-gene-set-extractors.git"))
             self.assertTrue(_is_fork_origin("https://github.com/example/dig-gene-set-extractors.git", "https://github.com/flannick/dig-gene-set-extractors.git"))
 
+    def test_safe_staging_handles_git_rename_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"; repo.mkdir()
+            self._git(repo, "init")
+            self._git(repo, "config", "user.email", "test@example.invalid")
+            self._git(repo, "config", "user.name", "Test")
+            (repo / "src").mkdir(); (repo / "src" / "old.py").write_text("x = 1\n", encoding="utf-8")
+            self._git(repo, "add", "."); self._git(repo, "commit", "-m", "baseline")
+            self._git(repo, "mv", "src/old.py", "src/new.py")
+            self.assertEqual(safe_stage(repo, ("src",)), ["src/new.py"])
+
+    def test_safe_staging_allows_explicit_root_gitignore(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"; repo.mkdir()
+            self._git(repo, "init")
+            (repo / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
+            self.assertEqual(safe_stage(repo, (".gitignore",)), [".gitignore"])
+
 
 if __name__ == "__main__":
     unittest.main()
