@@ -109,6 +109,46 @@ class LegacyAdoptionTest(unittest.TestCase):
     def _workspace_command(self, workspace: Path, name: str, *args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
         return subprocess.run([str(workspace / name), *args], cwd=workspace, capture_output=True, text=True, env=env)
 
+    def _submittable_workspace(self, root: Path, *, base_branch: str = "main", dig_change: str | None = None) -> tuple[Path, Path, Path, Path]:
+        legacy = self.legacy_library(root)
+        dig_upstream = self._remote(root, "dig-upstream", base_branch, dig_interface=True)
+        dig_fork = self._remote(root, "dig-fork", base_branch, dig_interface=True)
+        wrapper_upstream = self._remote(root, "wrapper-upstream", base_branch, with_tools=True)
+        wrapper_fork = self._remote(root, "wrapper-fork", base_branch, with_tools=True)
+        old_constants = adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER
+        adoption_workspace.CANONICAL_DIG = str(dig_upstream); adoption_workspace.CANONICAL_WRAPPER = str(wrapper_upstream)
+        try:
+            workspace = create_workspace(existing=legacy, workspace=root / "workspace", library_id="Adopted", display_name=None, pattern="generic", github_user=None, dig_fork=str(dig_fork), wrapper_fork=str(wrapper_fork), base_branch=base_branch)
+        finally:
+            adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER = old_constants
+        dig = workspace / "dig-gene-set-extractors"
+        wrapper = workspace / "geneset-extractor-dev"
+        self._git(dig, "config", "user.email", "test@example.invalid"); self._git(dig, "config", "user.name", "Test")
+        if dig_change == "committed":
+            (dig / "src" / "extractor.py").write_text("VALUE = 1\n", encoding="utf-8")
+            self._git(dig, "add", "."); self._git(dig, "commit", "-m", "adoption extractor")
+        elif dig_change == "dirty":
+            (dig / "src" / "extractor.py").write_text("VALUE = 1\n", encoding="utf-8")
+        library = wrapper / "Adopted"
+        payload = json.loads((library / "submission.yaml").read_text(encoding="utf-8"))
+        payload["submission_status"] = "ready"
+        payload["dig"]["commit"] = subprocess.run(["git", "rev-parse", "HEAD"], cwd=dig, check=True, capture_output=True, text=True).stdout.strip()
+        payload["dig"]["identifiers"] = ["rna_deg"]
+        (library / "submission.yaml").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        _root, manifest = load_workspace(workspace)
+        manifest["verification"] = {"last_result": "PASS", "last_receipt": None, "full_comparison_completed": True, "workspace_digest": _workspace_digest(workspace, manifest)}
+        _write_json(workspace / ".adoption-workspace.yaml", manifest)
+        return workspace, dig, wrapper, dig_fork
+
+    def _submit_with_mock_prs(self, workspace: Path, dig: Path) -> tuple[bool, list[str], list[Path]]:
+        opened: list[Path] = []
+        def open_pr(repo: Path, _declared: dict, _title: str, _body: str) -> tuple[str, str]:
+            opened.append(repo)
+            return ("https://github.com/example/dig/pull/1" if repo == dig else "https://github.com/example/wrapper/pull/1", "draft PR opened")
+        with patch.object(adoption_workspace, "_active_tooling", return_value=(True, workspace / "geneset-extractor-dev/submission_tools", workspace / "geneset-extractor-dev/submission_tools", "test")), patch.object(adoption_workspace, "_open_draft_pr", side_effect=open_pr):
+            ok, messages = submit_workspace(workspace, yes=True)
+        return ok, messages, opened
+
     def test_isolated_workspace_uses_fresh_local_forks_and_preserves_legacy(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -151,6 +191,51 @@ class LegacyAdoptionTest(unittest.TestCase):
         source = inspect.getsource(adoption_workspace.submit_workspace)
         self.assertIn('["git", "push", "-u", "origin"', source)
         self.assertNotIn('["git", "push", "upstream"', source)
+
+    def test_submit_pushes_and_opens_pr_for_clean_precommitted_dig_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace, dig, _wrapper, dig_fork = self._submittable_workspace(Path(temp), dig_change="committed")
+            self.assertFalse(bool(adoption_workspace._changed_paths(dig)))
+            ok, messages, opened = self._submit_with_mock_prs(workspace, dig)
+            self.assertTrue(ok, messages)
+            self.assertIn(dig, opened)
+            payload = json.loads((workspace / "geneset-extractor-dev/Adopted/submission.yaml").read_text(encoding="utf-8"))
+            self.assertEqual(payload["paired_pull_requests"]["dig_gene_set_extractors"], "https://github.com/example/dig/pull/1")
+            pushed = subprocess.run(["git", "--git-dir", str(dig_fork), "rev-parse", "refs/heads/adopt/Adopted"], capture_output=True, text=True)
+            self.assertEqual(pushed.returncode, 0, pushed.stderr)
+
+    def test_submit_sets_na_and_skips_dig_pr_when_only_wrapper_is_pending(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace, dig, _wrapper, _dig_fork = self._submittable_workspace(Path(temp))
+            ok, messages, opened = self._submit_with_mock_prs(workspace, dig)
+            self.assertTrue(ok, messages)
+            self.assertNotIn(dig, opened)
+            payload = json.loads((workspace / "geneset-extractor-dev/Adopted/submission.yaml").read_text(encoding="utf-8"))
+            self.assertEqual(payload["paired_pull_requests"]["dig_gene_set_extractors"], "N/A")
+
+    def test_submit_commits_dirty_dig_and_uses_custom_base_for_divergence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace, dig, _wrapper, _dig_fork = self._submittable_workspace(Path(temp), base_branch="release", dig_change="dirty")
+            ok, messages, opened = self._submit_with_mock_prs(workspace, dig)
+            self.assertTrue(ok, messages)
+            self.assertIn(dig, opened)
+            self.assertTrue(adoption_workspace._ahead_of_base(dig, "release"))
+
+    def test_open_draft_pr_reuses_existing_open_pr(self) -> None:
+        calls: list[list[str]] = []
+        def fake_run(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+            calls.append(args)
+            if args[1:3] == ["auth", "status"]:
+                return subprocess.CompletedProcess(args, 0, "", "")
+            if args[1:3] == ["pr", "list"]:
+                return subprocess.CompletedProcess(args, 0, "https://github.com/example/repo/pull/9\n", "")
+            return subprocess.CompletedProcess(args, 1, "", "unexpected command")
+        declared = {"origin": "https://github.com/example/repo.git", "upstream": "https://github.com/flannick/repo.git", "base_branch": "main", "work_branch": "adopt/Adopted"}
+        with patch.object(adoption_workspace.shutil, "which", return_value="gh"), patch.object(adoption_workspace, "_run", side_effect=fake_run):
+            url, message = _open_draft_pr(Path("."), declared, "title", "body")
+        self.assertEqual(url, "https://github.com/example/repo/pull/9")
+        self.assertEqual(message, "existing draft PR found")
+        self.assertFalse(any(command[1:3] == ["pr", "create"] for command in calls))
 
     def test_workspace_helpers_use_workspace_tooling_and_external_tooling_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
