@@ -2,8 +2,8 @@
   "command": [
     "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/adoption_candidate/verify-adoption"
   ],
-  "completed_at": "2026-08-11T19:33:37.882570+00:00",
-  "dig_commit": "31a237712eefe9d5ed663dc91e40264368b23133",
+  "completed_at": "2026-08-11T19:34:23.321771+00:00",
+  "dig_commit": "5c8bb6f87e5270216c0c74aac8b5fd7e7da40afd",
   "environment": {
     "digest": "0a0a17bb80ffdb26f5b3bbf124f2b21d3bab5dfe575aa07ce0674e90bf938c37",
     "identifier": "Python 3.10+ standard library; DIG runtime"
@@ -16,7 +16,7 @@
   ],
   "output_manifest_digest": "6151beafec7133710c5bebe39c2aa9b6fb3ba1b98bfc349dbcbc240bce5732ec",
   "schema_version": "1.0.0",
-  "started_at": "2026-08-11T19:33:37.882553+00:00",
+  "started_at": "2026-08-11T19:34:23.321760+00:00",
   "submission_schema_version": "1.0.0",
   "validation_result": {
     "messages": [
@@ -61,5 +61,5 @@
     ],
     "ok": true
   },
-  "wrapper_commit": "31a237712eefe9d5ed663dc91e40264368b23133"
+  "wrapper_commit": "92772e75e5aae0319d6aae6b8821512c396322aa"
 }
