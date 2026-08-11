@@ -36,6 +36,10 @@ Read [architecture.md](architecture.md), [submission-schema.md](submission-schem
 should start with [contributor-workflow.md](contributor-workflow.md), including
 the proposal issue and paired-PR sequence.
 
+If gene sets already exist outside this framework, follow
+[adopting-existing-library.md](adopting-existing-library.md) to inventory and
+migrate them into the same contract.
+
 See the explicitly non-biological, test-only
 [`examples/synthetic_submission`](../../examples/synthetic_submission/README.md)
 for a complete small package.

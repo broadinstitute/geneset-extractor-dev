@@ -15,6 +15,8 @@
     "expected_outputs": {"type": "object", "required": ["manifest"]},
     "environment": {"type": "object", "required": ["declaration"]},
     "deviations": {"type": "object", "required": ["from_standard_architecture", "allow_wrapper_findings"]},
-    "paired_pull_requests": {"type": "object", "required": ["geneset_extractor_dev", "dig_gene_set_extractors"]}
+    "paired_pull_requests": {"type": "object", "required": ["geneset_extractor_dev", "dig_gene_set_extractors"]},
+    "submission_origin": {"type": "object", "properties": {"type": {"enum": ["new", "adopted"]}, "legacy_inventory": {"type": "string"}}},
+    "adoption": {"type": "object", "properties": {"reference_outputs": {"type": "array"}}}
   }
 }
