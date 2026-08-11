@@ -503,12 +503,43 @@ def safe_stage(repo: Path, allowed_roots: tuple[str, ...]) -> list[str]:
     return staged
 
 
+def _require_git_author_identity(repo: Path) -> None:
+    """Require a configured author identity before creating a user commit.
+
+    Adoption workspaces intentionally use the contributor's Git identity.  Do
+    not invent one here: doing so would make a real submission appear to have
+    been authored by the tooling.  Checking before ``git commit`` turns Git's
+    otherwise cryptic failure into a direct setup instruction.
+    """
+    name = _run(["git", "config", "--get", "user.name"], repo)
+    email = _run(["git", "config", "--get", "user.email"], repo)
+    if (
+        name.returncode == 0
+        and name.stdout.strip()
+        and email.returncode == 0
+        and email.stdout.strip()
+    ):
+        return
+    raise ValueError(
+        "Git author identity is not configured.\n\n"
+        "Configure it with:\n"
+        '  git config --global user.name "Your Name"\n'
+        '  git config --global user.email "you@example.com"'
+    )
+
+
 def _commit_if_changed(repo: Path, message: str, roots: tuple[str, ...]) -> str | None:
     staged = safe_stage(repo, roots)
     if not staged:
         return None
+    _require_git_author_identity(repo)
     _git(repo, "commit", "-m", message)
     return _git(repo, "rev-parse", "HEAD")
+
+
+def _ahead_of_base(repo: Path, base_branch: str) -> bool:
+    """Whether HEAD has commits not contained in the declared upstream base."""
+    return bool(_git(repo, "rev-list", f"upstream/{base_branch}..HEAD"))
 
 
 def _is_fork_origin(url: str, upstream: str) -> bool:
@@ -539,6 +570,9 @@ def _open_draft_pr(repo: Path, declared: dict[str, Any], title: str, body: str) 
     if not upstream_slug or not owner:
         return None, f"non-GitHub remotes; create a draft PR manually from {declared['work_branch']}"
     head = str(declared["work_branch"]) if _normalize_remote(str(declared["origin"])) == _normalize_remote(str(declared["upstream"])) else f"{owner}:{declared['work_branch']}"
+    existing = _run([gh, "pr", "list", "--repo", upstream_slug, "--head", head, "--base", str(declared["base_branch"]), "--state", "open", "--json", "url", "--jq", ".[0].url"], repo)
+    if existing.returncode == 0 and existing.stdout.strip():
+        return existing.stdout.strip().splitlines()[0], "existing draft PR found"
     command = [gh, "pr", "create", "--repo", upstream_slug, "--base", str(declared["base_branch"]), "--head", head, "--draft", "--title", title, "--body", body]
     completed = _run(command, repo)
     if completed.returncode:
@@ -569,42 +603,50 @@ def submit_workspace(workspace: Path, *, yes: bool = False, allow_upstream_origi
     if _legacy_changed(root, manifest, legacy):
         return False, ["ERROR: legacy source changed during adoption"]
     messages: list[str] = []
-    dig_changed = bool(_changed_paths(dig)); wrapper_changed = bool(_changed_paths(wrapper))
-    if not dig_changed and not wrapper_changed:
+    dig_dirty = bool(_changed_paths(dig))
+    wrapper_dirty = bool(_changed_paths(wrapper))
+    dig_ahead = _ahead_of_base(dig, str(repositories["dig"]["base_branch"]))
+    wrapper_ahead = _ahead_of_base(wrapper, str(repositories["wrapper"]["base_branch"]))
+    dig_pending = dig_dirty or dig_ahead
+    wrapper_pending = wrapper_dirty or wrapper_ahead
+    if not dig_pending and not wrapper_pending:
         return False, ["ERROR: no changes are available to submit"]
     if not yes:
         return False, [
             "Changes to submit:",
-            f"  dig-gene-set-extractors: {'changed' if dig_changed else 'unchanged'}",
-            f"  geneset-extractor-dev: {'changed' if wrapper_changed else 'unchanged'}",
+            f"  dig-gene-set-extractors: {'pending' if dig_pending else 'unchanged'}",
+            f"  geneset-extractor-dev: {'pending' if wrapper_pending else 'unchanged'}",
             "Re-run with --yes to commit and push only to contributor forks.",
         ]
     for repo, declared in ((dig, repositories["dig"]), (wrapper, repositories["wrapper"])):
         origin = _git(repo, "remote", "get-url", "origin")
         if not allow_upstream_origin and not _is_fork_origin(origin, str(declared["upstream"])):
             return False, [f"ERROR: refusing to push {repo.name}; origin is canonical upstream"]
-    dig_sha = _commit_if_changed(dig, f"Add extractor support for {manifest['library_id']}", ("src", "tests", "docs", "pyproject.toml", "README.md", ".gitignore")) if dig_changed else None
-    if dig_sha:
-        submission = library / "submission.yaml"; payload = load(submission); payload["dig"]["commit"] = dig_sha
-        _write_json(submission, payload)
-    if not dig_sha:
-        submission = library / "submission.yaml"
-        payload = load(submission)
+    dig_sha = _commit_if_changed(dig, f"Add extractor support for {manifest['library_id']}", ("src", "tests", "docs", "pyproject.toml", "README.md", ".gitignore")) if dig_dirty else None
+    submission = library / "submission.yaml"
+    payload = load(submission)
+    if dig_pending:
+        dig_sha = dig_sha or _git(dig, "rev-parse", "HEAD")
+        payload["dig"]["commit"] = dig_sha
+        payload["paired_pull_requests"]["dig_gene_set_extractors"] = "TBD"
+    else:
         payload["paired_pull_requests"]["dig_gene_set_extractors"] = "N/A"
-        _write_json(submission, payload)
-    wrapper_sha = _commit_if_changed(wrapper, f"Add {manifest['library_id']} gene-set library", (manifest["library_id"], "docs", "submission_tools", "tests", "config", "run", ".gitignore")) if (wrapper_changed or dig_sha) else None
+    _write_json(submission, payload)
+    wrapper_dirty_after_metadata = bool(_changed_paths(wrapper))
+    wrapper_sha = _commit_if_changed(wrapper, f"Add {manifest['library_id']} gene-set library", (manifest["library_id"], "docs", "submission_tools", "tests", "config", "run", ".gitignore")) if (wrapper_dirty_after_metadata or dig_pending) else None
+    wrapper_pending = wrapper_pending or wrapper_sha is not None
     # Confirm the wrapper now points at the exact DIG commit before any push.
-    if dig_sha:
+    if dig_pending:
         result = coordinated_validate(library, dig, development_dig_checkout=False)
         if not result.ok:
             return False, ["ERROR: coordinated validation failed after DIG pinning", *[issue.message for issue in result.issues]]
     for repo, declared in ((dig, manifest["repositories"]["dig"]), (wrapper, manifest["repositories"]["wrapper"])):
-        if (repo == dig and dig_sha) or (repo == wrapper and wrapper_sha):
+        if (repo == dig and dig_pending) or (repo == wrapper and wrapper_pending):
             completed = _run(["git", "push", "-u", "origin", str(declared["work_branch"])], repo)
             if completed.returncode:
                 return False, [f"ERROR: push to contributor fork failed for {repo.name}: {completed.stderr.strip()}"]
     dig_pr: str | None = None
-    if dig_sha:
+    if dig_pending:
         dig_pr, message = _open_draft_pr(
             dig, manifest["repositories"]["dig"], f"Add extractor support for {manifest['library_id']}",
             f"Adopted legacy library: {manifest['library_id']}\n\nRun verify-adoption before review.",
