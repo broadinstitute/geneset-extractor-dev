@@ -482,6 +482,14 @@ def safe_stage(repo: Path, allowed_roots: tuple[str, ...]) -> list[str]:
     staged: list[str] = []
     for path in _changed_paths(repo):
         rel = path.relative_to(repo)
+        ignored = _run(["git", "check-ignore", "--quiet", "--", str(rel)], repo)
+        if ignored.returncode == 0:
+            # Generated receipts and other intentionally ignored artifacts can
+            # appear when an untracked contribution directory is expanded.
+            # They are never part of a submission commit.
+            continue
+        if ignored.returncode not in {0, 1}:
+            raise ValueError(ignored.stderr.strip() or f"could not check ignore status for {rel}")
         if not any(str(rel) == root or str(rel).startswith(root.rstrip("/") + "/") for root in allowed_roots):
             raise ValueError(f"refusing to stage unrelated file: {rel}")
         if _FORBIDDEN_NAMES.search(path.name) or path.suffix.lower() in _FORBIDDEN_SUFFIXES:

@@ -346,6 +346,19 @@ class LegacyAdoptionTest(unittest.TestCase):
             (repo / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
             self.assertEqual(safe_stage(repo, (".gitignore",)), [".gitignore"])
 
+    def test_safe_staging_skips_ignored_generated_receipts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"; repo.mkdir()
+            self._git(repo, "init")
+            self._git(repo, "config", "user.email", "test@example.invalid")
+            self._git(repo, "config", "user.name", "Test")
+            (repo / ".gitignore").write_text("*/run_receipt.json\n", encoding="utf-8")
+            self._git(repo, "add", ".gitignore"); self._git(repo, "commit", "-m", "ignore receipts")
+            (repo / "Library").mkdir()
+            (repo / "Library" / "submission.yaml").write_text("{}\n", encoding="utf-8")
+            (repo / "Library" / "run_receipt.json").write_text("{}\n", encoding="utf-8")
+            self.assertEqual(safe_stage(repo, ("Library",)), ["Library/submission.yaml"])
+
 
 if __name__ == "__main__":
     unittest.main()
