@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .discovery import discover_submissions
 from .adoption import adopt, adoption_status
-from .adoption_workspace import DEFAULT_BASE_BRANCH, create_workspace, submit_workspace, verify_workspace
+from .adoption_workspace import DEFAULT_BASE_BRANCH, _active_tooling, load_workspace, create_workspace, submit_workspace, verify_workspace
 from .coordinated import coordinated_validate
 from .legacy_compare import compare_gmt
 from .receipt import write_receipt
@@ -89,6 +89,10 @@ def main(argv: list[str] | None = None) -> int:
                   f"  cd {created}\n"
                   "  codex\n\n"
                   "Then tell your agent: Follow AI_ADOPTION_PROMPT.md.\n\n"
+                  "After the migration:\n"
+                  "  ./verify-adoption\n\n"
+                  "After verification passes:\n"
+                  "  ./submit-adoption\n\n"
                   "No existing repositories or legacy files were modified.")
             return 0
         output = Path(args.output or args.library_id)
@@ -135,6 +139,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "verify-adoption":
         try:
+            root, manifest = load_workspace(Path(args.workspace))
+            tooling_ok, expected, active, commit = _active_tooling(root, manifest)
+            if not tooling_ok:
+                for message in ("ERROR: verify-adoption is running from a submission_tools implementation outside this adoption workspace.", f"Expected: {expected}", f"Active: {active}", f"Run: {root / 'verify-adoption'}"):
+                    print(message)
+                return 2
+            print("Submission tooling:\n"
+                  f"  repository: {root / manifest['repositories']['wrapper']['path']}\n"
+                  f"  commit: {commit}\n"
+                  f"  module: {active}")
             ok, messages = verify_workspace(Path(args.workspace))
         except (OSError, ValueError) as exc:
             print(f"ERROR: {exc}")
