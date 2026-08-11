@@ -44,6 +44,7 @@ def main(argv: list[str] | None = None) -> int:
     adopt_parser.add_argument("--dig-fork", help="Contributor DIG fork URL.")
     adopt_parser.add_argument("--wrapper-fork", help="Contributor wrapper fork URL.")
     adopt_parser.add_argument("--base-branch", default=DEFAULT_BASE_BRANCH, help="Upstream baseline and pull-request target branch (default: main).")
+    adopt_parser.add_argument("--allow-upstream-origin", action="store_true", help="Advanced maintainer/test override; allow a canonical repository as origin for this isolated workspace.")
     comparison = commands.add_parser("compare-legacy", help="Compare legacy and regenerated GMT outputs.")
     comparison.add_argument("--library", help="Adopted library directory; discovers the first legacy/new GMT pair.")
     comparison.add_argument("--legacy")
@@ -78,6 +79,7 @@ def main(argv: list[str] | None = None) -> int:
                     existing=Path(args.existing), workspace=Path(args.workspace), library_id=args.library_id,
                     display_name=args.display_name, pattern=args.pattern, github_user=args.github_user,
                     dig_fork=args.dig_fork, wrapper_fork=args.wrapper_fork, base_branch=args.base_branch,
+                    allow_upstream_origin=args.allow_upstream_origin,
                 )
             except ValueError as exc:
                 parser.error(str(exc))

@@ -45,6 +45,35 @@ refuses secret-like files, large source data, and stale verification. When
 `gh` is installed and authenticated it opens draft PRs; otherwise it prints the
 branch details needed to create PRs manually.
 
+## Maintainer testing without forks
+
+Forks remain the normal contributor workflow. A repository maintainer testing
+in an isolated workspace may explicitly use the canonical repositories as
+`origin`:
+
+```bash
+python3 -m submission_tools adopt \
+  --existing /path/to/old_library \
+  --library-id MY_LIBRARY \
+  --workspace ~/gene-set-adoptions/MY_LIBRARY \
+  --dig-fork https://github.com/flannick/dig-gene-set-extractors.git \
+  --wrapper-fork https://github.com/broadinstitute/geneset-extractor-dev.git \
+  --allow-upstream-origin
+```
+
+This remains a fresh clone on `adopt/MY_LIBRARY`, never `main`, and records the
+override in `.adoption-workspace.yaml`. Verification accepts canonical origins
+only when that recorded override exists. Submission requires a second explicit
+acknowledgement:
+
+```bash
+python3 -m submission_tools submit-adoption \
+  --workspace ~/gene-set-adoptions/MY_LIBRARY --yes --allow-upstream-origin
+```
+
+That second flag is not inferred from the workspace. Draft PRs in this mode are
+same-repository branch PRs: `adopt/MY_LIBRARY` into upstream `main`.
+
 ## Advanced / low-level commands
 
 The existing lower-level commands remain available for debugging and unusual

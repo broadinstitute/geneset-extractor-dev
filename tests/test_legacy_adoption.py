@@ -11,7 +11,7 @@ from pathlib import Path
 
 from submission_tools.adoption import adopt, adoption_status, inventory_legacy
 from submission_tools import adoption_workspace
-from submission_tools.adoption_workspace import DEFAULT_BASE_BRANCH, _is_fork_origin, _open_draft_pr, create_workspace, load_workspace, safe_stage, submit_workspace, validate_workspace_location, verify_workspace
+from submission_tools.adoption_workspace import DEFAULT_BASE_BRANCH, _is_fork_origin, _open_draft_pr, _workspace_digest, _write_json, create_workspace, load_workspace, safe_stage, submit_workspace, validate_workspace_location, verify_workspace
 from submission_tools.legacy_compare import compare_gmt
 from submission_tools.validator import validate_submission
 
@@ -121,6 +121,7 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertEqual(manifest["repositories"]["dig"]["upstream"], str(dig_upstream))
             self.assertEqual(manifest["repositories"]["wrapper"]["origin"], str(wrapper))
             self.assertEqual(manifest["repositories"]["wrapper"]["upstream"], str(wrapper_upstream))
+            self.assertFalse(manifest["workspace"]["upstream_origin_mode"])
             self.assertTrue((workspace / "adoption/legacy_reference.json").exists())
             self.assertTrue((workspace / "AI_ADOPTION_PROMPT.md").exists())
             self.assertIn("Baseline branch: `main`", (workspace / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8"))
@@ -144,6 +145,37 @@ class LegacyAdoptionTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validate_workspace_location(workspace, legacy)
 
+    def test_canonical_origins_require_recorded_maintainer_override(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            legacy = self.legacy_library(root)
+            dig, wrapper = self._remote(root, "dig"), self._remote(root, "wrapper")
+            old_constants = adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER
+            adoption_workspace.CANONICAL_DIG = str(dig); adoption_workspace.CANONICAL_WRAPPER = str(wrapper)
+            try:
+                with self.assertRaisesRegex(ValueError, "allow-upstream-origin"):
+                    create_workspace(existing=legacy, workspace=root / "rejected", library_id="Adopted", display_name=None, pattern="generic", github_user=None, dig_fork=str(dig), wrapper_fork=str(wrapper))
+                workspace = create_workspace(existing=legacy, workspace=root / "accepted", library_id="Adopted", display_name=None, pattern="generic", github_user=None, dig_fork=str(dig), wrapper_fork=str(wrapper), allow_upstream_origin=True)
+            finally:
+                adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER = old_constants
+            _root, manifest = load_workspace(workspace)
+            self.assertTrue(manifest["workspace"]["upstream_origin_mode"])
+            self.assertEqual(manifest["repositories"]["dig"]["work_branch"], "adopt/Adopted")
+            verified, messages = verify_workspace(workspace)
+            self.assertFalse(verified)  # incomplete scaffold, not remote safety
+            self.assertFalse(any("without the recorded" in message for message in messages))
+            manifest["workspace"]["upstream_origin_mode"] = False
+            _write_json(workspace / ".adoption-workspace.yaml", manifest)
+            verified, messages = verify_workspace(workspace)
+            self.assertFalse(verified)
+            self.assertTrue(any("without the recorded" in message for message in messages))
+            manifest["workspace"]["upstream_origin_mode"] = True
+            manifest["verification"] = {"last_result": "PASS", "last_receipt": None, "workspace_digest": _workspace_digest(workspace, manifest)}
+            _write_json(workspace / ".adoption-workspace.yaml", manifest)
+            submitted, submission_messages = submit_workspace(workspace, yes=True)
+            self.assertFalse(submitted)
+            self.assertTrue(any("origin is canonical upstream" in message for message in submission_messages))
+
     def test_verify_and_submit_fail_safely_on_incomplete_or_stale_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -152,7 +184,7 @@ class LegacyAdoptionTest(unittest.TestCase):
             old_constants = adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER
             adoption_workspace.CANONICAL_DIG = str(dig); adoption_workspace.CANONICAL_WRAPPER = str(wrapper)
             try:
-                workspace = create_workspace(existing=legacy, workspace=root / "isolated", library_id="Adopted", display_name=None, pattern="generic", github_user=None, dig_fork=str(dig), wrapper_fork=str(wrapper))
+                workspace = create_workspace(existing=legacy, workspace=root / "isolated", library_id="Adopted", display_name=None, pattern="generic", github_user=None, dig_fork=str(dig), wrapper_fork=str(wrapper), allow_upstream_origin=True)
                 ok, messages = verify_workspace(workspace)
                 self.assertFalse(ok)  # scaffold intentionally has no usable DIG identifier yet
                 self.assertTrue(any("DIG" in message or "smoke" in message.lower() for message in messages))
@@ -174,7 +206,7 @@ class LegacyAdoptionTest(unittest.TestCase):
             old_constants = adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER
             adoption_workspace.CANONICAL_DIG = str(dig); adoption_workspace.CANONICAL_WRAPPER = str(wrapper)
             try:
-                workspace = create_workspace(existing=legacy, workspace=root / "isolated", library_id="Adopted", display_name=None, pattern="generic", github_user=None, dig_fork=str(dig), wrapper_fork=str(wrapper), base_branch="release-branch")
+                workspace = create_workspace(existing=legacy, workspace=root / "isolated", library_id="Adopted", display_name=None, pattern="generic", github_user=None, dig_fork=str(dig), wrapper_fork=str(wrapper), base_branch="release-branch", allow_upstream_origin=True)
             finally:
                 adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER = old_constants
             _root, manifest = load_workspace(workspace)
@@ -189,6 +221,12 @@ class LegacyAdoptionTest(unittest.TestCase):
         self.assertEqual(url, "https://github.com/broadinstitute/geneset-extractor-dev/pull/1")
         pr_command = commands[-1]
         self.assertEqual(pr_command[pr_command.index("--base") + 1], "main")
+        same_repo = {"origin": "https://github.com/broadinstitute/geneset-extractor-dev.git", "upstream": "https://github.com/broadinstitute/geneset-extractor-dev.git", "base_branch": "main", "work_branch": "adopt/Adopted"}
+        commands.clear()
+        with patch.object(adoption_workspace.shutil, "which", return_value="gh"), patch.object(adoption_workspace, "_run", side_effect=fake_run):
+            _open_draft_pr(Path("."), same_repo, "title", "body")
+        same_repo_command = commands[-1]
+        self.assertEqual(same_repo_command[same_repo_command.index("--head") + 1], "adopt/Adopted")
 
     def test_safe_staging_rejects_secrets_and_canonical_origins(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
