@@ -448,21 +448,33 @@ _FORBIDDEN_SUFFIXES = {".gmt", ".h5", ".h5ad", ".rds", ".parquet", ".zip", ".tar
 
 
 def _changed_paths(repo: Path) -> list[Path]:
-    status = _git(repo, "status", "--porcelain=v1")
+    # NUL-delimited porcelain is the only reliable format for renames and for
+    # paths containing whitespace, arrows, or newlines.  For a rename/copy its
+    # first path is the destination and its second path is the original; stage
+    # the destination only so Git records the rename rather than treating the
+    # status text itself as a filename.
+    completed = _run(["git", "status", "--porcelain=v1", "-z"], repo)
+    if completed.returncode:
+        raise ValueError(completed.stderr.strip() or "could not inspect Git status")
+    records = completed.stdout.split("\0")
     paths: list[Path] = []
-    for line in status.splitlines():
-        if len(line) >= 4:
-            raw = line[3:]
-            if " -> " in raw:
-                raw = raw.split(" -> ", 1)[1]
-            candidate = repo / raw.rstrip("/")
-            # Porcelain reports an untracked directory as one entry. Expand it
-            # before staging so a hidden secret or large source file cannot be
-            # smuggled in by staging the directory as a whole.
-            if candidate.is_dir():
-                paths.extend(path for path in candidate.rglob("*") if path.is_file())
-            else:
-                paths.append(candidate)
+    index = 0
+    while index < len(records):
+        record = records[index]
+        index += 1
+        if not record or len(record) < 4:
+            continue
+        status, raw = record[:2], record[3:]
+        if "R" in status or "C" in status:
+            index += 1  # discard the following original path
+        candidate = repo / raw.rstrip("/")
+        # Porcelain reports an untracked directory as one entry. Expand it
+        # before staging so a hidden secret or large source file cannot be
+        # smuggled in by staging the directory as a whole.
+        if candidate.is_dir():
+            paths.extend(path for path in candidate.rglob("*") if path.is_file())
+        else:
+            paths.append(candidate)
     return paths
 
 
@@ -563,7 +575,7 @@ def submit_workspace(workspace: Path, *, yes: bool = False, allow_upstream_origi
         origin = _git(repo, "remote", "get-url", "origin")
         if not allow_upstream_origin and not _is_fork_origin(origin, str(declared["upstream"])):
             return False, [f"ERROR: refusing to push {repo.name}; origin is canonical upstream"]
-    dig_sha = _commit_if_changed(dig, f"Add extractor support for {manifest['library_id']}", ("src", "tests", "docs", "pyproject.toml", "README.md")) if dig_changed else None
+    dig_sha = _commit_if_changed(dig, f"Add extractor support for {manifest['library_id']}", ("src", "tests", "docs", "pyproject.toml", "README.md", ".gitignore")) if dig_changed else None
     if dig_sha:
         submission = library / "submission.yaml"; payload = load(submission); payload["dig"]["commit"] = dig_sha
         _write_json(submission, payload)
@@ -572,7 +584,7 @@ def submit_workspace(workspace: Path, *, yes: bool = False, allow_upstream_origi
         payload = load(submission)
         payload["paired_pull_requests"]["dig_gene_set_extractors"] = "N/A"
         _write_json(submission, payload)
-    wrapper_sha = _commit_if_changed(wrapper, f"Add {manifest['library_id']} gene-set library", (manifest["library_id"], "docs", "submission_tools", "tests", "config", "run")) if (wrapper_changed or dig_sha) else None
+    wrapper_sha = _commit_if_changed(wrapper, f"Add {manifest['library_id']} gene-set library", (manifest["library_id"], "docs", "submission_tools", "tests", "config", "run", ".gitignore")) if (wrapper_changed or dig_sha) else None
     # Confirm the wrapper now points at the exact DIG commit before any push.
     if dig_sha:
         result = coordinated_validate(library, dig, development_dig_checkout=False)
