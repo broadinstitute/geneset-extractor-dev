@@ -27,7 +27,7 @@ from .yaml_loader import load
 
 CANONICAL_DIG = "https://github.com/flannick/dig-gene-set-extractors.git"
 CANONICAL_WRAPPER = "https://github.com/broadinstitute/geneset-extractor-dev.git"
-DEFAULT_BASE_BRANCH = "rk-submission-system-v1"
+DEFAULT_BASE_BRANCH = "main"
 WORKSPACE_MANIFEST = ".adoption-workspace.yaml"
 
 
@@ -168,6 +168,7 @@ The original legacy submission at `{manifest['legacy']['source_path']}` is **REA
 
 DIG branch: `{manifest['repositories']['dig']['work_branch']}`
 Wrapper branch: `{manifest['repositories']['wrapper']['work_branch']}`
+Baseline branch: `{manifest['repositories']['dig']['base_branch']}`
 
 All substantive source-data processing, statistical analysis, normalization, differential testing, gene mapping, ranking, gene-set construction, and reusable converters belong in `dig-gene-set-extractors`. The wrapper repository may only configure, dispatch, execute, refresh metadata/provenance, and publish.
 

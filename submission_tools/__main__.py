@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .discovery import discover_submissions
 from .adoption import adopt, adoption_status
-from .adoption_workspace import create_workspace, submit_workspace, verify_workspace
+from .adoption_workspace import DEFAULT_BASE_BRANCH, create_workspace, submit_workspace, verify_workspace
 from .coordinated import coordinated_validate
 from .legacy_compare import compare_gmt
 from .receipt import write_receipt
@@ -43,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     adopt_parser.add_argument("--github-user", help="GitHub username used to infer both contributor forks.")
     adopt_parser.add_argument("--dig-fork", help="Contributor DIG fork URL.")
     adopt_parser.add_argument("--wrapper-fork", help="Contributor wrapper fork URL.")
-    adopt_parser.add_argument("--base-branch", default="rk-submission-system-v1")
+    adopt_parser.add_argument("--base-branch", default=DEFAULT_BASE_BRANCH, help="Upstream baseline and pull-request target branch (default: main).")
     comparison = commands.add_parser("compare-legacy", help="Compare legacy and regenerated GMT outputs.")
     comparison.add_argument("--library", help="Adopted library directory; discovers the first legacy/new GMT pair.")
     comparison.add_argument("--legacy")

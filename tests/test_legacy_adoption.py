@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import json
+import inspect
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from submission_tools.adoption import adopt, adoption_status, inventory_legacy
 from submission_tools import adoption_workspace
-from submission_tools.adoption_workspace import _is_fork_origin, create_workspace, load_workspace, safe_stage, submit_workspace, validate_workspace_location, verify_workspace
+from submission_tools.adoption_workspace import DEFAULT_BASE_BRANCH, _is_fork_origin, _open_draft_pr, create_workspace, load_workspace, safe_stage, submit_workspace, validate_workspace_location, verify_workspace
 from submission_tools.legacy_compare import compare_gmt
 from submission_tools.validator import validate_submission
 
@@ -80,10 +82,10 @@ class LegacyAdoptionTest(unittest.TestCase):
         completed = subprocess.run(["git", *args], cwd=root, text=True, capture_output=True)
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
-    def _remote(self, root: Path, name: str) -> Path:
+    def _remote(self, root: Path, name: str, branch: str = "main") -> Path:
         source = root / (name + "-source")
         source.mkdir()
-        self._git(source, "init", "-b", "rk-submission-system-v1")
+        self._git(source, "init", "-b", branch)
         self._git(source, "config", "user.email", "test@example.invalid")
         self._git(source, "config", "user.name", "Test")
         (source / "README.md").write_text("fixture\n", encoding="utf-8")
@@ -98,10 +100,11 @@ class LegacyAdoptionTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             legacy = self.legacy_library(root)
-            dig, wrapper = self._remote(root, "dig"), self._remote(root, "wrapper")
+            dig_upstream, dig = self._remote(root, "dig-upstream"), self._remote(root, "dig-fork")
+            wrapper_upstream, wrapper = self._remote(root, "wrapper-upstream"), self._remote(root, "wrapper-fork")
             old_constants = adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER
-            adoption_workspace.CANONICAL_DIG = str(dig)
-            adoption_workspace.CANONICAL_WRAPPER = str(wrapper)
+            adoption_workspace.CANONICAL_DIG = str(dig_upstream)
+            adoption_workspace.CANONICAL_WRAPPER = str(wrapper_upstream)
             try:
                 workspace = create_workspace(
                     existing=legacy, workspace=root / "isolated", library_id="Adopted", display_name=None,
@@ -111,11 +114,24 @@ class LegacyAdoptionTest(unittest.TestCase):
                 adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER = old_constants
             loaded_root, manifest = load_workspace(workspace)
             self.assertEqual(loaded_root, workspace.resolve())
+            self.assertEqual(manifest["repositories"]["dig"]["base_branch"], "main")
+            self.assertEqual(manifest["repositories"]["wrapper"]["base_branch"], "main")
             self.assertEqual(manifest["repositories"]["dig"]["work_branch"], "adopt/Adopted")
+            self.assertEqual(manifest["repositories"]["dig"]["origin"], str(dig))
+            self.assertEqual(manifest["repositories"]["dig"]["upstream"], str(dig_upstream))
+            self.assertEqual(manifest["repositories"]["wrapper"]["origin"], str(wrapper))
+            self.assertEqual(manifest["repositories"]["wrapper"]["upstream"], str(wrapper_upstream))
             self.assertTrue((workspace / "adoption/legacy_reference.json").exists())
             self.assertTrue((workspace / "AI_ADOPTION_PROMPT.md").exists())
+            self.assertIn("Baseline branch: `main`", (workspace / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8"))
             self.assertEqual((legacy / "old.gmt").read_text(encoding="utf-8"), "set_a\tna\tA\tB\n")
             self.assertTrue((workspace / "geneset-extractor-dev/Adopted/submission.yaml").is_file())
+
+    def test_default_branch_is_main_and_submit_never_pushes_upstream(self) -> None:
+        self.assertEqual(DEFAULT_BASE_BRANCH, "main")
+        source = inspect.getsource(adoption_workspace.submit_workspace)
+        self.assertIn('["git", "push", "-u", "origin"', source)
+        self.assertNotIn('["git", "push", "upstream"', source)
 
     def test_workspace_safety_and_legacy_change_detection(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -149,6 +165,30 @@ class LegacyAdoptionTest(unittest.TestCase):
                 self.assertTrue(any("stale" in message or "missing" in message for message in submission_messages))
             finally:
                 adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER = old_constants
+
+    def test_base_branch_override_is_recorded_and_used_for_draft_prs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            legacy = self.legacy_library(root)
+            dig, wrapper = self._remote(root, "dig", "release-branch"), self._remote(root, "wrapper", "release-branch")
+            old_constants = adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER
+            adoption_workspace.CANONICAL_DIG = str(dig); adoption_workspace.CANONICAL_WRAPPER = str(wrapper)
+            try:
+                workspace = create_workspace(existing=legacy, workspace=root / "isolated", library_id="Adopted", display_name=None, pattern="generic", github_user=None, dig_fork=str(dig), wrapper_fork=str(wrapper), base_branch="release-branch")
+            finally:
+                adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER = old_constants
+            _root, manifest = load_workspace(workspace)
+            self.assertEqual(manifest["repositories"]["dig"]["base_branch"], "release-branch")
+        commands: list[list[str]] = []
+        def fake_run(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+            commands.append(args)
+            return subprocess.CompletedProcess(args, 0, "https://github.com/broadinstitute/geneset-extractor-dev/pull/1\n", "")
+        declared = {"origin": "https://github.com/example/geneset-extractor-dev.git", "upstream": "https://github.com/broadinstitute/geneset-extractor-dev.git", "base_branch": "main", "work_branch": "adopt/Adopted"}
+        with patch.object(adoption_workspace.shutil, "which", return_value="gh"), patch.object(adoption_workspace, "_run", side_effect=fake_run):
+            url, _message = _open_draft_pr(Path("."), declared, "title", "body")
+        self.assertEqual(url, "https://github.com/broadinstitute/geneset-extractor-dev/pull/1")
+        pr_command = commands[-1]
+        self.assertEqual(pr_command[pr_command.index("--base") + 1], "main")
 
     def test_safe_staging_rejects_secrets_and_canonical_origins(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

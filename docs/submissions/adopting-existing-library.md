@@ -16,7 +16,9 @@ python3 -m submission_tools adopt \
 
 1. Fork both repositories first. The tool uses those forks as writable
    `origin` remotes and configures the canonical repositories as read-only
-   `upstream` remotes.
+   `upstream` remotes. It uses upstream `main` as the default baseline and PR
+   target; pass `--base-branch SOME_BRANCH` only when an alternate baseline is
+   explicitly required.
 2. Run `adopt` as above. It creates branches named `adopt/MY_LIBRARY`, an
    inventory, legacy-output checksums, and `AI_ADOPTION_PROMPT.md`.
 3. Start a coding agent in the generated workspace and tell it to follow that
