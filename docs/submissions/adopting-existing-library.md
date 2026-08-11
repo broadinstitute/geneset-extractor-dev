@@ -26,18 +26,19 @@ python3 -m submission_tools adopt \
    produced by committed code. Substantive processing, statistics, mapping,
    ranking, and gene-set construction belong in `dig-gene-set-extractors`; this
    repository remains wrapper-only.
-4. Verify the migration:
+4. Verify the migration from the workspace root. This helper deliberately uses
+   the `submission_tools` code in the workspace's `geneset-extractor-dev`
+   clone, so it cannot silently use another checkout or installed package:
 
 ```bash
-python3 -m submission_tools verify-adoption \
-  --workspace ~/gene-set-adoptions/MY_LIBRARY
+cd ~/gene-set-adoptions/MY_LIBRARY
+./verify-adoption
 ```
 
 5. Review the result, then commit/push to your forks and open draft PRs:
 
 ```bash
-python3 -m submission_tools submit-adoption \
-  --workspace ~/gene-set-adoptions/MY_LIBRARY --yes
+./submit-adoption --yes
 ```
 
 `submit-adoption` never pushes to `upstream`, never merges pull requests, and
@@ -67,12 +68,32 @@ only when that recorded override exists. Submission requires a second explicit
 acknowledgement:
 
 ```bash
-python3 -m submission_tools submit-adoption \
-  --workspace ~/gene-set-adoptions/MY_LIBRARY --yes --allow-upstream-origin
+./submit-adoption --yes --allow-upstream-origin
 ```
 
 That second flag is not inferred from the workspace. Draft PRs in this mode are
 same-repository branch PRs: `adopt/MY_LIBRARY` into upstream `main`.
+
+## Full legacy equivalence
+
+Smoke reproduction proves that the small test workflow runs; it is not treated
+as a full-library comparison. Declare an explicit regenerated counterpart for
+each legacy output that must be compared, for example in `submission.yaml`:
+
+```yaml
+adoption:
+  reference_outputs:
+    - legacy: /read-only/legacy/genesets.gmt
+      regenerated: work/full/genesets.gmt
+      comparison: set_equivalent
+      scope: full
+```
+
+The regenerated path is relative to the submitted library. Without a declared
+full mapping, verification reports that smoke passed and that full equivalence
+was not run; submission remains blocked until the required full comparison is
+completed. An explicit `scope: smoke` mapping is allowed for a corresponding
+smoke reference, but is never selected automatically for a full legacy GMT.
 
 ## Advanced / low-level commands
 
@@ -84,6 +105,8 @@ After migration, run ordinary validation and compare outputs:
 ```bash
 python3 -m submission_tools adopt --existing ../old_library --library-id MY_LIBRARY --output MY_LIBRARY
 python3 -m submission_tools validate --submission MY_LIBRARY/submission.yaml --dig-repo ../dig-gene-set-extractors --smoke --receipt-out MY_LIBRARY/run_receipt.json
+python3 -m submission_tools verify-adoption --workspace ~/gene-set-adoptions/MY_LIBRARY
+python3 -m submission_tools submit-adoption --workspace ~/gene-set-adoptions/MY_LIBRARY --yes
 python3 -m submission_tools compare-legacy --library MY_LIBRARY
 python3 -m submission_tools adoption-status --library MY_LIBRARY
 ```
