@@ -70,12 +70,21 @@ def validate_workspace_location(workspace: Path, legacy: Path) -> tuple[Path, Pa
     return workspace, legacy
 
 
-def _fork_urls(github_user: str | None, dig_fork: str | None, wrapper_fork: str | None) -> tuple[str, str]:
+def _normalize_remote(url: str) -> str:
+    return url.rstrip("/").removesuffix(".git").replace("git@github.com:", "https://github.com/")
+
+
+def _fork_urls(github_user: str | None, dig_fork: str | None, wrapper_fork: str | None, *, allow_upstream_origin: bool) -> tuple[str, str]:
     if github_user:
         dig_fork = dig_fork or f"https://github.com/{github_user}/dig-gene-set-extractors.git"
         wrapper_fork = wrapper_fork or f"https://github.com/{github_user}/geneset-extractor-dev.git"
     if not dig_fork or not wrapper_fork:
         raise ValueError("pass --github-user or both --dig-fork and --wrapper-fork")
+    if not allow_upstream_origin:
+        canonical = (("DIG", dig_fork, CANONICAL_DIG), ("wrapper", wrapper_fork, CANONICAL_WRAPPER))
+        for role, origin, upstream in canonical:
+            if _normalize_remote(origin) == _normalize_remote(upstream):
+                raise ValueError(f"{role} origin is the canonical upstream; use a contributor fork or pass --allow-upstream-origin explicitly for maintainer testing")
     return dig_fork, wrapper_fork
 
 
@@ -112,9 +121,10 @@ def create_workspace(
     dig_fork: str | None,
     wrapper_fork: str | None,
     base_branch: str = DEFAULT_BASE_BRANCH,
+    allow_upstream_origin: bool = False,
 ) -> Path:
     workspace, legacy = validate_workspace_location(workspace, existing)
-    dig_fork, wrapper_fork = _fork_urls(github_user, dig_fork, wrapper_fork)
+    dig_fork, wrapper_fork = _fork_urls(github_user, dig_fork, wrapper_fork, allow_upstream_origin=allow_upstream_origin)
     workspace.mkdir(parents=True, exist_ok=True)
     work_branch = f"adopt/{library_id}"
     try:
@@ -136,7 +146,7 @@ def create_workspace(
         _write_json(submission, payload)
         manifest = {
             "schema_version": "1.0.0", "library_id": library_id,
-            "workspace": {"root": str(workspace)},
+            "workspace": {"root": str(workspace), "upstream_origin_mode": allow_upstream_origin},
             "legacy": {"source_path": str(legacy), "read_only": True, "inventory": "adoption/inventory.json", "reference": "adoption/legacy_reference.json"},
             "repositories": {
                 "dig": {"path": "dig-gene-set-extractors", "origin": dig_fork, "upstream": CANONICAL_DIG, "base_branch": base_branch, "work_branch": work_branch},
@@ -169,6 +179,7 @@ The original legacy submission at `{manifest['legacy']['source_path']}` is **REA
 DIG branch: `{manifest['repositories']['dig']['work_branch']}`
 Wrapper branch: `{manifest['repositories']['wrapper']['work_branch']}`
 Baseline branch: `{manifest['repositories']['dig']['base_branch']}`
+Maintainer upstream-origin mode: `{manifest['workspace']['upstream_origin_mode']}`
 
 All substantive source-data processing, statistical analysis, normalization, differential testing, gene mapping, ranking, gene-set construction, and reusable converters belong in `dig-gene-set-extractors`. The wrapper repository may only configure, dispatch, execute, refresh metadata/provenance, and publish.
 
@@ -276,6 +287,10 @@ def verify_workspace(workspace: Path) -> tuple[bool, list[str]]:
     repos = manifest["repositories"]
     messages.extend("ERROR: " + item for item in _repo_safety(dig, repos["dig"], "DIG"))
     messages.extend("ERROR: " + item for item in _repo_safety(wrapper, repos["wrapper"], "wrapper"))
+    maintainer_mode = bool(manifest.get("workspace", {}).get("upstream_origin_mode", False))
+    for role, declared in (("DIG", repos["dig"]), ("wrapper", repos["wrapper"])):
+        if _normalize_remote(str(declared["origin"])) == _normalize_remote(str(declared["upstream"])) and not maintainer_mode:
+            messages.append(f"ERROR: {role} uses canonical upstream as origin without the recorded --allow-upstream-origin override")
     if not legacy.is_dir():
         messages.append(f"ERROR: legacy source is missing: {legacy}")
     else:
@@ -368,9 +383,7 @@ def _commit_if_changed(repo: Path, message: str, roots: tuple[str, ...]) -> str 
 
 
 def _is_fork_origin(url: str, upstream: str) -> bool:
-    def normalize(value: str) -> str:
-        return value.rstrip("/").removesuffix(".git").replace("git@github.com:", "https://github.com/")
-    return normalize(url) != normalize(upstream)
+    return _normalize_remote(url) != _normalize_remote(upstream)
 
 
 def _github_slug(url: str) -> str | None:
@@ -396,7 +409,8 @@ def _open_draft_pr(repo: Path, declared: dict[str, Any], title: str, body: str) 
     owner = _github_owner(str(declared["origin"]))
     if not upstream_slug or not owner:
         return None, f"non-GitHub remotes; create a draft PR manually from {declared['work_branch']}"
-    command = [gh, "pr", "create", "--repo", upstream_slug, "--base", str(declared["base_branch"]), "--head", f"{owner}:{declared['work_branch']}", "--draft", "--title", title, "--body", body]
+    head = str(declared["work_branch"]) if _normalize_remote(str(declared["origin"])) == _normalize_remote(str(declared["upstream"])) else f"{owner}:{declared['work_branch']}"
+    command = [gh, "pr", "create", "--repo", upstream_slug, "--base", str(declared["base_branch"]), "--head", head, "--draft", "--title", title, "--body", body]
     completed = _run(command, repo)
     if completed.returncode:
         return None, "gh could not create a draft PR: " + (completed.stderr.strip() or completed.stdout.strip())
@@ -406,6 +420,15 @@ def _open_draft_pr(repo: Path, declared: dict[str, Any], title: str, body: str) 
 def submit_workspace(workspace: Path, *, yes: bool = False, allow_upstream_origin: bool = False) -> tuple[bool, list[str]]:
     root, manifest = load_workspace(workspace)
     dig, wrapper, library, legacy = _workspace_paths(root, manifest)
+    repositories = manifest["repositories"]
+    maintainer_mode = bool(manifest.get("workspace", {}).get("upstream_origin_mode", False))
+    remote_problems: list[str] = []
+    for role, repo, declared in (("DIG", dig, repositories["dig"]), ("wrapper", wrapper, repositories["wrapper"])):
+        remote_problems.extend(_repo_safety(repo, declared, role))
+        if _normalize_remote(str(declared["origin"])) == _normalize_remote(str(declared["upstream"])) and not maintainer_mode:
+            remote_problems.append(f"{role} uses canonical upstream as origin without the recorded --allow-upstream-origin override")
+    if remote_problems:
+        return False, ["ERROR: " + problem for problem in remote_problems]
     verification = manifest.get("verification", {})
     if verification.get("last_result") != "PASS" or verification.get("workspace_digest") != _workspace_digest(root, manifest):
         return False, ["ERROR: verification is missing or stale; run verify-adoption again"]
@@ -422,7 +445,7 @@ def submit_workspace(workspace: Path, *, yes: bool = False, allow_upstream_origi
             f"  geneset-extractor-dev: {'changed' if wrapper_changed else 'unchanged'}",
             "Re-run with --yes to commit and push only to contributor forks.",
         ]
-    for repo, declared in ((dig, manifest["repositories"]["dig"]), (wrapper, manifest["repositories"]["wrapper"])):
+    for repo, declared in ((dig, repositories["dig"]), (wrapper, repositories["wrapper"])):
         origin = _git(repo, "remote", "get-url", "origin")
         if not allow_upstream_origin and not _is_fork_origin(origin, str(declared["upstream"])):
             return False, [f"ERROR: refusing to push {repo.name}; origin is canonical upstream"]
