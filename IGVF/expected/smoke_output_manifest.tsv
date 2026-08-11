@@ -1,0 +1,3 @@
+output_id	relative_path
+smoke_workflow_gmt	outputs/smoke/genesets/SMOKE/models/PS1/workflow/gene_set_library_crisp.gmt
+smoke_extractor_gmt	outputs/smoke/genesets/SMOKE/models/PS1/extractor/genesets.gmt

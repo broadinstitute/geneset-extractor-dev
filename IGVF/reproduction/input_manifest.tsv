@@ -1,0 +1,18 @@
+input_id	source_uri_or_access_instructions	version_release	checksum	access_method	smoke_full	workflow_stage	redistribution_status	committed_fixture	fixture_path
+IGVFFI0331FOUT	https://api.data.igvf.org/tabular-files/IGVFFI0331FOUT/@@download/IGVFFI0331FOUT.tsv.gz	IGVFDS0523KGZP		public_https	full	workflow_input	public	false	
+IGVFFI3445AYOJ	https://api.data.igvf.org/tabular-files/IGVFFI3445AYOJ/@@download/IGVFFI3445AYOJ.tsv.gz	IGVFDS0790MEEM		public_https	full	workflow_input	public	false	
+IGVFFI8750MLNP	https://api.data.igvf.org/tabular-files/IGVFFI8750MLNP/@@download/IGVFFI8750MLNP.tsv.gz	IGVFDS3578UWZK		public_https	full	workflow_input	public	false	
+IGVFFI4354THUZ	https://api.data.igvf.org/tabular-files/IGVFFI4354THUZ/@@download/IGVFFI4354THUZ.tsv.gz	IGVFDS3959LESA		public_https	full	workflow_input	public	false	
+IGVFFI3272UWTY	https://api.data.igvf.org/tabular-files/IGVFFI3272UWTY/@@download/IGVFFI3272UWTY.tsv.gz	IGVFDS7132YVKO		public_https	full	workflow_input	public	false	
+IGVFFI1867ROFS	https://api.data.igvf.org/tabular-files/IGVFFI1867ROFS/@@download/IGVFFI1867ROFS.csv.gz	IGVFDS2266YDVM		public_https	full	workflow_input	public	false	
+IGVFFI0726ZROO	https://api.data.igvf.org/tabular-files/IGVFFI0726ZROO/@@download/IGVFFI0726ZROO.csv.gz	IGVFDS2873EPIU		public_https	full	workflow_input	public	false	
+IGVFFI6770EFUQ	https://api.data.igvf.org/tabular-files/IGVFFI6770EFUQ/@@download/IGVFFI6770EFUQ.csv.gz	IGVFDS4003HZAB		public_https	full	workflow_input	public	false	
+IGVFFI8786YBUA	https://api.data.igvf.org/tabular-files/IGVFFI8786YBUA/@@download/IGVFFI8786YBUA.csv.gz	IGVFDS4252LFRU		public_https	full	workflow_input	public	false	
+IGVFFI7266NWTF	https://api.data.igvf.org/tabular-files/IGVFFI7266NWTF/@@download/IGVFFI7266NWTF.csv.gz	IGVFDS4389OUWU		public_https	full	workflow_input	public	false	
+IGVFFI5883SVNN	https://api.data.igvf.org/tabular-files/IGVFFI5883SVNN/@@download/IGVFFI5883SVNN.csv.gz	IGVFDS7340YDHF		public_https	full	workflow_input	public	false	
+IGVFFI0068OWUG	https://api.data.igvf.org/tabular-files/IGVFFI0068OWUG/@@download/IGVFFI0068OWUG.csv.gz	IGVFDS6924DJAZ		public_https	full	workflow_input	public	false	
+IGVFFI2903THXX	https://api.data.igvf.org/tabular-files/IGVFFI2903THXX/@@download/IGVFFI2903THXX.tsv.gz	IGVFDS3405NGXF		public_https	full	workflow_input	public	false	
+IGVFFI6830YLEK	https://api.data.igvf.org/tabular-files/IGVFFI6830YLEK/@@download/IGVFFI6830YLEK.tsv.gz	IGVFDS5239SBBT		public_https	full	workflow_input	public	false	
+IGVFFI0830FXFI	https://api.data.igvf.org/tabular-files/IGVFFI0830FXFI/@@download/IGVFFI0830FXFI.csv.gz	IGVFDS6332VCTO		public_https	full	workflow_input	public	false	
+IGVFFI5198JCCU	https://api.data.igvf.org/tabular-files/IGVFFI5198JCCU/@@download/IGVFFI5198JCCU.tsv.gz	IGVFDS9445RJOU		public_https	full	workflow_input	public	false	
+smoke_long_de	Synthetic long-DE fixture for CLI smoke validation	fixture_v1		committed_fixture	smoke	workflow_input	not_redistributable	true	tests/fixtures/smoke_long_de.tsv

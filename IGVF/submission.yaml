@@ -1,0 +1,400 @@
+{
+  "adoption": {
+    "reference_outputs": [
+      {
+        "checksum": "sha256:ee623e00ce9c0debfe0bf502262cf3c860f722bd334e12b7a752d6610697b412",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS0523KGZP/models/PS1/extractor/genesets.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS0523KGZP/models/PS1/extractor/genesets.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:07b9e468835895ceb0c61993abdebf24937080b884807556220c1003ebcc73fc",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS0523KGZP/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS0523KGZP/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:5ec29da181881aa945c1f228e4e493c88f5c9eda693736c6c94330361e0b4c4f",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS0790MEEM/models/PS1/extractor/genesets.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS0790MEEM/models/PS1/extractor/genesets.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:af96f7cd777610f9d6387e78eb913998b9d3fd6e042143a573674672ebec677c",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS0790MEEM/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS0790MEEM/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:366ac77ab1febb10ac718ae2ffa462dd377f7a8bb2ffbd44b60a9f9e9c2828da",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS2266YDVM/models/PS1/extractor/genesets.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS2266YDVM/models/PS1/extractor/genesets.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:8c07801e478886210425aec2e5e47e28eb67bae17db580d8bbf81ff928834304",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS2266YDVM/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS2266YDVM/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:6ea02ee172d615d50b4f05f30b606a76e790d8ddc6bad09614880fd4b5c6ea2c",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS2873EPIU/models/PS1/extractor/genesets.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS2873EPIU/models/PS1/extractor/genesets.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:cc990a5e01c81bf2a3861924d8979101e7dfe151fbe79aa10eca470460be8c67",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS2873EPIU/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS2873EPIU/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:3f0376083dfe78b8ad2bc86b59754066f6f91ac42e58f6fde8df4d7ead864abe",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS3405NGXF/models/PS1/extractor/genesets.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS3405NGXF/models/PS1/extractor/genesets.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:1c4a7067dd35c5591437846203647bc3db7289f712e171f43fb73d9c0fecf333",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS3405NGXF/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS3405NGXF/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:0b9db918ada393875ecbbcad0a1999f704eea1a83d207a00ae612f046324073e",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS3578UWZK/models/PS1/extractor/genesets.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS3578UWZK/models/PS1/extractor/genesets.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:4fed277dfa64aa801e8e701a4d7b058172f267d9a028649109cefca09611b487",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS3578UWZK/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS3578UWZK/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:1b518937646fd586c20bae08a5b0ae462e5d8b1785a7d9e808f3511984cad6b3",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS3959LESA/models/PS1/extractor/genesets.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS3959LESA/models/PS1/extractor/genesets.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:d52d4c5c892a608ad038cb073f55a7819ae5196c6b553efd105fde23f736776c",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS3959LESA/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS3959LESA/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:5e4ce26cfaa3b3ad0f16332f7b2868894aef2cd5c35f894fff1e8ddbce2088da",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS4003HZAB/models/PS1/extractor/genesets.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS4003HZAB/models/PS1/extractor/genesets.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:93d5bd0594e7c5c45cb4624da60037900d5203475a061cef5a131c0e96c792e4",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS4003HZAB/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS4003HZAB/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:8893ca61919add1258cdcadab2c514e86652ed8ae528746c942f860cafb27e0d",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS4252LFRU/models/PS1/extractor/genesets.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS4252LFRU/models/PS1/extractor/genesets.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:dc0b63bd4fdd83d1fb4fae5ebd94109be907fb7d1bf0ad899c09144cefed742b",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS4252LFRU/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS4252LFRU/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:8c655eae3e5b95b1fbb47c8dbb36030a2a1aab60c8006acaf50046979f23f769",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS4389OUWU/models/PS1/extractor/genesets.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS4389OUWU/models/PS1/extractor/genesets.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:068df24dee65f25ac77be3a06a6dfdffb8d8cc3eafb3f21a3241e555daf72228",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS4389OUWU/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS4389OUWU/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:037c69ae2822cf797a1889b369dddb5ea866f2811ae4912eb0ca6b98331351bd",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS5239SBBT/models/PS1/extractor/genesets.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS5239SBBT/models/PS1/extractor/genesets.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:6976ba649d670b18d92ef6fc465784ddc397ee009d41961437255458d3975f54",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS5239SBBT/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS5239SBBT/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:795d900bd8b35e5ec3f4785b8c895c82eb47fb0b6a5d71ab8ab2498b36d6dbff",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS6332VCTO/models/PS1/extractor/genesets.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS6332VCTO/models/PS1/extractor/genesets.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:a7d723762e79e00cffae15c2cd0b5c47acbbd531110248b7e2998ac3cfe9a336",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS6332VCTO/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS6332VCTO/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:882c138921c0912276c1e698ee45bc417ef6995c84e1d1f5dfe667ed5bac88d6",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS6924DJAZ/models/PS1/extractor/genesets.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS6924DJAZ/models/PS1/extractor/genesets.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:79cf7ee0b5644d1fbcd52d1bb8612673641b3401962b26169ff465ce09e35d32",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS6924DJAZ/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS6924DJAZ/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:8a101912d1d45cf5a6be724389ea21d3effc0f6026df2332dccd6c7616c457e5",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS7132YVKO/models/PS1/extractor/genesets.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS7132YVKO/models/PS1/extractor/genesets.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:c5d0e97369258cf13bb677ab2ee2fa6d531cf3ed47fff4cfb22fe6c2e60006c9",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS7132YVKO/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS7132YVKO/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:74d487a0672f2835dc6a023bc8f28c9a2dcf105b68b903ecdb38364348deb900",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS7340YDHF/models/PS1/extractor/genesets.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS7340YDHF/models/PS1/extractor/genesets.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:4eaa878e52a67c863c1e2bd2901af282a2a7087a10176ab84df1471025daba63",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS7340YDHF/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS7340YDHF/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:d494b7dfdc2183ea755f4d6e7f41d0c43effc91c85cfee8759df8ac8e0b08087",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS9445RJOU/models/PS1/extractor/genesets.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS9445RJOU/models/PS1/extractor/genesets.gmt",
+        "scope": "full"
+      },
+      {
+        "checksum": "sha256:5bac449297cd8c981acd34125bf8983fae650b73d2778d384d97b69edbcfd949",
+        "comparison": "set_equivalent",
+        "legacy": "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/igvf_all_models/genesets/IGVFDS9445RJOU/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "regenerated": "outputs/full/genesets/IGVFDS9445RJOU/models/PS1/workflow/gene_set_library_crisp.gmt",
+        "scope": "full"
+      }
+    ]
+  },
+  "configs": {
+    "description_config": "config/model_description_templates.tsv",
+    "model_config": "config/model_list.tsv",
+    "partition_config": "config/partition_list.tsv"
+  },
+  "deviations": {
+    "allow_wrapper_findings": [
+      "gmt_writing"
+    ],
+    "from_standard_architecture": []
+  },
+  "dig": {
+    "commit": "70d02d5a7a26b67516dc236861459adf8d9c3aaa",
+    "entrypoints": [
+      "geneset-extractors workflows igvf_perturbseq",
+      "geneset-extractors convert signed_term_gene"
+    ],
+    "identifiers": [
+      "igvf_perturbseq",
+      "signed_term_gene"
+    ],
+    "repository_url": "https://github.com/flannick/dig-gene-set-extractors"
+  },
+  "environment": {
+    "declaration": "Python 3.10+ with the declared geneset-extractors runtime dependencies (numpy and pandas)."
+  },
+  "expected_outputs": {
+    "manifest": "expected/output_manifest.tsv",
+    "smoke_manifest": "expected/smoke_output_manifest.tsv"
+  },
+  "library": {
+    "assay_types": [
+      "rna_seq"
+    ],
+    "closest_reference_pattern": "generic",
+    "display_name": "IGVF",
+    "genome_build": "hg38",
+    "id": "IGVF",
+    "organism": "human",
+    "wrapper_directory": "."
+  },
+  "paired_pull_requests": {
+    "dig_gene_set_extractors": "TBD",
+    "geneset_extractor_dev": "TBD"
+  },
+  "reproduction": {
+    "entry_point": "reproduction/reproduce.sh",
+    "input_manifest": "reproduction/input_manifest.tsv",
+    "smoke_test_command": "bash reproduction/reproduce.sh --smoke"
+  },
+  "schema_version": "1.0.0",
+  "sources": [
+    {
+      "access_restrictions": "public",
+      "license": "IGVF portal terms",
+      "name": "IGVFFI0331FOUT",
+      "release": "IGVFDS0523KGZP",
+      "uri_or_identifier": "https://api.data.igvf.org/tabular-files/IGVFFI0331FOUT/@@download/IGVFFI0331FOUT.tsv.gz"
+    },
+    {
+      "access_restrictions": "public",
+      "license": "IGVF portal terms",
+      "name": "IGVFFI3445AYOJ",
+      "release": "IGVFDS0790MEEM",
+      "uri_or_identifier": "https://api.data.igvf.org/tabular-files/IGVFFI3445AYOJ/@@download/IGVFFI3445AYOJ.tsv.gz"
+    },
+    {
+      "access_restrictions": "public",
+      "license": "IGVF portal terms",
+      "name": "IGVFFI8750MLNP",
+      "release": "IGVFDS3578UWZK",
+      "uri_or_identifier": "https://api.data.igvf.org/tabular-files/IGVFFI8750MLNP/@@download/IGVFFI8750MLNP.tsv.gz"
+    },
+    {
+      "access_restrictions": "public",
+      "license": "IGVF portal terms",
+      "name": "IGVFFI4354THUZ",
+      "release": "IGVFDS3959LESA",
+      "uri_or_identifier": "https://api.data.igvf.org/tabular-files/IGVFFI4354THUZ/@@download/IGVFFI4354THUZ.tsv.gz"
+    },
+    {
+      "access_restrictions": "public",
+      "license": "IGVF portal terms",
+      "name": "IGVFFI3272UWTY",
+      "release": "IGVFDS7132YVKO",
+      "uri_or_identifier": "https://api.data.igvf.org/tabular-files/IGVFFI3272UWTY/@@download/IGVFFI3272UWTY.tsv.gz"
+    },
+    {
+      "access_restrictions": "public",
+      "license": "IGVF portal terms",
+      "name": "IGVFFI1867ROFS",
+      "release": "IGVFDS2266YDVM",
+      "uri_or_identifier": "https://api.data.igvf.org/tabular-files/IGVFFI1867ROFS/@@download/IGVFFI1867ROFS.csv.gz"
+    },
+    {
+      "access_restrictions": "public",
+      "license": "IGVF portal terms",
+      "name": "IGVFFI0726ZROO",
+      "release": "IGVFDS2873EPIU",
+      "uri_or_identifier": "https://api.data.igvf.org/tabular-files/IGVFFI0726ZROO/@@download/IGVFFI0726ZROO.csv.gz"
+    },
+    {
+      "access_restrictions": "public",
+      "license": "IGVF portal terms",
+      "name": "IGVFFI6770EFUQ",
+      "release": "IGVFDS4003HZAB",
+      "uri_or_identifier": "https://api.data.igvf.org/tabular-files/IGVFFI6770EFUQ/@@download/IGVFFI6770EFUQ.csv.gz"
+    },
+    {
+      "access_restrictions": "public",
+      "license": "IGVF portal terms",
+      "name": "IGVFFI8786YBUA",
+      "release": "IGVFDS4252LFRU",
+      "uri_or_identifier": "https://api.data.igvf.org/tabular-files/IGVFFI8786YBUA/@@download/IGVFFI8786YBUA.csv.gz"
+    },
+    {
+      "access_restrictions": "public",
+      "license": "IGVF portal terms",
+      "name": "IGVFFI7266NWTF",
+      "release": "IGVFDS4389OUWU",
+      "uri_or_identifier": "https://api.data.igvf.org/tabular-files/IGVFFI7266NWTF/@@download/IGVFFI7266NWTF.csv.gz"
+    },
+    {
+      "access_restrictions": "public",
+      "license": "IGVF portal terms",
+      "name": "IGVFFI5883SVNN",
+      "release": "IGVFDS7340YDHF",
+      "uri_or_identifier": "https://api.data.igvf.org/tabular-files/IGVFFI5883SVNN/@@download/IGVFFI5883SVNN.csv.gz"
+    },
+    {
+      "access_restrictions": "public",
+      "license": "IGVF portal terms",
+      "name": "IGVFFI0068OWUG",
+      "release": "IGVFDS6924DJAZ",
+      "uri_or_identifier": "https://api.data.igvf.org/tabular-files/IGVFFI0068OWUG/@@download/IGVFFI0068OWUG.csv.gz"
+    },
+    {
+      "access_restrictions": "public",
+      "license": "IGVF portal terms",
+      "name": "IGVFFI2903THXX",
+      "release": "IGVFDS3405NGXF",
+      "uri_or_identifier": "https://api.data.igvf.org/tabular-files/IGVFFI2903THXX/@@download/IGVFFI2903THXX.tsv.gz"
+    },
+    {
+      "access_restrictions": "public",
+      "license": "IGVF portal terms",
+      "name": "IGVFFI6830YLEK",
+      "release": "IGVFDS5239SBBT",
+      "uri_or_identifier": "https://api.data.igvf.org/tabular-files/IGVFFI6830YLEK/@@download/IGVFFI6830YLEK.tsv.gz"
+    },
+    {
+      "access_restrictions": "public",
+      "license": "IGVF portal terms",
+      "name": "IGVFFI0830FXFI",
+      "release": "IGVFDS6332VCTO",
+      "uri_or_identifier": "https://api.data.igvf.org/tabular-files/IGVFFI0830FXFI/@@download/IGVFFI0830FXFI.csv.gz"
+    },
+    {
+      "access_restrictions": "public",
+      "license": "IGVF portal terms",
+      "name": "IGVFFI5198JCCU",
+      "release": "IGVFDS9445RJOU",
+      "uri_or_identifier": "https://api.data.igvf.org/tabular-files/IGVFFI5198JCCU/@@download/IGVFFI5198JCCU.tsv.gz"
+    }
+  ],
+  "submission_origin": {
+    "legacy_inventory": "../../adoption/inventory.json",
+    "type": "adopted"
+  },
+  "submission_status": "draft"
+}

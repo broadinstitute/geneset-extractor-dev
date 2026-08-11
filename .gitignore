@@ -38,6 +38,7 @@
 !HuBMAP/
 !MoTrPAC/
 !KOMP2/
+!IGVF/
 !src/
 !run/
 !proposals/
@@ -58,6 +59,7 @@
 !HuBMAP/**/
 !MoTrPAC/**/
 !KOMP2/**/
+!IGVF/**/
 !src/**/
 !run/**/
 !proposals/**/
@@ -170,5 +172,18 @@
 !KOMP2/**/*.md
 !KOMP2/**/*.pdf
 !KOMP2/**/*.png
+!IGVF/**/*.py
+!IGVF/**/*.r
+!IGVF/**/*.R
+!IGVF/**/*.sh
+!IGVF/**/*.md
+!IGVF/**/*.json
+!IGVF/**/*.yaml
+!IGVF/**/*.tsv
+!IGVF/**/*.txt
+
+# Regenerated IGVF artifacts are reproducible local outputs, not source files.
+IGVF/outputs/
+IGVF/run_receipt.json
 
 archive/
