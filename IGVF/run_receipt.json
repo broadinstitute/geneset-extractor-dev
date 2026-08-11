@@ -2,7 +2,7 @@
   "command": [
     "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/adoption_candidate/verify-adoption"
   ],
-  "completed_at": "2026-08-11T19:39:14.763613+00:00",
+  "completed_at": "2026-08-11T19:40:13.973886+00:00",
   "dig_commit": "5c8bb6f87e5270216c0c74aac8b5fd7e7da40afd",
   "environment": {
     "digest": "0a0a17bb80ffdb26f5b3bbf124f2b21d3bab5dfe575aa07ce0674e90bf938c37",
@@ -16,7 +16,7 @@
   ],
   "output_manifest_digest": "6151beafec7133710c5bebe39c2aa9b6fb3ba1b98bfc349dbcbc240bce5732ec",
   "schema_version": "1.0.0",
-  "started_at": "2026-08-11T19:39:14.763596+00:00",
+  "started_at": "2026-08-11T19:40:13.973860+00:00",
   "submission_schema_version": "1.0.0",
   "validation_result": {
     "messages": [
@@ -61,5 +61,5 @@
     ],
     "ok": true
   },
-  "wrapper_commit": "739b2fbad96cfd04eb88d2787a83e75eb5e7de00"
+  "wrapper_commit": "f183d55a10f9c8ffad3922392c3f2ac7cdc7fce9"
 }
