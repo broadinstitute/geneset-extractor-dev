@@ -26,6 +26,29 @@ python3 -m submission_tools adopt \
    produced by committed code. Substantive processing, statistics, mapping,
    ranking, and gene-set construction belong in `dig-gene-set-extractors`; this
    repository remains wrapper-only.
+
+## Target architecture for an adopted library
+
+The generated `AI_ADOPTION_PROMPT.md` uses GTEx, MoTrPAC, HuBMAP, and
+LINCS_L1000 as references for wrapper naming and orchestration structure, not
+as permission to preserve historical analytical implementation in the wrapper.
+The target wrapper layout is small and explicit:
+
+```text
+<Library>/config/        model, partition, manifest, and description configuration
+<Library>/run/           strict shell launcher
+<Library>/src/           selection and DIG dispatch only
+<Library>/reproduction/  declared input and reproduction contract
+<Library>/expected/      expected-output manifest
+<Library>/tests/fixtures/ small redistributable smoke fixtures
+```
+
+All substantive data processing and gene-set generation logic belongs in
+`dig-gene-set-extractors`. `geneset-extractor-dev` may configure, dispatch,
+execute, refresh, and publish that logic, but must not independently implement
+it. The prompt identifies the selected `--pattern` (`gtex`, `motrpac`,
+`hubmap`, `lincs_l1000`, or `generic`) and directs the agent to the existing
+DIG submission contract before it creates a wrapper dispatcher.
 4. Verify the migration from the workspace root. This helper deliberately uses
    the `submission_tools` code in the workspace's `geneset-extractor-dev`
    clone, so it cannot silently use another checkout or installed package:

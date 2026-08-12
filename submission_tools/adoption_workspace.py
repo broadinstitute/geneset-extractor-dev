@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from .adoption import adoption_report, inventory_legacy
+from .adoption_prompt import architecture_guidance
 from .coordinated import coordinated_validate
 from .legacy_compare import compare_gmt
 from .receipt import write_receipt
@@ -169,7 +170,7 @@ def create_workspace(
                 "wrapper": {"path": "geneset-extractor-dev", "origin": wrapper_fork, "upstream": CANONICAL_WRAPPER, "base_branch": base_branch, "work_branch": work_branch},
             },
             "tooling": {"wrapper_commit": _git(workspace / "geneset-extractor-dev", "rev-parse", "HEAD"), "submission_tools_path": "geneset-extractor-dev/submission_tools"},
-            "submission": {"wrapper_library_path": f"geneset-extractor-dev/{library_id}"},
+            "submission": {"wrapper_library_path": f"geneset-extractor-dev/{library_id}", "pattern": pattern},
             "verification": {"last_result": None, "last_receipt": None, "workspace_digest": None},
         }
         _write_json(workspace / WORKSPACE_MANIFEST, manifest)
@@ -184,6 +185,7 @@ def create_workspace(
 
 
 def _workspace_prompt(workspace: Path, manifest: dict[str, Any], inventory: dict[str, Any]) -> str:
+    pattern = str(manifest.get("submission", {}).get("pattern", "generic"))
     return f"""# AI adoption instructions
 
 You are operating inside an isolated adoption workspace: `{workspace}`.
@@ -200,9 +202,9 @@ Wrapper branch: `{manifest['repositories']['wrapper']['work_branch']}`
 Baseline branch: `{manifest['repositories']['dig']['base_branch']}`
 Maintainer upstream-origin mode: `{manifest['workspace']['upstream_origin_mode']}`
 
-All substantive source-data processing, statistical analysis, normalization, differential testing, gene mapping, ranking, gene-set construction, and reusable converters belong in `dig-gene-set-extractors`. The wrapper repository may only configure, dispatch, execute, refresh metadata/provenance, and publish.
+{architecture_guidance(pattern, inventory)}
 
-Reconstruct every dependency from declared source inputs to final outputs. Every intermediate must be declared or produced by committed code. Preserve thresholds, mappings, contrasts, normalization, ranking, and model definitions; stop for approval before scientifically meaningful changes. Add smoke fixtures and tests, regenerate gene sets, and compare them with the legacy reference. From this workspace root, run `./verify-adoption`; it deliberately imports `submission_tools` from `./geneset-extractor-dev`, not from another checkout or an installed package.
+From this workspace root, run `./verify-adoption`; it deliberately imports `submission_tools` from `./geneset-extractor-dev`, not from another checkout or an installed package.
 
 Inventory: `adoption/inventory.json` ({len(inventory.get('gene_set_outputs', []))} legacy GMT candidates)
 """
