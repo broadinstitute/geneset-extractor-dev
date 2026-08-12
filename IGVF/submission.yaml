@@ -109,7 +109,7 @@
     "from_standard_architecture": []
   },
   "dig": {
-    "commit": "8a076a5871c12acd45c21cad44a23094efdcba4c",
+    "commit": "ac6337f9902ab9cd14d90f945835f72db375def4",
     "entrypoints": [
       "geneset-extractors workflows igvf_perturbseq"
     ],
@@ -137,7 +137,7 @@
     "wrapper_directory": "."
   },
   "paired_pull_requests": {
-    "dig_gene_set_extractors": "https://github.com/flannick/dig-gene-set-extractors/pull/11",
+    "dig_gene_set_extractors": "TBD",
     "geneset_extractor_dev": "https://github.com/broadinstitute/geneset-extractor-dev/pull/26"
   },
   "reproduction": {

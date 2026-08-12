@@ -2,8 +2,8 @@
   "command": [
     "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/adoption_candidate/verify-adoption"
   ],
-  "completed_at": "2026-08-12T03:27:40.833110+00:00",
-  "dig_commit": "8cd9ee99414ca46f562cccb66c393422649f9eec",
+  "completed_at": "2026-08-12T03:57:05.307066+00:00",
+  "dig_commit": "ac6337f9902ab9cd14d90f945835f72db375def4",
   "environment": {
     "digest": "6fed6494c6ee4efd254b791f0a4239f97eac1d4b3ba7f422bc393b5ba5f3c0b8",
     "identifier": "Python 3.10+ with the pinned DIG checkout and its declared project dependencies."
@@ -16,7 +16,7 @@
   ],
   "output_manifest_digest": "51d6e9753bb2fc91f5a8ae4d385ef9fe240c82715f1f3df55425954720922478",
   "schema_version": "1.0.0",
-  "started_at": "2026-08-12T03:27:40.833085+00:00",
+  "started_at": "2026-08-12T03:57:05.307052+00:00",
   "submission_schema_version": "1.0.0",
   "validation_result": {
     "messages": [
@@ -45,5 +45,5 @@
     ],
     "ok": true
   },
-  "wrapper_commit": "c59560fce4f59007e62aadebd4740f3b14985d32"
+  "wrapper_commit": "2b1000a4d04f41a340b31605b92cd7b98fd94308"
 }
