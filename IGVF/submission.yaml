@@ -138,7 +138,7 @@
   },
   "paired_pull_requests": {
     "dig_gene_set_extractors": "https://github.com/flannick/dig-gene-set-extractors/pull/11",
-    "geneset_extractor_dev": "TBD"
+    "geneset_extractor_dev": "https://github.com/broadinstitute/geneset-extractor-dev/pull/26"
   },
   "reproduction": {
     "entry_point": "reproduction/reproduce.sh",
