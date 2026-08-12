@@ -37,6 +37,7 @@
 !GlyGen/
 !HuBMAP/
 !MoTrPAC/
+!IGVF/
 !KOMP2/
 !src/
 !run/
@@ -57,6 +58,7 @@
 !GlyGen/**/
 !HuBMAP/**/
 !MoTrPAC/**/
+!IGVF/**/
 !KOMP2/**/
 !src/**/
 !run/**/
@@ -163,6 +165,10 @@
 !MoTrPAC/**/*.md
 !MoTrPAC/**/*.pdf
 !MoTrPAC/**/*.png
+!IGVF/**
+
+# IGVF reproduction artifacts are generated and remain untracked.
+IGVF/outputs/
 !KOMP2/**/*.py
 !KOMP2/**/*.r
 !KOMP2/**/*.R

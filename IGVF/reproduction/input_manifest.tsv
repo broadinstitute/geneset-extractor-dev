@@ -1,0 +1,18 @@
+input_id	source_uri_or_access_instructions	version_release	checksum	access_method	smoke_full	workflow_stage	redistribution_status	committed_fixture	fixture_path
+igvf_processed_differential_expression	https://data.igvf.org/	released_2026-08-11		public_https	full	workflow_input	not_redistributable	false	
+IGVFFI0331FOUT	https://api.data.igvf.org/tabular-files/IGVFFI0331FOUT/@@download/IGVFFI0331FOUT.tsv.gz	released_2026-08-11		public_https	full	workflow_input	not_redistributable	false	
+IGVFFI3445AYOJ	https://api.data.igvf.org/tabular-files/IGVFFI3445AYOJ/@@download/IGVFFI3445AYOJ.tsv.gz	released_2026-08-11		public_https	full	workflow_input	not_redistributable	false	
+IGVFFI8750MLNP	https://api.data.igvf.org/tabular-files/IGVFFI8750MLNP/@@download/IGVFFI8750MLNP.tsv.gz	released_2026-08-11		public_https	full	workflow_input	not_redistributable	false	
+IGVFFI4354THUZ	https://api.data.igvf.org/tabular-files/IGVFFI4354THUZ/@@download/IGVFFI4354THUZ.tsv.gz	released_2026-08-11		public_https	full	workflow_input	not_redistributable	false	
+IGVFFI3272UWTY	https://api.data.igvf.org/tabular-files/IGVFFI3272UWTY/@@download/IGVFFI3272UWTY.tsv.gz	released_2026-08-11		public_https	full	workflow_input	not_redistributable	false	
+IGVFFI1867ROFS	https://api.data.igvf.org/tabular-files/IGVFFI1867ROFS/@@download/IGVFFI1867ROFS.csv.gz	released_2026-08-11		public_https	full	workflow_input	not_redistributable	false	
+IGVFFI0726ZROO	https://api.data.igvf.org/tabular-files/IGVFFI0726ZROO/@@download/IGVFFI0726ZROO.csv.gz	released_2026-08-11		public_https	full	workflow_input	not_redistributable	false	
+IGVFFI6770EFUQ	https://api.data.igvf.org/tabular-files/IGVFFI6770EFUQ/@@download/IGVFFI6770EFUQ.csv.gz	released_2026-08-11		public_https	full	workflow_input	not_redistributable	false	
+IGVFFI8786YBUA	https://api.data.igvf.org/tabular-files/IGVFFI8786YBUA/@@download/IGVFFI8786YBUA.csv.gz	released_2026-08-11		public_https	full	workflow_input	not_redistributable	false	
+IGVFFI7266NWTF	https://api.data.igvf.org/tabular-files/IGVFFI7266NWTF/@@download/IGVFFI7266NWTF.csv.gz	released_2026-08-11		public_https	full	workflow_input	not_redistributable	false	
+IGVFFI5883SVNN	https://api.data.igvf.org/tabular-files/IGVFFI5883SVNN/@@download/IGVFFI5883SVNN.csv.gz	released_2026-08-11		public_https	full	workflow_input	not_redistributable	false	
+IGVFFI0068OWUG	https://api.data.igvf.org/tabular-files/IGVFFI0068OWUG/@@download/IGVFFI0068OWUG.csv.gz	released_2026-08-11		public_https	full	workflow_input	not_redistributable	false	
+IGVFFI2903THXX	https://api.data.igvf.org/tabular-files/IGVFFI2903THXX/@@download/IGVFFI2903THXX.tsv.gz	released_2026-08-11		public_https	smoke,full	workflow_input	not_redistributable	true	tests/fixtures/igvf_perturbseq_smoke.tsv
+IGVFFI6830YLEK	https://api.data.igvf.org/tabular-files/IGVFFI6830YLEK/@@download/IGVFFI6830YLEK.tsv.gz	released_2026-08-11		public_https	full	workflow_input	not_redistributable	false	
+IGVFFI0830FXFI	https://api.data.igvf.org/tabular-files/IGVFFI0830FXFI/@@download/IGVFFI0830FXFI.csv.gz	released_2026-08-11		public_https	full	workflow_input	not_redistributable	false	
+IGVFFI5198JCCU	https://api.data.igvf.org/tabular-files/IGVFFI5198JCCU/@@download/IGVFFI5198JCCU.tsv.gz	released_2026-08-11		public_https	full	workflow_input	not_redistributable	false	

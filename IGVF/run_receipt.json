@@ -1,0 +1,49 @@
+{
+  "command": [
+    "/home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/adoption_candidate/verify-adoption"
+  ],
+  "completed_at": "2026-08-12T03:27:40.833110+00:00",
+  "dig_commit": "8cd9ee99414ca46f562cccb66c393422649f9eec",
+  "environment": {
+    "digest": "6fed6494c6ee4efd254b791f0a4239f97eac1d4b3ba7f422bc393b5ba5f3c0b8",
+    "identifier": "Python 3.10+ with the pinned DIG checkout and its declared project dependencies."
+  },
+  "input_manifest_digest": "e52183ba2a5bbc3d35c908b66d53ed6004624e13efc68031d84e4af73d131650",
+  "library_id": "IGVF",
+  "models_completed": [],
+  "models_expected": [
+    "PS1"
+  ],
+  "output_manifest_digest": "51d6e9753bb2fc91f5a8ae4d385ef9fe240c82715f1f3df55425954720922478",
+  "schema_version": "1.0.0",
+  "started_at": "2026-08-12T03:27:40.833085+00:00",
+  "submission_schema_version": "1.0.0",
+  "validation_result": {
+    "messages": [
+      "INFO: Submission tooling repository: /home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/adoption_candidate/geneset-extractor-dev",
+      "INFO: Submission tooling commit: c59560fce4f59007e62aadebd4740f3b14985d32",
+      "INFO: Submission tooling module: /home/ryank/software/geneset_extractors/adoptions/submissions/IGVF/adoption_candidate/geneset-extractor-dev/submission_tools",
+      "INFO: wrapper submission-tool tests passed",
+      "INFO: no smoke output manifest is declared; smoke command exit status was checked.",
+      "INFO: smoke verification completed; full legacy equivalence is evaluated only for explicitly declared full mappings.",
+      "INFO: full legacy comparison passed (1186 gene sets)",
+      "INFO: full legacy comparison passed (1191 gene sets)",
+      "INFO: full legacy comparison passed (246 gene sets)",
+      "INFO: full legacy comparison passed (142 gene sets)",
+      "INFO: full legacy comparison passed (10 gene sets)",
+      "INFO: full legacy comparison passed (1188 gene sets)",
+      "INFO: full legacy comparison passed (1182 gene sets)",
+      "INFO: full legacy comparison passed (81 gene sets)",
+      "INFO: full legacy comparison passed (79 gene sets)",
+      "INFO: full legacy comparison passed (109 gene sets)",
+      "INFO: full legacy comparison passed (58 gene sets)",
+      "INFO: full legacy comparison passed (857 gene sets)",
+      "INFO: full legacy comparison passed (42 gene sets)",
+      "INFO: full legacy comparison passed (1184 gene sets)",
+      "INFO: full legacy comparison passed (72 gene sets)",
+      "INFO: full legacy comparison passed (70 gene sets)"
+    ],
+    "ok": true
+  },
+  "wrapper_commit": "c59560fce4f59007e62aadebd4740f3b14985d32"
+}

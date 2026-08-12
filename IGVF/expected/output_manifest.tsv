@@ -1,0 +1,2 @@
+output_id	relative_path	role	required	model_id	partition_id
+smoke_authoritative_gmt	outputs/smoke/IGVFDS3405NGXF/models/PS1/extractor/genesets.gmt	authoritative_gmt	true	PS1	IGVFDS3405NGXF
