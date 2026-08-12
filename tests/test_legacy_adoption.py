@@ -55,6 +55,20 @@ class LegacyAdoptionTest(unittest.TestCase):
             for name in ("inventory.json", "dependency_map.json", "adoption_report.md", "AI_ADOPTION_PROMPT.md"):
                 self.assertTrue((adopted / "adoption" / name).is_file())
 
+    def test_adoption_prompt_is_pattern_aware_and_enforces_repository_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            adopted = adopt(self.legacy_library(root), root / "Adopted", "Adopted", pattern="hubmap")
+            prompt = (adopted / "adoption" / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8")
+        self.assertIn("selected `hubmap` pattern", prompt)
+        self.assertIn("ASCT+B parsing", prompt)
+        self.assertIn("GTEx, MoTrPAC,\nHuBMAP, and LINCS_L1000", prompt)
+        self.assertIn("The wrapper must not read and transform biological matrices", prompt)
+        self.assertIn("geneset-extractors submission list", prompt)
+        self.assertIn("config/model_list.tsv", prompt)
+        self.assertIn("Possible unexplained intermediates", prompt)
+        self.assertIn("Do not modify", prompt)
+
     def test_compare_modes_and_cli(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -186,6 +200,7 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertEqual(manifest["repositories"]["wrapper"]["origin"], str(wrapper))
             self.assertEqual(manifest["repositories"]["wrapper"]["upstream"], str(wrapper_upstream))
             self.assertFalse(manifest["workspace"]["upstream_origin_mode"])
+            self.assertEqual(manifest["submission"]["pattern"], "generic")
             self.assertEqual(len(manifest["tooling"]["wrapper_commit"]), 40)
             self.assertEqual(manifest["tooling"]["submission_tools_path"], "geneset-extractor-dev/submission_tools")
             self.assertTrue((workspace / "adoption/legacy_reference.json").exists())
@@ -196,6 +211,33 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertIn("Baseline branch: `main`", (workspace / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8"))
             self.assertEqual((legacy / "old.gmt").read_text(encoding="utf-8"), "set_a\tna\tA\tB\n")
             self.assertTrue((workspace / "geneset-extractor-dev/Adopted/submission.yaml").is_file())
+
+    def test_workspace_prompt_uses_selected_pattern_and_workspace_helper(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            legacy = self.legacy_library(root)
+            dig_upstream = self._remote(root, "dig-upstream")
+            dig_fork = self._remote(root, "dig-fork")
+            wrapper_upstream = self._remote(root, "wrapper-upstream", with_tools=True)
+            wrapper_fork = self._remote(root, "wrapper-fork", with_tools=True)
+            old_constants = adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER
+            adoption_workspace.CANONICAL_DIG = str(dig_upstream)
+            adoption_workspace.CANONICAL_WRAPPER = str(wrapper_upstream)
+            try:
+                workspace = create_workspace(
+                    existing=legacy, workspace=root / "isolated", library_id="Adopted",
+                    display_name=None, pattern="lincs_l1000", github_user=None,
+                    dig_fork=str(dig_fork), wrapper_fork=str(wrapper_fork),
+                )
+            finally:
+                adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER = old_constants
+            prompt = (workspace / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8")
+            _root, manifest = load_workspace(workspace)
+        self.assertEqual(manifest["submission"]["pattern"], "lincs_l1000")
+        self.assertIn("selected `lincs_l1000` pattern", prompt)
+        self.assertIn("perturbation-matrix processing", prompt)
+        self.assertIn("./verify-adoption", prompt)
+        self.assertIn("is **READ ONLY**", prompt)
 
     def test_default_branch_is_main_and_submit_never_pushes_upstream(self) -> None:
         self.assertEqual(DEFAULT_BASE_BRANCH, "main")
