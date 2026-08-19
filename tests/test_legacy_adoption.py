@@ -69,6 +69,8 @@ class LegacyAdoptionTest(unittest.TestCase):
         self.assertIn("no\n  placeholder `TODO` values", prompt)
         self.assertIn("Every full legacy reference output has an explicit `regenerated` path", prompt)
         self.assertIn("artifact_roles", prompt)
+        self.assertIn("Full reproduction may require obtaining the declared source inputs first", prompt)
+        self.assertIn("never commit source datasets", prompt)
         self.assertIn("The wrapper must not read and transform biological matrices", prompt)
         self.assertIn("geneset-extractors submission list", prompt)
         self.assertIn("config/model_list.tsv", prompt)
