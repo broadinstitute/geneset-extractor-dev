@@ -107,6 +107,27 @@ class SubmissionToolsTest(unittest.TestCase):
         (root / "src/analysis.py").write_text("import pandas as pd\n")
         self.assertFalse(validate_submission(root).ok)
 
+    def test_home_directory_provenance_mirror_warns_for_draft_and_fails_for_ready(self) -> None:
+        root = self.scaffold()
+        (root / "src/dispatch.py").write_text(
+            'command = ["--provenance_mirror_local_prefix", str(Path.home())]\n'
+        )
+        draft = validate_submission(root)
+        self.assertTrue(draft.ok)
+        self.assertTrue(any(issue.code == "unsafe_provenance_mirror" and issue.level == "warning" for issue in draft.issues))
+        payload = self.payload(root)
+        payload["submission_status"] = "ready"
+        payload["dig"]["commit"] = "a" * 40
+        self.write_payload(root, payload)
+        ready = validate_submission(root)
+        self.assertFalse(ready.ok)
+        self.assertTrue(any(issue.code == "unsafe_provenance_mirror" and issue.level == "error" for issue in ready.issues))
+
+    def test_scaffold_creates_provenance_overlay_template(self) -> None:
+        root = self.scaffold()
+        overlay = json.loads((root / "config/provenance_overlay.json").read_text(encoding="utf-8"))
+        self.assertIn("role:example_input", overlay["inputs"])
+
     def test_allowlisted_deviation_warns_not_fails(self) -> None:
         root = self.scaffold()
         (root / "src/analysis.py").write_text("import pandas as pd\n")

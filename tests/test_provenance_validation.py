@@ -112,6 +112,20 @@ class ProvenanceValidationTest(unittest.TestCase):
         self.assertTrue(any(issue.code == "provenance_input_link" for issue in result.issues))
         self.assertTrue(any(issue.code == "provenance_local_path" for issue in result.issues))
 
+    def test_workspace_derived_remote_url_is_a_ready_error(self) -> None:
+        root, payload = self.library(ready=True)
+        artifact = root / "work/model/genesets.gmt"
+        artifact.parent.mkdir(parents=True)
+        artifact.write_text("set\tna\tA\n", encoding="utf-8")
+        value = graph(artifact.name)
+        value["nodes"][0]["access"] = {
+            "canonical_uri": "https://api.data.igvf.org/software/geneset_extractors/adoptions/adoption_candidate/geneset-extractor-dev/IGVF/inputs/input.tsv"
+        }
+        (artifact.parent / "geneset.provenance.json").write_text(json.dumps(value), encoding="utf-8")
+        result = validate_provenance_complete(root, payload, scope="full")
+        self.assertFalse(result.ok)
+        self.assertTrue(any(issue.code == "provenance_workspace_url" for issue in result.issues))
+
 
 if __name__ == "__main__":
     unittest.main()

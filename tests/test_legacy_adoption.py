@@ -63,6 +63,8 @@ class LegacyAdoptionTest(unittest.TestCase):
         self.assertIn("selected `hubmap` pattern", prompt)
         self.assertIn("ASCT+B parsing", prompt)
         self.assertIn("GTEx, MoTrPAC,\nHuBMAP, and LINCS_L1000", prompt)
+        self.assertIn("config/provenance_overlay.json", prompt)
+        self.assertIn("Path.home()", prompt)
         self.assertIn("The wrapper must not read and transform biological matrices", prompt)
         self.assertIn("geneset-extractors submission list", prompt)
         self.assertIn("config/model_list.tsv", prompt)

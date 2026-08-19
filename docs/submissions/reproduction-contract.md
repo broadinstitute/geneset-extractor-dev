@@ -31,6 +31,18 @@ manifest digests, environment identifier/digest, command, timestamps, expected
 and completed models, and validation result. It does not cryptographically
 prove reproducibility.
 
+## Source URLs versus local execution paths
+
+Use `config/provenance_overlay.json` to provide stable source identifiers,
+canonical URIs, and public download URLs for declared input-manifest records.
+The overlay is passed to a supporting DIG entry point with
+`--provenance_overlay_json`. Do not rewrite `$HOME`, `~`, an adoption
+workspace, a wrapper root, or an output directory to a source-provider URL
+with `--provenance_mirror_local_prefix`: it would falsely present local
+commands and generated outputs as remote source data. A narrowly defined
+local cache mirror is permitted only when it maps declared inputs to their
+actual stable source location.
+
 ## Provenance completeness
 
 `./verify-adoption` and `./verify-library` run a `provenance_complete` stage
