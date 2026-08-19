@@ -17,6 +17,48 @@ NONPORTABLE = re.compile(r"(?:/home/|/Users/|/humgen/|/broad/|\bscratch/|\b(?:to
 MANUAL = re.compile(r"\b(?:manually|open in excel|edit this file|copy this file|download by hand|rename manually|filter rows|paste)\b", re.I)
 
 
+def gitignore_allowlist(library_id: str) -> str:
+    """Return narrow root-.gitignore rules for one submitted library."""
+    return f"""# {library_id} submission source/configuration only
+!{library_id}/
+!{library_id}/submission.yaml
+!{library_id}/README.md
+
+!{library_id}/config/
+!{library_id}/config/**
+!{library_id}/reproduction/
+!{library_id}/reproduction/*.sh
+!{library_id}/reproduction/*.tsv
+!{library_id}/reproduction/*.md
+!{library_id}/run/
+!{library_id}/run/**/
+!{library_id}/run/*.sh
+!{library_id}/run/*.py
+!{library_id}/src/
+!{library_id}/src/**/
+!{library_id}/src/**/*.py
+!{library_id}/src/**/*.R
+!{library_id}/src/**/*.r
+!{library_id}/src/**/*.sh
+!{library_id}/src/**/*.md
+!{library_id}/expected/
+!{library_id}/expected/*.tsv
+!{library_id}/tests/
+!{library_id}/tests/fixtures/
+!{library_id}/tests/fixtures/**/
+!{library_id}/tests/fixtures/**/*.tsv
+!{library_id}/tests/fixtures/**/*.json
+!{library_id}/tests/fixtures/**/*.txt
+!{library_id}/tests/fixtures/**/*.md
+
+# Keep downloaded data and generated artifacts ignored.
+{library_id}/inputs/
+{library_id}/outputs/
+{library_id}/work/
+{library_id}/run_receipt.json
+"""
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -146,6 +188,7 @@ def adopt(existing: Path, output: Path, library_id: str, display_name: str | Non
     dependency_map = {"schema_version": "1.0.0", "intermediates": [{"path": item["path"], "producer": "TODO"} for item in inventory["possible_intermediates"]]}
     (adoption_dir / "dependency_map.json").write_text(json.dumps(dependency_map, indent=2) + "\n", encoding="utf-8")
     (adoption_dir / "adoption_report.md").write_text(adoption_report(inventory), encoding="utf-8")
+    (adoption_dir / "gitignore_allowlist.md").write_text(gitignore_allowlist(library_id), encoding="utf-8")
     (adoption_dir / "AI_ADOPTION_PROMPT.md").write_text(adoption_prompt(existing.resolve(), output.resolve(), inventory, dig_repo, pattern), encoding="utf-8")
     return output
 

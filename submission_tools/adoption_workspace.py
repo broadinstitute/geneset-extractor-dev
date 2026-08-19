@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .adoption import adoption_report, inventory_legacy
+from .adoption import adoption_report, gitignore_allowlist, inventory_legacy
 from .adoption_prompt import architecture_guidance
 from .coordinated import coordinated_validate
 from .legacy_compare import compare_gmt
@@ -153,6 +153,7 @@ def create_workspace(
         _write_json(adoption_dir / "inventory.json", inventory)
         _write_json(adoption_dir / "dependency_map.json", {"schema_version": "1.0.0", "intermediates": [{"path": item["path"], "producer": "TODO"} for item in inventory["possible_intermediates"]]})
         (adoption_dir / "adoption_report.md").write_text(adoption_report(inventory), encoding="utf-8")
+        (adoption_dir / "gitignore_allowlist.md").write_text(gitignore_allowlist(library_id), encoding="utf-8")
         reference = _legacy_reference(legacy, inventory)
         _write_json(adoption_dir / "legacy_reference.json", reference)
         library = workspace / "geneset-extractor-dev" / library_id
@@ -204,6 +205,11 @@ Baseline branch: `{manifest['repositories']['dig']['base_branch']}`
 Maintainer upstream-origin mode: `{manifest['workspace']['upstream_origin_mode']}`
 
 {architecture_guidance(pattern, inventory)}
+
+Before submission, review and apply `adoption/gitignore_allowlist.md` to the
+wrapper root `.gitignore`. It deliberately permits only submission
+code/configuration and small fixtures. Do not use `git add -f`; keep `inputs/`,
+`outputs/`, `work/`, and `run_receipt.json` ignored.
 
 From this workspace root, run `./verify-adoption`; it deliberately imports `submission_tools` from `./geneset-extractor-dev`, not from another checkout or an installed package.
 
@@ -500,7 +506,55 @@ def _changed_paths(repo: Path) -> list[Path]:
     return paths
 
 
-def safe_stage(repo: Path, allowed_roots: tuple[str, ...]) -> list[str]:
+_GENERATED_LIBRARY_PARTS = {"inputs", "outputs", "work", "data", "__pycache__", ".pytest_cache"}
+
+
+def _generated_library_path(rel: Path, library_root: str | None) -> bool:
+    if not library_root:
+        return False
+    root = Path(library_root)
+    try:
+        inside = rel.relative_to(root)
+    except ValueError:
+        return False
+    return inside.name == "run_receipt.json" or bool(inside.parts and inside.parts[0] in _GENERATED_LIBRARY_PARTS)
+
+
+def _ignored_submission_files(repo: Path, library: Path) -> list[tuple[str, str]]:
+    """Find ignored files that should be part of a submission package.
+
+    Generated data and receipts are deliberately excluded: they must remain
+    ignored and are separately rejected if someone tries to unignore/stage
+    them.  This check diagnoses the common deny-by-default wrapper policy
+    before a Git add error can obscure the required allowlist change.
+    """
+    ignored: list[tuple[str, str]] = []
+    for path in sorted(candidate for candidate in library.rglob("*") if candidate.is_file()):
+        rel = path.relative_to(repo)
+        if _generated_library_path(rel, library.name) or path.suffix == ".log":
+            continue
+        checked = _run(["git", "check-ignore", "--quiet", "--", str(rel)], repo)
+        if checked.returncode == 0:
+            detail = _run(["git", "check-ignore", "-v", "--", str(rel)], repo)
+            ignored.append((str(rel), detail.stdout.strip().splitlines()[0] if detail.stdout.strip() else "an ignore rule"))
+        elif checked.returncode != 1:
+            raise ValueError(checked.stderr.strip() or f"could not inspect ignore status for {rel}")
+    return ignored
+
+
+def _ignored_submission_message(root: Path, ignored: list[tuple[str, str]]) -> list[str]:
+    lines = [
+        "ERROR: submission source files are ignored by the wrapper repository policy.",
+        *[f"Ignored: {path} ({rule})" for path, rule in ignored[:10]],
+        f"Add the reviewed allowlist from: {root / 'adoption/gitignore_allowlist.md'}",
+        "Do not use git add -f. Keep inputs/, outputs/, work/, and run_receipt.json ignored.",
+    ]
+    if len(ignored) > 10:
+        lines.insert(2, f"... and {len(ignored) - 10} additional ignored submission files")
+    return lines
+
+
+def safe_stage(repo: Path, allowed_roots: tuple[str, ...], *, submission_library_root: str | None = None) -> list[str]:
     staged: list[str] = []
     for path in _changed_paths(repo):
         rel = path.relative_to(repo)
@@ -514,6 +568,10 @@ def safe_stage(repo: Path, allowed_roots: tuple[str, ...]) -> list[str]:
             raise ValueError(ignored.stderr.strip() or f"could not check ignore status for {rel}")
         if not any(str(rel) == root or str(rel).startswith(root.rstrip("/") + "/") for root in allowed_roots):
             raise ValueError(f"refusing to stage unrelated file: {rel}")
+        if _generated_library_path(rel, submission_library_root):
+            # Generated artifacts must never enter a source/configuration PR,
+            # even if a local test repository forgot to ignore them.
+            continue
         if _FORBIDDEN_NAMES.search(path.name) or path.suffix.lower() in _FORBIDDEN_SUFFIXES:
             raise ValueError(f"refusing to stage suspicious or source-data file: {rel}")
         if path.exists() and path.is_file() and path.stat().st_size > 5 * 1024 * 1024:
@@ -550,8 +608,8 @@ def _require_git_author_identity(repo: Path) -> None:
     )
 
 
-def _commit_if_changed(repo: Path, message: str, roots: tuple[str, ...]) -> str | None:
-    staged = safe_stage(repo, roots)
+def _commit_if_changed(repo: Path, message: str, roots: tuple[str, ...], *, submission_library_root: str | None = None) -> str | None:
+    staged = safe_stage(repo, roots, submission_library_root=submission_library_root)
     if not staged:
         return None
     _require_git_author_identity(repo)
@@ -644,6 +702,9 @@ def submit_workspace(workspace: Path, *, yes: bool = False, allow_upstream_origi
         origin = _git(repo, "remote", "get-url", "origin")
         if not allow_upstream_origin and not _is_fork_origin(origin, str(declared["upstream"])):
             return False, [f"ERROR: refusing to push {repo.name}; origin is canonical upstream"]
+    ignored_submission = _ignored_submission_files(wrapper, library)
+    if ignored_submission:
+        return False, _ignored_submission_message(root, ignored_submission)
     dig_sha = _commit_if_changed(dig, f"Add extractor support for {manifest['library_id']}", ("src", "tests", "docs", "pyproject.toml", "README.md", ".gitignore")) if dig_dirty else None
     submission = library / "submission.yaml"
     payload = load(submission)
@@ -655,7 +716,7 @@ def submit_workspace(workspace: Path, *, yes: bool = False, allow_upstream_origi
         payload["paired_pull_requests"]["dig_gene_set_extractors"] = "N/A"
     _write_json(submission, payload)
     wrapper_dirty_after_metadata = bool(_changed_paths(wrapper))
-    wrapper_sha = _commit_if_changed(wrapper, f"Add {manifest['library_id']} gene-set library", (manifest["library_id"], "docs", "submission_tools", "tests", "config", "run", ".gitignore")) if (wrapper_dirty_after_metadata or dig_pending) else None
+    wrapper_sha = _commit_if_changed(wrapper, f"Add {manifest['library_id']} gene-set library", (manifest["library_id"], "docs", "submission_tools", "tests", "config", "run", ".gitignore"), submission_library_root=manifest["library_id"]) if (wrapper_dirty_after_metadata or dig_pending) else None
     wrapper_pending = wrapper_pending or wrapper_sha is not None
     # Confirm the wrapper now points at the exact DIG commit before any push.
     if dig_pending:
@@ -678,7 +739,7 @@ def submit_workspace(workspace: Path, *, yes: bool = False, allow_upstream_origi
             submission = library / "submission.yaml"; payload = load(submission)
             payload["paired_pull_requests"]["dig_gene_set_extractors"] = dig_pr
             _write_json(submission, payload)
-            _commit_if_changed(wrapper, "Record paired pull request URLs", (manifest["library_id"],))
+            _commit_if_changed(wrapper, "Record paired pull request URLs", (manifest["library_id"],), submission_library_root=manifest["library_id"])
             completed = _run(["git", "push", "origin", str(manifest["repositories"]["wrapper"]["work_branch"])], wrapper)
             if completed.returncode:
                 return False, ["ERROR: could not push paired DIG PR metadata: " + completed.stderr.strip()]
@@ -691,7 +752,7 @@ def submit_workspace(workspace: Path, *, yes: bool = False, allow_upstream_origi
         submission = library / "submission.yaml"; payload = load(submission)
         payload["paired_pull_requests"]["geneset_extractor_dev"] = wrapper_pr
         _write_json(submission, payload)
-        _commit_if_changed(wrapper, "Record paired pull request URLs", (manifest["library_id"],))
+        _commit_if_changed(wrapper, "Record paired pull request URLs", (manifest["library_id"],), submission_library_root=manifest["library_id"])
         completed = _run(["git", "push", "origin", str(manifest["repositories"]["wrapper"]["work_branch"])], wrapper)
         if completed.returncode:
             return False, ["ERROR: could not push paired wrapper PR metadata: " + completed.stderr.strip()]

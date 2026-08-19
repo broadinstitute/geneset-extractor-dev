@@ -145,6 +145,10 @@ following are true:
   source inputs, and the wrapper passes it to the supporting DIG entry point.
 - The full reproduction has been run when full legacy equivalence is required;
   never use a smoke-only output as a full regenerated comparison target.
+- Review and apply `adoption/gitignore_allowlist.md` to the wrapper root
+  `.gitignore` before submission. It permits only code/configuration and small
+  fixtures; do not use `git add -f`, and do not unignore `inputs/`, `outputs/`,
+  `work/`, or `run_receipt.json`.
 
 Run `./verify-adoption` only after completing this gate. Treat any `FAIL`, or
 any warning that represents an incomplete ready requirement, as work to fix—do
