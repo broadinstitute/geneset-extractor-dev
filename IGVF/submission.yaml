@@ -234,7 +234,7 @@
     "wrapper_directory": "."
   },
   "paired_pull_requests": {
-    "dig_gene_set_extractors": "TBD",
+    "dig_gene_set_extractors": "https://github.com/flannick/dig-gene-set-extractors/pull/12",
     "geneset_extractor_dev": "TBD"
   },
   "provenance": {
