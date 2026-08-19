@@ -97,6 +97,29 @@ def _graphs(payload: object) -> tuple[list[tuple[str, dict[str, Any]]], str | No
     return graphs, None
 
 
+def _stable_source_identifier(node: dict[str, Any]) -> bool:
+    """Return whether a source file has a non-local stable identifier."""
+    values: list[object] = [node.get(key) for key in ("canonical_uri", "download_url", "dcc_url", "drc_url", "persistent_id")]
+    access = node.get("access")
+    if isinstance(access, dict):
+        values.extend(access.get(key) for key in ("canonical_uri", "download_url", "persistent_id", "uri"))
+    for value in values:
+        text = str(value or "").strip()
+        if text and not text.startswith(("/", "file://")):
+            return True
+    return False
+
+
+def _is_external_source_file(node_id: str, node: dict[str, Any], files: set[str], incoming: dict[str, set[str]]) -> bool:
+    """Identify root data inputs, excluding local config and smoke fixtures."""
+    if node_id not in files or incoming.get(node_id):
+        return False
+    text = _node_text(node)
+    if "tests/fixtures" in text or any(token in text for token in ("manifest", "config")):
+        return False
+    return any(token in text for token in ("input", "source", "raw", "released", "expression", "matrix", "count"))
+
+
 def _graph_issues(graph: dict[str, Any], artifact: Path, required_inputs: list[str]) -> list[tuple[str, str, bool]]:
     issues: list[tuple[str, str, bool]] = []
     nodes = graph.get("nodes")
@@ -109,11 +132,13 @@ def _graph_issues(graph: dict[str, Any], artifact: Path, required_inputs: list[s
     if len(indexed) != len(nodes):
         issues.append(("provenance_graph", "node IDs are blank or not unique", True))
     adjacency: dict[str, set[str]] = {node_id: set() for node_id in indexed}
+    incoming: dict[str, set[str]] = {node_id: set() for node_id in indexed}
     for edge in edges:
         if not isinstance(edge, dict) or str(edge.get("source", "")) not in indexed or str(edge.get("target", "")) not in indexed:
             issues.append(("provenance_graph", "edge has a missing source or target node", True))
             continue
         adjacency[str(edge["source"])].add(str(edge["target"]))
+        incoming[str(edge["target"])].add(str(edge["source"]))
     kinds = {node_id: str(node.get("kind") or node.get("type") or "").lower() for node_id, node in indexed.items()}
     genesets = {node_id for node_id, kind in kinds.items() if kind in {"geneset", "gene_set"}}
     operations = {node_id for node_id, kind in kinds.items() if kind in {"operation", "analysistype", "analysis_type", "workflow"}}
@@ -150,10 +175,9 @@ def _graph_issues(graph: dict[str, Any], artifact: Path, required_inputs: list[s
     for input_id in required_inputs:
         if not any(input_id.lower() in _node_text(node) for node in indexed.values()):
             issues.append(("provenance_input_link", f"required input_manifest ID is absent from graph: {input_id}", False))
-    for node in indexed.values():
-        text = _node_text(node)
-        if re.search(r"/(?:home/[^/]+|users/[^/]+|broad/|humgen/)", text):
-            issues.append(("provenance_local_path", "graph contains a contributor-specific local path", False))
+    for node_id, node in indexed.items():
+        if _is_external_source_file(node_id, node, files, incoming) and not _stable_source_identifier(node):
+            issues.append(("provenance_local_path", "external source file lacks a stable URI or persistent identifier", False))
             break
     for node in indexed.values():
         if _has_workspace_url(node):
@@ -181,9 +205,14 @@ def validate_provenance_complete(library_root: Path, submission: dict[str, Any],
             result.add("error", "provenance_contract", f"contract {index} provenance_filename must be a filename")
             continue
         required_inputs = [str(value) for value in contract.get("required_input_ids", []) if str(value)]
+        artifact_roles = {str(value) for value in contract.get("artifact_roles", []) if str(value)}
+        matched_rows = 0
         for row in rows:
             if str(row.get("required", "")).lower() not in {"true", "yes", "1"}:
                 continue
+            if artifact_roles and str(row.get("role", "")) not in artifact_roles:
+                continue
+            matched_rows += 1
             relative = row.get("relative_path", "")
             if not _safe_path(relative):
                 result.add("error", "provenance_contract", f"contract {index} has unsafe output path: {relative!r}")
@@ -206,4 +235,6 @@ def validate_provenance_complete(library_root: Path, submission: dict[str, Any],
                 label = f" graph {graph_id}" if graph_id else ""
                 for code, message, structural in _graph_issues(graph, artifact, required_inputs):
                     _add(result, submission, code, f"{sidecar.relative_to(library_root)}{label}: {message}", structural=structural)
+        if artifact_roles and not matched_rows:
+            result.add("error", "provenance_contract", f"contract {index} artifact_roles did not match any required output: {sorted(artifact_roles)}")
     return result

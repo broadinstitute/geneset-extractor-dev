@@ -122,6 +122,11 @@ def _validate_schema(data: dict[str, Any], result: ValidationResult) -> None:
                 result.add("error", "provenance_contract", f"provenance.contracts[{index}].provenance_filename must be a filename")
             if "required_input_ids" in contract and not isinstance(contract["required_input_ids"], list):
                 result.add("error", "provenance_contract", f"provenance.contracts[{index}].required_input_ids must be a list")
+            if "artifact_roles" in contract and (
+                not isinstance(contract["artifact_roles"], list)
+                or not all(isinstance(value, str) and value for value in contract["artifact_roles"])
+            ):
+                result.add("error", "provenance_contract", f"provenance.contracts[{index}].artifact_roles must be a list of non-empty output roles")
     if data.get("submission_status") == "ready":
         contracts = provenance.get("contracts", []) if isinstance(provenance, dict) else []
         if not any(isinstance(contract, dict) and contract.get("scope") == "full" for contract in contracts):
