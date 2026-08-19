@@ -69,6 +69,19 @@ class ProvenanceValidationTest(unittest.TestCase):
         )
         self.assertTrue(validate_provenance_complete(root, payload, scope="full").ok)
 
+    def test_dig_source_node_may_keep_local_execution_path_with_canonical_uri(self) -> None:
+        root, payload = self.library(ready=True)
+        artifact = root / "work/model/genesets.gmt"
+        artifact.parent.mkdir(parents=True)
+        artifact.write_text("set\tna\tA\n", encoding="utf-8")
+        value = dig_graph_map(artifact.name)
+        source = next(iter(value.values()))["nodes"][0]
+        source.pop("access")
+        source["c2m2_properties"] = {"local_id": "/home/contributor/inputs/source.tsv"}
+        source["dcc_url"] = "https://provider.example/release/source.tsv"
+        (artifact.parent / "geneset.provenance.json").write_text(json.dumps(value), encoding="utf-8")
+        self.assertTrue(validate_provenance_complete(root, payload, scope="full").ok)
+
     def test_empty_graph_map_is_an_error(self) -> None:
         root, payload = self.library()
         artifact = root / "work/model/genesets.gmt"
@@ -111,6 +124,38 @@ class ProvenanceValidationTest(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertTrue(any(issue.code == "provenance_input_link" for issue in result.issues))
         self.assertTrue(any(issue.code == "provenance_local_path" for issue in result.issues))
+
+    def test_local_generated_output_path_is_permitted(self) -> None:
+        root, payload = self.library(ready=True)
+        artifact = root / "work/model/genesets.gmt"
+        artifact.parent.mkdir(parents=True)
+        artifact.write_text("set\tna\tA\n", encoding="utf-8")
+        value = graph(artifact.name)
+        value["nodes"][-1]["access"] = {"local_path": "/home/contributor/output/genesets.gmt"}
+        (artifact.parent / "geneset.provenance.json").write_text(json.dumps(value), encoding="utf-8")
+        self.assertTrue(validate_provenance_complete(root, payload, scope="full").ok)
+
+    def test_artifact_roles_allow_mixed_output_sidecar_conventions(self) -> None:
+        root, payload = self.library(ready=True)
+        payload["provenance"]["contracts"][0]["artifact_roles"] = ["extractor_gmt"]
+        (root / "expected/provenance_output_manifest.tsv").write_text(
+            "output_id\trelative_path\trole\trequired\tmodel_id\tpartition_id\n"
+            "workflow\twork/model/workflow.gmt\tworkflow_gmt\ttrue\tM1\texample\n"
+            "extractor\twork/model/genesets.gmt\textractor_gmt\ttrue\tM1\texample\n",
+            encoding="utf-8",
+        )
+        artifact = root / "work/model/genesets.gmt"
+        artifact.parent.mkdir(parents=True)
+        artifact.write_text("set\tna\tA\n", encoding="utf-8")
+        (artifact.parent / "geneset.provenance.json").write_text(json.dumps(graph(artifact.name)), encoding="utf-8")
+        self.assertTrue(validate_provenance_complete(root, payload, scope="full").ok)
+
+    def test_artifact_roles_must_match_a_required_output(self) -> None:
+        root, payload = self.library()
+        payload["provenance"]["contracts"][0]["artifact_roles"] = ["extractor_gmt"]
+        result = validate_provenance_complete(root, payload, scope="full")
+        self.assertFalse(result.ok)
+        self.assertTrue(any(issue.code == "provenance_contract" for issue in result.issues))
 
     def test_workspace_derived_remote_url_is_a_ready_error(self) -> None:
         root, payload = self.library(ready=True)

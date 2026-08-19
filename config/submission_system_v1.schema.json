@@ -13,7 +13,7 @@
     "configs": {"type": "object", "required": ["model_config", "partition_config", "description_config"]},
     "reproduction": {"type": "object", "required": ["entry_point", "input_manifest", "smoke_test_command"]},
     "expected_outputs": {"type": "object", "required": ["manifest"]},
-    "provenance": {"type": "object", "properties": {"contracts": {"type": "array", "items": {"type": "object", "required": ["scope", "output_manifest"], "properties": {"scope": {"enum": ["smoke", "full"]}, "output_manifest": {"type": "string"}, "provenance_filename": {"type": "string"}, "required_input_ids": {"type": "array", "items": {"type": "string"}}}}}}},
+    "provenance": {"type": "object", "properties": {"contracts": {"type": "array", "items": {"type": "object", "required": ["scope", "output_manifest"], "properties": {"scope": {"enum": ["smoke", "full"]}, "output_manifest": {"type": "string"}, "provenance_filename": {"type": "string"}, "required_input_ids": {"type": "array", "items": {"type": "string"}}, "artifact_roles": {"type": "array", "items": {"type": "string", "minLength": 1}}}}}}},
     "environment": {"type": "object", "required": ["declaration"]},
     "deviations": {"type": "object", "required": ["from_standard_architecture", "allow_wrapper_findings"]},
     "paired_pull_requests": {"type": "object", "required": ["geneset_extractor_dev", "dig_gene_set_extractors"]},

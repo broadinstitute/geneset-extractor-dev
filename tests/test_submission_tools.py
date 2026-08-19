@@ -128,6 +128,15 @@ class SubmissionToolsTest(unittest.TestCase):
         overlay = json.loads((root / "config/provenance_overlay.json").read_text(encoding="utf-8"))
         self.assertIn("role:example_input", overlay["inputs"])
 
+    def test_provenance_artifact_roles_must_be_non_empty_strings(self) -> None:
+        root = self.scaffold()
+        payload = self.payload(root)
+        payload["provenance"]["contracts"][0]["artifact_roles"] = [""]
+        self.write_payload(root, payload)
+        result = validate_submission(root)
+        self.assertFalse(result.ok)
+        self.assertTrue(any(issue.code == "provenance_contract" for issue in result.issues))
+
     def test_allowlisted_deviation_warns_not_fails(self) -> None:
         root = self.scaffold()
         (root / "src/analysis.py").write_text("import pandas as pd\n")

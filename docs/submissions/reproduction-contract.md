@@ -21,6 +21,23 @@ required flag, model ID, and partition ID. It is a contract for review, not a
 generated-output requirement: large biological inputs and generated outputs
 must not be committed merely to satisfy validation.
 
+When one manifest contains outputs with different provenance-sidecar
+conventions, scope a provenance contract to the roles that actually have its
+declared sidecar:
+
+```yaml
+provenance:
+  contracts:
+    - scope: full
+      output_manifest: expected/output_manifest.tsv
+      provenance_filename: geneset.provenance.json
+      artifact_roles: [extractor_gmt]
+```
+
+For example, a DIG workflow graph may be upstream evidence in an extractor
+sidecar; it does not imply that the workflow output has a separate
+`geneset.provenance.json` beside it.
+
 Static checks cannot prove complete dependency tracing, validate scientific
 correctness, obtain controlled inputs, execute containers/schedulers, or prove
 that external commands have no hidden dependencies. Reviewers must inspect
@@ -54,6 +71,8 @@ the workspace manifest and receipt.
 
 Draft submissions may report incomplete unavailable full provenance as a
 warning. For ready submissions, missing required provenance, incomplete graph
-linkage, or local-only source paths are errors. These checks validate declared
-structure and provenance linkage; they do not prove scientific correctness or
-cryptographically prove reproducibility.
+linkage, or external source files without stable identifiers are errors. Local
+paths for generated outputs and recorded execution commands are permitted;
+they are not falsely treated as source locations. These checks validate
+declared structure and provenance linkage; they do not prove scientific
+correctness or cryptographically prove reproducibility.

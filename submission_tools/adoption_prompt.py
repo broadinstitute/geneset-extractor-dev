@@ -112,8 +112,12 @@ blocker. Do not accept unexplained precomputed intermediates.
    adoption workspace, the wrapper root, or an output root. Those broad
    rewrites incorrectly turn local commands and generated outputs into source
    URLs. Add the expected-output manifest, smoke reproduction, and an explicit
-   full legacy reference mapping. A smoke output is never a substitute for
-   full legacy equivalence.
+   full legacy reference mapping. Declare provenance contracts only for output
+   roles that have the named sidecar: a DIG workflow graph can be upstream
+   evidence for an extractor sidecar and does not imply a sibling
+   `workflow/geneset.provenance.json`. Use `artifact_roles` in a contract when
+   one output manifest contains mixed sidecar conventions. A smoke output is
+   never a substitute for full legacy equivalence.
 6. Run DIG contract validation, wrapper validation, smoke reproduction, and
    full mapped legacy comparison. Stop for approval before changing scientific
    parameters such as normalization, filtering, mapping, ranking, contrasts,
