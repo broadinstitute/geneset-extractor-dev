@@ -118,6 +118,13 @@ blocker. Do not accept unexplained precomputed intermediates.
    `workflow/geneset.provenance.json`. Use `artifact_roles` in a contract when
    one output manifest contains mixed sidecar conventions. A smoke output is
    never a substitute for full legacy equivalence.
+   Full reproduction may require obtaining the declared source inputs first.
+   Use the documented source URL, stable identifier, or controlled-access
+   instructions from `input_manifest.tsv`; download only into the untracked
+   library `inputs/` area (or another documented external input location),
+   never commit source datasets, and never invent an input, URL, release, or
+   access method. If the inputs are unavailable, record the concrete access
+   blocker and complete only the checks that can honestly run.
 6. Run DIG contract validation, wrapper validation, smoke reproduction, and
    full mapped legacy comparison. Stop for approval before changing scientific
    parameters such as normalization, filtering, mapping, ranking, contrasts,
@@ -143,6 +150,10 @@ following are true:
   actually have its declared sidecar.
 - `config/provenance_overlay.json` provides stable identifiers for external
   source inputs, and the wrapper passes it to the supporting DIG entry point.
+- All inputs needed for full regeneration have been obtained using the
+  documented `input_manifest.tsv` instructions, or an actual access blocker is
+  recorded. Do not claim full equivalence until those inputs are available and
+  the full command has run.
 - The full reproduction has been run when full legacy equivalence is required;
   never use a smoke-only output as a full regenerated comparison target.
 - Review and apply `adoption/gitignore_allowlist.md` to the wrapper root
