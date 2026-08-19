@@ -12,6 +12,13 @@ genome build, assay types, closest pattern, and wrapper directory. `sources`
 records name, stable URI/identifier, release, access restriction, and license.
 `dig` records its repository, exact commit, and workflow/converter commands.
 
+`provenance.contracts` declares the expected DIG-produced provenance sidecars
+for `smoke` and/or `full` outputs. Each contract identifies its output manifest,
+the sidecar filename (normally `geneset.provenance.json`), and any required
+input-manifest IDs that must appear in the graph. Ready submissions require a
+full provenance contract. The wrapper validates the graph but does not create
+or rewrite it; provenance production remains in DIG and shared refresh flows.
+
 Use `submission_status: draft` with `dig.commit: TODO` and `TBD` paired PRs
 while preparing a change. A `ready` submission requires a lowercase full
 40-character DIG commit SHA. PR fields accept `TBD`, `N/A`, or a GitHub pull

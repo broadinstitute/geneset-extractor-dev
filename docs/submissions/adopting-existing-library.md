@@ -58,6 +58,11 @@ cd ~/gene-set-adoptions/MY_LIBRARY
 ./verify-adoption
 ```
 
+This verification also runs `provenance_complete` after smoke reproduction.
+Ready adopted libraries require a declared full provenance contract and a
+source-input → workflow → geneset → materialized-output graph without local
+contributor paths.
+
 5. Review the result, then commit/push to your forks and open draft PRs:
 
 ```bash

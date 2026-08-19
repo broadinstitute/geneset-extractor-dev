@@ -6,6 +6,7 @@ from pathlib import Path
 from .discovery import discover_submissions
 from .adoption import adopt, adoption_status
 from .adoption_workspace import DEFAULT_BASE_BRANCH, _active_tooling, load_workspace, create_workspace, submit_workspace, verify_workspace
+from .library_workspace import create_library_workspace, load_library_workspace, submit_library_workspace, verify_library_workspace
 from .coordinated import coordinated_validate
 from .legacy_compare import compare_gmt
 from .receipt import write_receipt
@@ -45,6 +46,18 @@ def main(argv: list[str] | None = None) -> int:
     adopt_parser.add_argument("--wrapper-fork", help="Contributor wrapper fork URL.")
     adopt_parser.add_argument("--base-branch", default=DEFAULT_BASE_BRANCH, help="Upstream baseline and pull-request target branch (default: main).")
     adopt_parser.add_argument("--allow-upstream-origin", action="store_true", help="Advanced maintainer/test override; allow a canonical repository as origin for this isolated workspace.")
+    new_library = commands.add_parser("create-library", help="Create an isolated workspace for a brand-new gene-set library.")
+    new_library.add_argument("--inputs", required=True, help="Read-only source input file or directory.")
+    new_library.add_argument("--library-id", required=True)
+    new_library.add_argument("--workspace", required=True, help="Fresh-clone workspace directory.")
+    new_library.add_argument("--display-name")
+    new_library.add_argument("--pattern", default="generic", choices=["gtex", "motrpac", "hubmap", "lincs_l1000", "generic"])
+    new_library.add_argument("--github-user", help="GitHub username used to infer both contributor forks.")
+    new_library.add_argument("--dig-fork", help="Contributor DIG fork URL.")
+    new_library.add_argument("--wrapper-fork", help="Contributor wrapper fork URL.")
+    new_library.add_argument("--base-branch", default=DEFAULT_BASE_BRANCH, help="Upstream baseline and pull-request target branch (default: main).")
+    new_library.add_argument("--work-branch", help="Work branch; defaults to submit/<library-id>.")
+    new_library.add_argument("--allow-upstream-origin", action="store_true", help="Advanced maintainer/test override; allow a canonical repository as origin.")
     comparison = commands.add_parser("compare-legacy", help="Compare legacy and regenerated GMT outputs.")
     comparison.add_argument("--library", help="Adopted library directory; discovers the first legacy/new GMT pair.")
     comparison.add_argument("--legacy")
@@ -58,6 +71,12 @@ def main(argv: list[str] | None = None) -> int:
     submit.add_argument("--workspace", required=True)
     submit.add_argument("--yes", action="store_true", help="Confirm the one local commit/push operation.")
     submit.add_argument("--allow-upstream-origin", action="store_true", help="Advanced maintainer override; never enabled implicitly.")
+    verify_library = commands.add_parser("verify-library", help="Verify an isolated new-library workspace.")
+    verify_library.add_argument("--workspace", required=True)
+    submit_library = commands.add_parser("submit-library", help="Commit and push a verified isolated new-library workspace.")
+    submit_library.add_argument("--workspace", required=True)
+    submit_library.add_argument("--yes", action="store_true", help="Confirm the local commit/push operation.")
+    submit_library.add_argument("--allow-upstream-origin", action="store_true", help="Advanced maintainer override; never enabled implicitly.")
     args = parser.parse_args(argv)
     if args.command == "scaffold":
         scaffold(Path(args.output), args.library_id, args.display_name, args.pattern)
@@ -98,6 +117,28 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output or args.library_id)
         created = adopt(Path(args.existing), output, args.library_id, args.display_name, args.pattern, Path(args.dig_repo) if args.dig_repo else None)
         print(f"created adopted submission {created}")
+        return 0
+    if args.command == "create-library":
+        try:
+            created = create_library_workspace(
+                inputs=Path(args.inputs), workspace=Path(args.workspace), library_id=args.library_id,
+                display_name=args.display_name, pattern=args.pattern, github_user=args.github_user,
+                dig_fork=args.dig_fork, wrapper_fork=args.wrapper_fork, base_branch=args.base_branch,
+                work_branch=args.work_branch, allow_upstream_origin=args.allow_upstream_origin,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+        print("New-library workspace ready:\n\n"
+              f"  {created}\n\n"
+              "Next:\n"
+              f"  cd {created}\n"
+              "  codex\n\n"
+              "Then tell your agent: Follow AI_NEW_LIBRARY_PROMPT.md completely.\n\n"
+              "After implementation:\n"
+              "  ./verify-library\n\n"
+              "After verification passes:\n"
+              "  ./submit-library\n\n"
+              "Source inputs remain read-only; no existing repositories were modified.")
         return 0
     if args.command == "compare-legacy":
         legacy = Path(args.legacy) if args.legacy else None
@@ -160,6 +201,31 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "submit-adoption":
         try:
             ok, messages = submit_workspace(Path(args.workspace), yes=args.yes, allow_upstream_origin=args.allow_upstream_origin)
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        for message in messages:
+            print(message)
+        return 0 if ok else 1
+    if args.command == "verify-library":
+        try:
+            root, manifest = load_library_workspace(Path(args.workspace))
+            wrapper = root / manifest["repositories"]["wrapper"]["path"]
+            print("Submission tooling:\n"
+                  f"  repository: {wrapper}\n"
+                  f"  commit: {manifest['tooling']['wrapper_commit']}\n"
+                  f"  module: {wrapper / 'submission_tools'}")
+            ok, messages = verify_library_workspace(Path(args.workspace))
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print("New library verification: " + ("PASS" if ok else "FAILED"))
+        for message in messages:
+            print(message)
+        return 0 if ok else 1
+    if args.command == "submit-library":
+        try:
+            ok, messages = submit_library_workspace(Path(args.workspace), yes=args.yes, allow_upstream_origin=args.allow_upstream_origin)
         except (OSError, ValueError) as exc:
             print(f"ERROR: {exc}")
             return 2
