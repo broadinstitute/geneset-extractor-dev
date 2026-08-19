@@ -40,6 +40,11 @@ If gene sets already exist outside this framework, follow
 [adopting-existing-library.md](adopting-existing-library.md) to inventory and
 migrate them into the same contract.
 
+For a brand-new source library, use the isolated
+[creating-new-library workflow](creating-new-library.md). It creates a fresh
+two-repository workspace and provides `./verify-library` and
+`./submit-library` helpers that use the workspace-local tooling.
+
 See the explicitly non-biological, test-only
 [`examples/synthetic_submission`](../../examples/synthetic_submission/README.md)
 for a complete small package.
