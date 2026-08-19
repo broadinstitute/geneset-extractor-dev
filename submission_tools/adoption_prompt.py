@@ -123,6 +123,33 @@ blocker. Do not accept unexplained precomputed intermediates.
    parameters such as normalization, filtering, mapping, ranking, contrasts,
    thresholds, or model definitions.
 
+## Mandatory completion gate
+
+The scaffold is only a starting point. Do not report this adoption as complete,
+and do not rely on a passing draft-level verification, until all of the
+following are true:
+
+- `submission.yaml`, required manifests, and invoked wrapper files contain no
+  placeholder `TODO` values.
+- `dig.repository_url`, `dig.commit`, every DIG identifier, and every declared
+  DIG entry point are concrete and match the checked-out DIG implementation.
+- Every full legacy reference output has an explicit `regenerated` path to its
+  corresponding full output. Do not leave a legacy-only reference mapping.
+- `expected/output_manifest.tsv` describes full outputs. A smoke output
+  manifest, if used, is separate and contains only smoke outputs.
+- Each provenance contract points to the manifest for its own scope. If a
+  manifest contains workflow and extractor outputs with different sidecar
+  conventions, use `artifact_roles` so the contract selects only outputs that
+  actually have its declared sidecar.
+- `config/provenance_overlay.json` provides stable identifiers for external
+  source inputs, and the wrapper passes it to the supporting DIG entry point.
+- The full reproduction has been run when full legacy equivalence is required;
+  never use a smoke-only output as a full regenerated comparison target.
+
+Run `./verify-adoption` only after completing this gate. Treat any `FAIL`, or
+any warning that represents an incomplete ready requirement, as work to fix—do
+not reinterpret it as an adoption success.
+
 A wrapper dispatcher may only select configuration and invoke DIG, for example:
 
 ```python
