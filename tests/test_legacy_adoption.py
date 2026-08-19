@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 
-from submission_tools.adoption import adopt, adoption_status, inventory_legacy
+from submission_tools.adoption import adopt, adoption_status, gitignore_allowlist, inventory_legacy
 from submission_tools import adoption_workspace
 from submission_tools.adoption_workspace import DEFAULT_BASE_BRANCH, _compare_references, _is_fork_origin, _open_draft_pr, _workspace_digest, _write_json, create_workspace, load_workspace, safe_stage, submit_workspace, validate_workspace_location, verify_workspace
 from submission_tools.legacy_compare import compare_gmt
@@ -210,6 +210,10 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertEqual(len(manifest["tooling"]["wrapper_commit"]), 40)
             self.assertEqual(manifest["tooling"]["submission_tools_path"], "geneset-extractor-dev/submission_tools")
             self.assertTrue((workspace / "adoption/legacy_reference.json").exists())
+            snippet = workspace / "adoption/gitignore_allowlist.md"
+            self.assertTrue(snippet.exists())
+            self.assertIn("!Adopted/submission.yaml", snippet.read_text(encoding="utf-8"))
+            self.assertIn("Adopted/outputs/", snippet.read_text(encoding="utf-8"))
             self.assertTrue((workspace / "AI_ADOPTION_PROMPT.md").exists())
             self.assertTrue(os.access(workspace / "verify-adoption", os.X_OK))
             self.assertTrue(os.access(workspace / "submit-adoption", os.X_OK))
@@ -552,6 +556,47 @@ class LegacyAdoptionTest(unittest.TestCase):
             (repo / "Library" / "submission.yaml").write_text("{}\n", encoding="utf-8")
             (repo / "Library" / "run_receipt.json").write_text("{}\n", encoding="utf-8")
             self.assertEqual(safe_stage(repo, ("Library",)), ["Library/submission.yaml"])
+
+    def test_allowlist_preflight_requires_source_rules_and_never_stages_generated_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"; repo.mkdir()
+            self._git(repo, "init")
+            self._configure_test_git_identity(repo)
+            (repo / ".gitignore").write_text("*\n!.gitignore\n", encoding="utf-8")
+            library = repo / "Library"
+            (library / "config").mkdir(parents=True)
+            (library / "src").mkdir()
+            (library / "outputs").mkdir()
+            (library / "submission.yaml").write_text("{}\n", encoding="utf-8")
+            (library / "config/model_list.tsv").write_text("model_id\nM1\n", encoding="utf-8")
+            (library / "src/build.py").write_text("VALUE = 1\n", encoding="utf-8")
+            (library / "outputs/genesets.gmt").write_text("set\tna\tA\n", encoding="utf-8")
+            self.assertTrue(adoption_workspace._ignored_submission_files(repo, library))
+            with (repo / ".gitignore").open("a", encoding="utf-8") as handle:
+                handle.write("\n" + gitignore_allowlist("Library"))
+            self.assertEqual(adoption_workspace._ignored_submission_files(repo, library), [])
+            staged = safe_stage(repo, ("Library", ".gitignore"), submission_library_root="Library")
+            self.assertIn("Library/submission.yaml", staged)
+            self.assertNotIn("Library/outputs/genesets.gmt", staged)
+            self._git(repo, "reset")
+            with (repo / ".gitignore").open("a", encoding="utf-8") as handle:
+                handle.write("!Library/outputs/\n!Library/outputs/**\n")
+            staged = safe_stage(repo, ("Library", ".gitignore"), submission_library_root="Library")
+            self.assertNotIn("Library/outputs/genesets.gmt", staged)
+
+    def test_submit_reports_ignored_submission_sources_before_staging(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workspace, dig, wrapper, _dig_fork = self._submittable_workspace(root)
+            (wrapper / ".gitignore").write_text("*\n!.gitignore\n", encoding="utf-8")
+            _root, manifest = load_workspace(workspace)
+            manifest["verification"]["workspace_digest"] = _workspace_digest(workspace, manifest)
+            _write_json(workspace / ".adoption-workspace.yaml", manifest)
+            with patch.object(adoption_workspace, "_active_tooling", return_value=(True, wrapper / "submission_tools", wrapper / "submission_tools", "test")):
+                ok, messages = submit_workspace(workspace, yes=True)
+            self.assertFalse(ok)
+            self.assertTrue(any("submission source files are ignored" in message for message in messages))
+            self.assertTrue(any("gitignore_allowlist.md" in message for message in messages))
 
 
 if __name__ == "__main__":

@@ -31,6 +31,19 @@ python3 -m submission_tools adopt \
    output contracts, and source provenance overlays before an adoption can be
    reported complete.
 
+## Repository ignore policy
+
+The wrapper repository may use a deny-by-default root `.gitignore`. Each
+adoption workspace therefore creates `adoption/gitignore_allowlist.md` with
+library-specific rules for committed code, configuration, manifests, and small
+fixtures. Review and apply that snippet to the wrapper root `.gitignore`
+before `./submit-adoption`.
+
+Do not use `git add -f`. Keep `inputs/`, `outputs/`, `work/`, and
+`run_receipt.json` ignored. Submission tooling preflights this policy,
+rejects ignored submission source files, and never stages generated library
+artifacts even if a local ignore rule was accidentally loosened.
+
 ## Target architecture for an adopted library
 
 The generated `AI_ADOPTION_PROMPT.md` uses GTEx, MoTrPAC, HuBMAP, and

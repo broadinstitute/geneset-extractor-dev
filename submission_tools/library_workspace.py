@@ -355,7 +355,7 @@ def submit_library_workspace(workspace: Path, *, yes: bool = False, allow_upstre
     else:
         payload["paired_pull_requests"]["dig_gene_set_extractors"] = "N/A"
     shared._write_json(library / "submission.yaml", payload)
-    wrapper_sha = shared._commit_if_changed(wrapper, f"Add {manifest['library_id']} gene-set library", (manifest["library_id"], "docs", "submission_tools", "tests", "config", "run", ".gitignore")) if shared._changed_paths(wrapper) else None
+    wrapper_sha = shared._commit_if_changed(wrapper, f"Add {manifest['library_id']} gene-set library", (manifest["library_id"], "docs", "submission_tools", "tests", "config", "run", ".gitignore"), submission_library_root=manifest["library_id"]) if shared._changed_paths(wrapper) else None
     wrapper_pending = wrapper_pending or wrapper_sha is not None
     if dig_pending:
         result = coordinated_validate(library, dig, development_dig_checkout=False)
@@ -374,7 +374,7 @@ def submit_library_workspace(workspace: Path, *, yes: bool = False, allow_upstre
             payload = load(library / "submission.yaml")
             payload["paired_pull_requests"]["dig_gene_set_extractors"] = dig_pr
             shared._write_json(library / "submission.yaml", payload)
-            shared._commit_if_changed(wrapper, "Record paired DIG pull request URL", (manifest["library_id"],))
+            shared._commit_if_changed(wrapper, "Record paired DIG pull request URL", (manifest["library_id"],), submission_library_root=manifest["library_id"])
             completed = shared._run(["git", "push", "origin", str(repositories["wrapper"]["work_branch"])], wrapper)
             if completed.returncode:
                 return False, ["ERROR: could not push paired DIG PR metadata: " + completed.stderr.strip()]
@@ -384,7 +384,7 @@ def submit_library_workspace(workspace: Path, *, yes: bool = False, allow_upstre
         payload = load(library / "submission.yaml")
         payload["paired_pull_requests"]["geneset_extractor_dev"] = wrapper_pr
         shared._write_json(library / "submission.yaml", payload)
-        shared._commit_if_changed(wrapper, "Record wrapper pull request URL", (manifest["library_id"],))
+        shared._commit_if_changed(wrapper, "Record wrapper pull request URL", (manifest["library_id"],), submission_library_root=manifest["library_id"])
         completed = shared._run(["git", "push", "origin", str(repositories["wrapper"]["work_branch"])], wrapper)
         if completed.returncode:
             return False, ["ERROR: could not push wrapper PR metadata: " + completed.stderr.strip()]
