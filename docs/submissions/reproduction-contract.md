@@ -30,3 +30,18 @@ the rendered commands and source manifests as well.
 manifest digests, environment identifier/digest, command, timestamps, expected
 and completed models, and validation result. It does not cryptographically
 prove reproducibility.
+
+## Provenance completeness
+
+`./verify-adoption` and `./verify-library` run a `provenance_complete` stage
+after local smoke reproduction. It checks each declared sidecar for valid JSON,
+unique nodes, valid edges, a source-input → operation → geneset path, and a
+materialized expected artifact. It also checks declared input-manifest linkage
+and contributor-specific paths. The stage records `smoke` and `full` status in
+the workspace manifest and receipt.
+
+Draft submissions may report incomplete unavailable full provenance as a
+warning. For ready submissions, missing required provenance, incomplete graph
+linkage, or local-only source paths are errors. These checks validate declared
+structure and provenance linkage; they do not prove scientific correctness or
+cryptographically prove reproducibility.

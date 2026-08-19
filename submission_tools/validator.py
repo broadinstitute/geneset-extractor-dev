@@ -102,6 +102,25 @@ def _validate_schema(data: dict[str, Any], result: ValidationResult) -> None:
         for key in keys:
             if not mapping.get(key):
                 result.add("error", "schema", f"{section}.{key} is required")
+    provenance = data.get("provenance", {})
+    if provenance and (not isinstance(provenance, dict) or not isinstance(provenance.get("contracts", []), list)):
+        result.add("error", "provenance_contract", "provenance.contracts must be a list")
+    elif isinstance(provenance, dict):
+        for index, contract in enumerate(provenance.get("contracts", [])):
+            if not isinstance(contract, dict) or contract.get("scope") not in {"smoke", "full"}:
+                result.add("error", "provenance_contract", f"provenance.contracts[{index}] requires scope smoke or full")
+                continue
+            if not _safe_relative(contract.get("output_manifest")):
+                result.add("error", "provenance_contract", f"provenance.contracts[{index}].output_manifest must be a safe relative path")
+            filename = contract.get("provenance_filename", "geneset.provenance.json")
+            if not isinstance(filename, str) or Path(filename).name != filename:
+                result.add("error", "provenance_contract", f"provenance.contracts[{index}].provenance_filename must be a filename")
+            if "required_input_ids" in contract and not isinstance(contract["required_input_ids"], list):
+                result.add("error", "provenance_contract", f"provenance.contracts[{index}].required_input_ids must be a list")
+    if data.get("submission_status") == "ready":
+        contracts = provenance.get("contracts", []) if isinstance(provenance, dict) else []
+        if not any(isinstance(contract, dict) and contract.get("scope") == "full" for contract in contracts):
+            result.add("error", "provenance_contract", "ready submissions require a full provenance contract")
     paired = _required_mapping(data, "paired_pull_requests", result)
     for key in ("geneset_extractor_dev", "dig_gene_set_extractors"):
         value = str(paired.get(key, ""))

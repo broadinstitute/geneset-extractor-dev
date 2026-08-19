@@ -36,7 +36,9 @@ After implementation, use the workspace-local helpers:
 `verify-library` validates workspace remotes/branches, confirms source inputs
 did not change, checks wrapper schema and boundaries, validates the declared
 DIG checkout and identifiers, runs the explicitly local smoke command, and
-writes a receipt. It never runs this flow in CI and never downloads inputs.
+writes a receipt. It also runs `provenance_complete` against declared smoke and
+full provenance contracts; ready submissions require complete full provenance.
+It never runs this flow in CI and never downloads inputs.
 `submit-library` refuses stale verification, direct upstream pushes, unsafe
 files, and missing Git author identity. It commits/pushes only the work branch
 to `origin` and opens draft PRs when `gh` is available; it never merges.

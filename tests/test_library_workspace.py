@@ -35,7 +35,7 @@ class NewLibraryWorkspaceTest(unittest.TestCase):
             package = source / "src" / "geneset_extractors"
             package.mkdir(parents=True)
             (package / "__init__.py").write_text('__version__ = "test"\n', encoding="utf-8")
-            (package / "cli.py").write_text("import sys\nraise SystemExit(0 if sys.argv[1:] == ['submission', 'validate', 'TODO'] else 1)\n", encoding="utf-8")
+            (package / "cli.py").write_text("import sys\nraise SystemExit(0 if sys.argv[1:] in (['submission', 'validate', 'TODO'], ['submission', 'validate', 'rna_deg']) else 1)\n", encoding="utf-8")
         self.git(source, "add", ".")
         self.git(source, "commit", "-m", "baseline")
         remote = root / f"{name}.git"
@@ -94,6 +94,21 @@ class NewLibraryWorkspaceTest(unittest.TestCase):
                 ok, messages = library_workspace.verify_library_workspace(workspace)
         self.assertFalse(ok)
         self.assertTrue(any("source input changed" in message for message in messages))
+
+    def test_ready_verify_library_fails_for_missing_required_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace, _inputs, _dig_fork, _wrapper_fork = self.workspace(Path(temp))
+            library = workspace / "geneset-extractor-dev/NewLibrary"
+            payload = json.loads((library / "submission.yaml").read_text())
+            payload["submission_status"] = "ready"
+            payload["dig"]["commit"] = self.git(workspace / "dig-gene-set-extractors", "rev-parse", "HEAD")
+            payload["dig"]["identifiers"] = ["rna_deg"]
+            (library / "submission.yaml").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            expected = workspace / "geneset-extractor-dev/submission_tools"
+            with patch.object(library_workspace, "_tooling", return_value=(True, expected, expected, "test")):
+                ok, messages = library_workspace.verify_library_workspace(workspace)
+        self.assertFalse(ok)
+        self.assertTrue(any("provenance_complete full provenance_missing" in message for message in messages))
 
     def test_submit_requires_fresh_verification_and_never_pushes_upstream(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

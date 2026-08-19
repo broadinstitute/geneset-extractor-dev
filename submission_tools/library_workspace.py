@@ -19,6 +19,7 @@ from typing import Any
 from . import adoption_workspace as shared
 from .coordinated import coordinated_validate
 from .receipt import write_receipt
+from .provenance_validation import validate_provenance_complete
 from .scaffold import scaffold
 from .validator import validate_submission
 from .yaml_loader import load
@@ -160,6 +161,11 @@ parsing, main transformation, GMT generation, metadata, and provenance when
 feasible. Use `./verify-library` from this workspace; it deliberately imports
 the workspace's `geneset-extractor-dev/submission_tools`. When it passes, use
 `./submit-library` to create draft PRs only. Neither command merges a PR.
+
+Declare `provenance.contracts` for smoke/full outputs. Ready submissions must
+have a complete full provenance graph from declared sources through DIG
+workflow/operation nodes to materialized output; the wrapper validates that
+graph but must never construct it.
 """
 
 
@@ -241,6 +247,19 @@ def _tooling(root: Path, manifest: dict[str, Any]) -> tuple[bool, Path, Path, st
     return active == expected, expected, active, str(manifest["tooling"].get("wrapper_commit", "unknown"))
 
 
+def _provenance_stage(library: Path, payload: dict[str, Any], scope: str) -> tuple[list[str], dict[str, object]]:
+    result = validate_provenance_complete(library, payload, scope=scope)
+    contracts = payload.get("provenance", {}).get("contracts", []) if isinstance(payload.get("provenance"), dict) else []
+    declared = any(isinstance(contract, dict) and contract.get("scope") == scope for contract in contracts)
+    status = "NOT_RUN" if not declared else ("FAIL" if not result.ok else ("WARN" if result.issues else "PASS"))
+    messages = [f"{issue.level.upper()}: provenance_complete {scope} {issue.code}: {issue.message}" for issue in result.issues]
+    if not declared:
+        messages = [f"INFO: provenance_complete {scope}: no contract declared."]
+    else:
+        messages.append(f"INFO: provenance_complete {scope}: {status}")
+    return messages, {"status": status, "issues": [issue.__dict__ for issue in result.issues]}
+
+
 def verify_library_workspace(workspace: Path) -> tuple[bool, list[str]]:
     root, manifest = load_library_workspace(workspace)
     tooling_ok, expected, active, commit = _tooling(root, manifest)
@@ -275,19 +294,26 @@ def verify_library_workspace(workspace: Path) -> tuple[bool, list[str]]:
         if reproduced.returncode:
             messages.append("ERROR: smoke reproduction failed: " + (reproduced.stderr.strip() or reproduced.stdout.strip()))
         messages.extend(shared._check_declared_smoke_outputs(library, payload))
+        provenance_stages: dict[str, object] = {}
+        provenance_messages, provenance_stages["smoke"] = _provenance_stage(library, payload, "smoke")
+        messages.extend(provenance_messages)
+        provenance_messages, provenance_stages["full"] = _provenance_stage(library, payload, "full")
+        messages.extend(provenance_messages)
+    else:
+        provenance_stages = {"smoke": {"status": "NOT_RUN", "issues": []}, "full": {"status": "NOT_RUN", "issues": []}}
     ok = not any(message.startswith("ERROR:") for message in messages)
     receipt = library / "run_receipt.json"
     workspace_digest = _digest(root, manifest)
     write_receipt(
         library / "submission.yaml", dig,
-        {"ok": ok, "messages": messages, "workflow_type": "new_library"}, receipt,
+        {"ok": ok, "messages": messages, "workflow_type": "new_library", "provenance_validation": provenance_stages}, receipt,
         [str(root / "verify-library")],
         {"workflow_type": "new_library", "workspace_digest": workspace_digest,
          "tooling_path": str(active), "tooling_commit": commit},
     )
     # The receipt itself is generated under the library and therefore changes
     # the workspace digest. Record the post-receipt value for stale-checking.
-    manifest["verification"] = {"last_result": "PASS" if ok else "FAILED", "last_receipt": str(receipt.relative_to(root)), "workspace_digest": _digest(root, manifest), "completed_at": datetime.now(timezone.utc).isoformat()}
+    manifest["verification"] = {"last_result": "PASS" if ok else "FAILED", "last_receipt": str(receipt.relative_to(root)), "workspace_digest": _digest(root, manifest), "provenance_complete": provenance_stages, "completed_at": datetime.now(timezone.utc).isoformat()}
     shared._write_json(root / WORKSPACE_MANIFEST, manifest)
     return ok, messages
 

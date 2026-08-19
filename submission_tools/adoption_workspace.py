@@ -23,6 +23,7 @@ from .adoption_prompt import architecture_guidance
 from .coordinated import coordinated_validate
 from .legacy_compare import compare_gmt
 from .receipt import write_receipt
+from .provenance_validation import validate_provenance_complete
 from .scaffold import scaffold
 from .validator import validate_submission
 from .yaml_loader import load
@@ -394,6 +395,20 @@ def _check_declared_smoke_outputs(library: Path, payload: dict[str, Any]) -> lis
     return messages or ["INFO: declared smoke outputs exist."]
 
 
+def _provenance_stage(library: Path, payload: dict[str, Any], scope: str) -> tuple[list[str], dict[str, object]]:
+    """Run the shared, DIG-output-only provenance completeness check."""
+    result = validate_provenance_complete(library, payload, scope=scope)
+    contracts = payload.get("provenance", {}).get("contracts", []) if isinstance(payload.get("provenance"), dict) else []
+    declared = any(isinstance(contract, dict) and contract.get("scope") == scope for contract in contracts)
+    status = "NOT_RUN" if not declared else ("FAIL" if not result.ok else ("WARN" if result.issues else "PASS"))
+    messages = [f"{issue.level.upper()}: provenance_complete {scope} {issue.code}: {issue.message}" for issue in result.issues]
+    if not declared:
+        messages = [f"INFO: provenance_complete {scope}: no contract declared."]
+    else:
+        messages.append(f"INFO: provenance_complete {scope}: {status}")
+    return messages, {"status": status, "issues": [issue.__dict__ for issue in result.issues]}
+
+
 def verify_workspace(workspace: Path) -> tuple[bool, list[str]]:
     root, manifest = load_workspace(workspace)
     tooling_ok, expected_tooling, active_tooling, tooling_commit = _active_tooling(root, manifest)
@@ -434,13 +449,18 @@ def verify_workspace(workspace: Path) -> tuple[bool, list[str]]:
     if reproduced.returncode:
         messages.append("ERROR: smoke reproduction failed: " + (reproduced.stderr.strip() or reproduced.stdout.strip()))
     messages.extend(_check_declared_smoke_outputs(library, payload))
+    provenance_stages: dict[str, object] = {}
+    provenance_messages, provenance_stages["smoke"] = _provenance_stage(library, payload, "smoke")
+    messages.extend(provenance_messages)
     messages.append("INFO: smoke verification completed; full legacy equivalence is evaluated only for explicitly declared full mappings.")
     comparison_messages, full_compared = _compare_references(root, library, manifest, payload)
     messages.extend(comparison_messages)
+    provenance_messages, provenance_stages["full"] = _provenance_stage(library, payload, "full")
+    messages.extend(provenance_messages)
     receipt = library / "run_receipt.json"
     ok = not any(message.startswith("ERROR:") for message in messages)
-    write_receipt(library / "submission.yaml", dig, {"ok": ok, "messages": messages}, receipt, [str(root / "verify-adoption")])
-    manifest["verification"] = {"last_result": "PASS" if ok else "FAILED", "last_receipt": str(receipt.relative_to(root)), "workspace_digest": _workspace_digest(root, manifest), "full_comparison_completed": full_compared, "completed_at": datetime.now(timezone.utc).isoformat()}
+    write_receipt(library / "submission.yaml", dig, {"ok": ok, "messages": messages, "provenance_validation": provenance_stages}, receipt, [str(root / "verify-adoption")])
+    manifest["verification"] = {"last_result": "PASS" if ok else "FAILED", "last_receipt": str(receipt.relative_to(root)), "workspace_digest": _workspace_digest(root, manifest), "full_comparison_completed": full_compared, "provenance_complete": provenance_stages, "completed_at": datetime.now(timezone.utc).isoformat()}
     _write_json(root / WORKSPACE_MANIFEST, manifest)
     return ok, messages
 
