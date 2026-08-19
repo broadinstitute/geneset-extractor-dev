@@ -172,3 +172,37 @@
 !KOMP2/**/*.png
 
 archive/
+
+# IGVF submission source/configuration only (reviewed adoption allowlist).
+!IGVF/
+!IGVF/submission.yaml
+!IGVF/README.md
+!IGVF/config/
+!IGVF/config/**
+!IGVF/reproduction/
+!IGVF/reproduction/*.sh
+!IGVF/reproduction/*.tsv
+!IGVF/reproduction/*.md
+!IGVF/run/
+!IGVF/run/**/
+!IGVF/run/*.sh
+!IGVF/run/*.py
+!IGVF/src/
+!IGVF/src/**/
+!IGVF/src/**/*.py
+!IGVF/src/**/*.md
+!IGVF/expected/
+!IGVF/expected/*.tsv
+!IGVF/tests/
+!IGVF/tests/fixtures/
+!IGVF/tests/fixtures/**/
+!IGVF/tests/fixtures/**/*.tsv
+!IGVF/tests/fixtures/**/*.json
+!IGVF/tests/fixtures/**/*.txt
+!IGVF/tests/fixtures/**/*.md
+
+# Downloaded sources and generated artifacts stay untracked.
+IGVF/inputs/
+IGVF/outputs/
+IGVF/work/
+IGVF/run_receipt.json

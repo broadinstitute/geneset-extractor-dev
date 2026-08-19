@@ -1,0 +1,9 @@
+{
+  "inputs": {
+    "role:source_igvf_differential_expression_tsv": {
+      "canonical_uri": "https://data.igvf.org/",
+      "provider": "IGVF Data Portal",
+      "version": "released_2026-08-19"
+    }
+  }
+}
