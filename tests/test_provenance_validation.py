@@ -29,6 +29,15 @@ def graph(artifact: str, *, source_label: str = "source_counts", broken: bool = 
     }
 
 
+def dig_graph_map(artifact: str) -> dict:
+    """Representative existing DIG graph-map sidecar, with no focus node."""
+    value = graph(artifact)
+    value.pop("focus_node_id")
+    for node in value["nodes"]:
+        node["type"] = {"file": "File", "operation": "AnalysisType", "geneset": "GeneSet"}[node.pop("kind")]
+    return {"urn:uuid:test-provenance-graph": value}
+
+
 class ProvenanceValidationTest(unittest.TestCase):
     def library(self, *, ready: bool = False) -> tuple[Path, dict]:
         temp = tempfile.TemporaryDirectory()
@@ -49,6 +58,26 @@ class ProvenanceValidationTest(unittest.TestCase):
         artifact.write_text("set\tna\tA\n", encoding="utf-8")
         (artifact.parent / "geneset.provenance.json").write_text(json.dumps(graph(artifact.name)), encoding="utf-8")
         self.assertTrue(validate_provenance_complete(root, payload, scope="full").ok)
+
+    def test_existing_dig_graph_map_sidecar_passes(self) -> None:
+        root, payload = self.library(ready=True)
+        artifact = root / "work/model/genesets.gmt"
+        artifact.parent.mkdir(parents=True)
+        artifact.write_text("set\tna\tA\n", encoding="utf-8")
+        (artifact.parent / "geneset.provenance.json").write_text(
+            json.dumps(dig_graph_map(artifact.name)), encoding="utf-8"
+        )
+        self.assertTrue(validate_provenance_complete(root, payload, scope="full").ok)
+
+    def test_empty_graph_map_is_an_error(self) -> None:
+        root, payload = self.library()
+        artifact = root / "work/model/genesets.gmt"
+        artifact.parent.mkdir(parents=True)
+        artifact.write_text("set\tna\tA\n", encoding="utf-8")
+        (artifact.parent / "geneset.provenance.json").write_text("{}", encoding="utf-8")
+        result = validate_provenance_complete(root, payload, scope="full")
+        self.assertFalse(result.ok)
+        self.assertTrue(any(issue.code == "provenance_json" for issue in result.issues))
 
     def test_missing_sidecar_is_warning_for_draft_and_error_for_ready(self) -> None:
         root, payload = self.library()

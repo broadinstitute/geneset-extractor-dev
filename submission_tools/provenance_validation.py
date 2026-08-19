@@ -60,6 +60,29 @@ def _node_text(node: dict[str, Any]) -> str:
     return json.dumps(node, sort_keys=True).lower()
 
 
+def _graphs(payload: object) -> tuple[list[tuple[str, dict[str, Any]]], str | None]:
+    """Return graphs from either supported DIG sidecar representation.
+
+    Older and current DIG producers may write one graph directly, while other
+    producers write a graph-map envelope keyed by provenance graph ID.  The
+    envelope is part of the existing DIG output contract; normalizing it here
+    keeps wrapper validation format-compatible without constructing or
+    changing DIG provenance.
+    """
+    if not isinstance(payload, dict):
+        return [], "must contain a graph object or graph-ID map"
+    if "nodes" in payload or "edges" in payload:
+        return [("", payload)], None
+    if not payload:
+        return [], "graph-ID map is empty"
+    graphs: list[tuple[str, dict[str, Any]]] = []
+    for graph_id, graph in payload.items():
+        if not isinstance(graph, dict):
+            return [], f"graph-ID map entry {graph_id!r} is not a graph object"
+        graphs.append((str(graph_id), graph))
+    return graphs, None
+
+
 def _graph_issues(graph: dict[str, Any], artifact: Path, required_inputs: list[str]) -> list[tuple[str, str, bool]]:
     issues: list[tuple[str, str, bool]] = []
     nodes = graph.get("nodes")
@@ -153,13 +176,16 @@ def validate_provenance_complete(library_root: Path, submission: dict[str, Any],
                 _add(result, submission, "provenance_missing", f"{scope} provenance sidecar is missing for {relative}: {sidecar.relative_to(library_root)}")
                 continue
             try:
-                graph = json.loads(sidecar.read_text(encoding="utf-8"))
+                payload = json.loads(sidecar.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
                 result.add("error", "provenance_json", f"{sidecar.relative_to(library_root)} is not valid JSON: {exc}")
                 continue
-            if not isinstance(graph, dict):
-                result.add("error", "provenance_json", f"{sidecar.relative_to(library_root)} must contain one graph object")
+            graphs, error = _graphs(payload)
+            if error:
+                result.add("error", "provenance_json", f"{sidecar.relative_to(library_root)} {error}")
                 continue
-            for code, message, structural in _graph_issues(graph, artifact, required_inputs):
-                _add(result, submission, code, f"{sidecar.relative_to(library_root)}: {message}", structural=structural)
+            for graph_id, graph in graphs:
+                label = f" graph {graph_id}" if graph_id else ""
+                for code, message, structural in _graph_issues(graph, artifact, required_inputs):
+                    _add(result, submission, code, f"{sidecar.relative_to(library_root)}{label}: {message}", structural=structural)
     return result
