@@ -103,10 +103,17 @@ blocker. Do not accept unexplained precomputed intermediates.
    a partition/tissue list when applicable, and
    `config/model_description_templates.tsv`. Add only a strict `run/` launcher
    and a thin `src/` model dispatcher.
-5. Declare every external input and fixture in `input_manifest.tsv`; add the
-   expected-output manifest, smoke reproduction, and an explicit full legacy
-   reference mapping. A smoke output is never a substitute for full legacy
-   equivalence.
+5. Declare every external input and fixture in `input_manifest.tsv`. Create
+   `config/provenance_overlay.json` with stable source identifiers/URLs keyed
+   by the DIG-supported input path or `role:<input-role>`, and pass it as
+   `--provenance_overlay_json` where the declared DIG entry point supports it.
+   Source URLs belong only to declared source inputs: do not use
+   `--provenance_mirror_local_prefix` with `Path.home()`, `$HOME`, `~`, the
+   adoption workspace, the wrapper root, or an output root. Those broad
+   rewrites incorrectly turn local commands and generated outputs into source
+   URLs. Add the expected-output manifest, smoke reproduction, and an explicit
+   full legacy reference mapping. A smoke output is never a substitute for
+   full legacy equivalence.
 6. Run DIG contract validation, wrapper validation, smoke reproduction, and
    full mapped legacy comparison. Stop for approval before changing scientific
    parameters such as normalization, filtering, mapping, ranking, contrasts,

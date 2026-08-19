@@ -53,6 +53,23 @@ def scaffold(root: Path, library_id: str, display_name: str, pattern: str) -> No
     _write(root / "config/model_list.tsv", "model_id\tenabled\nM1\tfalse\n")
     _write(root / "config/partition_list.tsv", f"{partition_field}\nexample\n")
     _write(root / "config/model_description_templates.tsv", "model_id\tdescription_template\nM1\tTODO\n")
+    _write(
+        root / "config/provenance_overlay.json",
+        json.dumps(
+            {
+                "inputs": {
+                    "role:example_input": {
+                        "canonical_uri": "TODO: stable source URI or identifier from input_manifest.tsv",
+                        "download_url": "TODO: public download URL when applicable",
+                        "provider": "TODO",
+                        "version": "TODO",
+                    }
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+    )
     _write(root / "reproduction/input_manifest.tsv", "\t".join(INPUT_HEADERS) + "\nexample_input\tTODO\tTODO\t\tmanual\tsmoke,full\tworkflow_input\tnot_redistributable\tfalse\t\n")
     _write(root / "expected/output_manifest.tsv", "\t".join(OUTPUT_HEADERS) + "\nexample_output\tgenesets/example/models/M1/extractor/geneset.meta.json\tmetadata\ttrue\tM1\texample\n")
     _write(root / "reproduction/download_inputs.sh", "#!/usr/bin/env bash\nset -euo pipefail\necho 'TODO: obtain inputs described in input_manifest.tsv'\n", executable=True)

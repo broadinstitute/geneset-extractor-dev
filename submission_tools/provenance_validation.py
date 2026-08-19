@@ -29,7 +29,7 @@ def _severity(payload: dict[str, Any], code: str) -> str:
     # A ready submission cannot waive an absent required sidecar, source
     # linkage, or publishable source location. Structural failures are handled
     # separately as unconditional errors.
-    if str(payload.get("submission_status", "draft")) == "ready" and code in {"provenance_missing", "provenance_input_link", "provenance_local_path"}:
+    if str(payload.get("submission_status", "draft")) == "ready" and code in {"provenance_missing", "provenance_input_link", "provenance_local_path", "provenance_workspace_url"}:
         return "error"
     deviations = payload.get("deviations", {})
     allowed = deviations.get("allow_provenance_findings", []) if isinstance(deviations, dict) else []
@@ -58,6 +58,20 @@ def _read_rows(root: Path, manifest: object, result: ValidationResult) -> list[d
 
 def _node_text(node: dict[str, Any]) -> str:
     return json.dumps(node, sort_keys=True).lower()
+
+
+def _has_workspace_url(node: dict[str, Any]) -> bool:
+    """Detect an HTTP URL fabricated from an adoption/workspace path.
+
+    This deliberately targets repository and adoption-directory path segments,
+    not legitimate source-provider URLs.  Stable source URLs are supplied via
+    the input manifest and provenance overlay, never by mirroring a whole
+    contributor home directory.
+    """
+    return bool(re.search(
+        r"https?://[^\s\"']*/(?:adoption_candidate|geneset-extractor-dev|dig-gene-set-extractors)(?:/|$)",
+        _node_text(node),
+    ))
 
 
 def _graphs(payload: object) -> tuple[list[tuple[str, dict[str, Any]]], str | None]:
@@ -140,6 +154,10 @@ def _graph_issues(graph: dict[str, Any], artifact: Path, required_inputs: list[s
         text = _node_text(node)
         if re.search(r"/(?:home/[^/]+|users/[^/]+|broad/|humgen/)", text):
             issues.append(("provenance_local_path", "graph contains a contributor-specific local path", False))
+            break
+    for node in indexed.values():
+        if _has_workspace_url(node):
+            issues.append(("provenance_workspace_url", "graph contains a remote URL fabricated from an adoption/workspace path", False))
             break
     return issues
 

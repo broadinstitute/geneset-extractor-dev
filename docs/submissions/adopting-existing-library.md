@@ -63,6 +63,16 @@ Ready adopted libraries require a declared full provenance contract and a
 source-input → workflow → geneset → materialized-output graph without local
 contributor paths.
 
+### Source provenance
+
+For each adopted source, keep its stable URI/identifier in
+`reproduction/input_manifest.tsv` and add corresponding metadata to
+`config/provenance_overlay.json`. Pass that overlay to the supporting DIG
+entry point when it supports `--provenance_overlay_json`. Do not map a whole
+home directory, the adoption workspace, or outputs to a provider URL with
+`--provenance_mirror_local_prefix`; those locations contain local execution
+paths, not remotely hosted source data.
+
 5. Review the result, then commit/push to your forks and open draft PRs:
 
 ```bash

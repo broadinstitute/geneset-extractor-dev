@@ -15,6 +15,11 @@ MODEL_HEADERS = {"model_id"}
 PARTITION_HEADERS = {"partition_id", "tissue_id", "dataset_id", "signature_id"}
 DESCRIPTION_HEADERS = {"model_id", "description_template"}
 ANALYTICAL_IMPORTS = ("pandas", "numpy", "scipy", "statsmodels", "scanpy", "sklearn", "rpy2", "tensorflow", "torch")
+UNSAFE_PROVENANCE_MIRROR = re.compile(
+    r"(?:Path\s*\.\s*home\s*\(|os\.environ\s*\[\s*['\"]HOME['\"]\s*\]|"
+    r"expanduser\s*\(\s*['\"]~|\$\{?HOME\}?|(?:^|[\s'\"])~(?:/|['\"]|$)|/(?:home|Users)/)",
+    re.M,
+)
 
 
 @dataclass
@@ -173,6 +178,13 @@ def _wrapper_scan(root: Path, wrapper: Path, data: dict[str, Any], result: Valid
                 result.add("warning", "allowlisted_" + code, f"{path.relative_to(root)}: allowlisted {code}")
             else:
                 result.add("error", code, f"{path.relative_to(root)} appears to implement {code}; move it to DIG or document an allowlisted deviation")
+        if "provenance_mirror_local_prefix" in text and UNSAFE_PROVENANCE_MIRROR.search(text):
+            level = "error" if data.get("submission_status") == "ready" else "warning"
+            result.add(
+                level,
+                "unsafe_provenance_mirror",
+                f"{path.relative_to(root)} mirrors a home-directory path into provenance; use a narrow declared input mirror or config/provenance_overlay.json instead",
+            )
 
 
 def _script_checks(root: Path, entry: Path, result: ValidationResult) -> None:
