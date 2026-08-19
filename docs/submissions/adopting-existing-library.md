@@ -25,7 +25,11 @@ python3 -m submission_tools adopt \
    prompt. Every intermediate must be either a declared source input or
    produced by committed code. Substantive processing, statistics, mapping,
    ranking, and gene-set construction belong in `dig-gene-set-extractors`; this
-   repository remains wrapper-only.
+   repository remains wrapper-only. The generated prompt includes a mandatory
+   completion gate: it requires concrete DIG metadata, no scaffold `TODO`
+   values, explicit full legacy-to-regenerated mappings, separate smoke/full
+   output contracts, and source provenance overlays before an adoption can be
+   reported complete.
 
 ## Target architecture for an adopted library
 
