@@ -17,7 +17,7 @@ def _git_commit(root: Path) -> str:
     return completed.stdout.strip() if completed.returncode == 0 else "unknown"
 
 
-def write_receipt(submission_path: Path, dig_repo: Path, result: dict[str, Any], out_path: Path, command: list[str]) -> None:
+def write_receipt(submission_path: Path, dig_repo: Path, result: dict[str, Any], out_path: Path, command: list[str], workspace_context: dict[str, Any] | None = None) -> None:
     from .yaml_loader import load
     payload = load(submission_path)
     root = submission_path.parent
@@ -37,6 +37,10 @@ def write_receipt(submission_path: Path, dig_repo: Path, result: dict[str, Any],
         "models_completed": [],
         "validation_result": result,
     }
+    if workspace_context:
+        # Isolated workflows add their workspace identity without changing the
+        # base, versioned receipt contract used by ordinary validation.
+        receipt["workspace"] = workspace_context
     out_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 

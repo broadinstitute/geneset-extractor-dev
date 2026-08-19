@@ -43,8 +43,9 @@ def scaffold(root: Path, library_id: str, display_name: str, pattern: str) -> No
         "configs": {"model_config": "config/model_list.tsv", "partition_config": "config/partition_list.tsv", "description_config": "config/model_description_templates.tsv"},
         "reproduction": {"entry_point": "reproduction/reproduce.sh", "input_manifest": "reproduction/input_manifest.tsv", "smoke_test_command": "bash reproduction/reproduce.sh --smoke"},
         "expected_outputs": {"manifest": "expected/output_manifest.tsv"},
+        "provenance": {"contracts": [{"scope": "full", "output_manifest": "expected/output_manifest.tsv", "provenance_filename": "geneset.provenance.json", "required_input_ids": []}]},
         "environment": {"declaration": "TODO: document the Python/container environment"},
-        "deviations": {"from_standard_architecture": [], "allow_wrapper_findings": []},
+        "deviations": {"from_standard_architecture": [], "allow_wrapper_findings": [], "allow_provenance_findings": []},
         "paired_pull_requests": {"geneset_extractor_dev": "TBD", "dig_gene_set_extractors": "TBD"},
     }
     _write(root / "submission.yaml", json.dumps(payload, indent=2) + "\n")

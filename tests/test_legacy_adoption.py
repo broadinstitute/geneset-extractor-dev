@@ -367,7 +367,26 @@ class LegacyAdoptionTest(unittest.TestCase):
             payload["dig"]["identifiers"] = ["rna_deg"]
             (library / "work").mkdir()
             (library / "work/full.gmt").write_text((legacy / "old.gmt").read_text(encoding="utf-8"), encoding="utf-8")
+            (library / "expected/provenance_output_manifest.tsv").write_text(
+                "output_id\trelative_path\trole\trequired\tmodel_id\tpartition_id\n"
+                "full\twork/full.gmt\tgmt\ttrue\tM1\texample\n", encoding="utf-8"
+            )
+            (library / "work/geneset.provenance.json").write_text(json.dumps({
+                "focus_node_id": "geneset:result",
+                "nodes": [
+                    {"id": "file:input", "kind": "file", "role": "source_input", "label": "source", "access": {"canonical_uri": "urn:test:source"}},
+                    {"id": "operation:workflow", "kind": "operation", "label": "workflow"},
+                    {"id": "geneset:result", "kind": "geneset", "label": "result"},
+                    {"id": "file:output", "kind": "file", "role": "gmt", "label": "full.gmt"},
+                ],
+                "edges": [
+                    {"source": "file:input", "target": "operation:workflow"},
+                    {"source": "operation:workflow", "target": "geneset:result"},
+                    {"source": "geneset:result", "target": "file:output"},
+                ],
+            }), encoding="utf-8")
             payload["adoption"]["reference_outputs"] = [{"legacy": str(legacy / "old.gmt"), "regenerated": "work/full.gmt", "comparison": "set_equivalent", "scope": "full"}]
+            payload["provenance"] = {"contracts": [{"scope": "full", "output_manifest": "expected/provenance_output_manifest.tsv", "provenance_filename": "geneset.provenance.json", "required_input_ids": []}]}
             (library / "submission.yaml").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
             completed = self._workspace_command(workspace, "verify-adoption")
             self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)

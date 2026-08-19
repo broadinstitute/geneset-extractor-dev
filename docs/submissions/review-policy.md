@@ -3,6 +3,12 @@
 Run `python3 -m submission_tools validate --submission <library>` before review.
 Errors block approval. Warnings require review but do not block validation.
 
+For an explicitly run workspace verification, `provenance_complete` is a
+separate stage. Ready submissions fail when required provenance sidecars are
+missing, malformed, disconnected from source inputs, or retain
+contributor-specific paths. Draft work may retain documented unavailable full
+provenance as warnings, but malformed graph structure remains an error.
+
 The wrapper boundary scan rejects analytical-package imports; GMT writing;
 normalization, differential-analysis, ranking, statistics, and gene-mapping
 heuristics; and direct provenance graph construction. A narrowly justified,

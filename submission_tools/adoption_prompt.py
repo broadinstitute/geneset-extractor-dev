@@ -135,6 +135,8 @@ Do not declare adoption complete until every source input is manifested, every
 transformation is committed code, declared DIG identifiers validate at the
 pinned exact commit, the wrapper-boundary validator passes without unapproved
 deviations, smoke reproduction succeeds, a full/reference mapping passes (or
-an approved discrepancy is documented), and a ready-valid submission plus run
-receipt exists.
+an approved discrepancy is documented), and declared `provenance.contracts`
+pass `provenance_complete`. Ready submissions require a full provenance graph
+linking declared sources through workflow/operation nodes to materialized gene
+set output, plus a ready-valid submission and run receipt.
 """

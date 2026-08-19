@@ -10,6 +10,13 @@ source, its access and license terms, the biological meaning of a set, the
 closest existing pattern, and whether DIG work is expected. Resolve the source
 and architecture questions before building a library.
 
+For source files held locally, create an isolated two-repository workspace with
+[`create-library`](creating-new-library.md). It records read-only input hashes,
+creates `submit/<library_id>` branches, and supplies workspace-local
+`./verify-library` and `./submit-library` helpers. This is the preferred path
+for a new library; use [legacy adoption](adopting-existing-library.md) only
+when final gene sets were already independently generated.
+
 Then follow the paired-PR sequence:
 
 1. Create the DIG code PR when a workflow, converter, or reusable processing
