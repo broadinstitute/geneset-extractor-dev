@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .adoption import adoption_report, gitignore_allowlist, inventory_legacy
+from .adoption import adoption_report, gitignore_allowlist, implementation_inventory, inventory_legacy, migration_map, source_assessment_template
 from .adoption_prompt import architecture_guidance
 from .coordinated import coordinated_validate
 from .legacy_compare import compare_gmt
@@ -152,6 +152,9 @@ def create_workspace(
         adoption_dir = workspace / "adoption"
         _write_json(adoption_dir / "inventory.json", inventory)
         _write_json(adoption_dir / "dependency_map.json", {"schema_version": "1.0.0", "intermediates": [{"path": item["path"], "producer": "TODO"} for item in inventory["possible_intermediates"]]})
+        _write_json(adoption_dir / "implementation_inventory.json", implementation_inventory(legacy, inventory))
+        _write_json(adoption_dir / "migration_map.yaml", migration_map(inventory))
+        (adoption_dir / "source_assessment.md").write_text(source_assessment_template(), encoding="utf-8")
         (adoption_dir / "adoption_report.md").write_text(adoption_report(inventory), encoding="utf-8")
         (adoption_dir / "gitignore_allowlist.md").write_text(gitignore_allowlist(library_id), encoding="utf-8")
         reference = _legacy_reference(legacy, inventory)
@@ -161,7 +164,7 @@ def create_workspace(
         submission = library / "submission.yaml"
         payload = load(submission)
         payload["submission_origin"] = {"type": "adopted", "legacy_inventory": "../../adoption/inventory.json"}
-        payload["adoption"] = {"reference_outputs": reference["reference_outputs"]}
+        payload["adoption"] = {"comparison_policy": {"mode": "exact_reproduction"}, "reference_outputs": reference["reference_outputs"]}
         _write_json(submission, payload)
         manifest = {
             "schema_version": "1.0.0", "library_id": library_id,
@@ -325,13 +328,13 @@ def _run_wrapper_submission_tests(wrapper: Path) -> tuple[bool, str] | None:
     return completed.returncode == 0, completed.stderr.strip() or completed.stdout.strip()
 
 
-def _reference_mappings(root: Path, library: Path, manifest: dict[str, Any], payload: dict[str, Any]) -> list[dict[str, str]]:
+def _reference_mappings(root: Path, library: Path, manifest: dict[str, Any], payload: dict[str, Any]) -> list[dict[str, Any]]:
     """Read explicit legacy/regenerated mappings without guessing GMT files."""
     raw = payload.get("adoption", {}).get("reference_outputs", []) if isinstance(payload.get("adoption"), dict) else []
     if not raw:
         reference_path = root / str(manifest["legacy"]["reference"])
         raw = json.loads(reference_path.read_text(encoding="utf-8")).get("reference_outputs", [])
-    mappings: list[dict[str, str]] = []
+    mappings: list[dict[str, Any]] = []
     for item in raw:
         if not isinstance(item, dict):
             continue
@@ -339,7 +342,7 @@ def _reference_mappings(root: Path, library: Path, manifest: dict[str, Any], pay
         regenerated = str(item.get("regenerated") or "")
         scope = str(item.get("scope") or "full")
         if legacy:
-            mappings.append({"legacy": legacy, "regenerated": regenerated, "comparison": str(item.get("comparison") or "set_equivalent"), "scope": scope})
+            mappings.append({"legacy": legacy, "regenerated": regenerated, "comparison": str(item.get("comparison") or "set_equivalent"), "scope": scope, "metrics": item.get("metrics") if isinstance(item.get("metrics"), dict) else {}, "mapping_file": str(item.get("mapping_file") or "")})
     return mappings
 
 
@@ -370,13 +373,20 @@ def _compare_references(root: Path, library: Path, manifest: dict[str, Any], pay
             messages.append(f"ERROR: declared regenerated {scope} reference does not exist: {regenerated}")
             continue
         report = root / "adoption" / ("comparison_report.tsv" if scope == "full" else f"comparison_smoke_{index}.tsv")
-        passed, rows = compare_gmt(legacy, regenerated, mapping["comparison"], report)
+        mapping_file = library / mapping["mapping_file"] if mapping.get("mapping_file") else None
+        try:
+            passed, rows = compare_gmt(legacy, regenerated, mapping["comparison"], report, metrics=mapping.get("metrics"), mapping_path=mapping_file)
+        except ValueError as exc:
+            messages.append(f"ERROR: {scope} legacy comparison configuration failed: {exc}")
+            continue
         if scope == "full":
             full_compared = True
         if not passed:
-            messages.append(f"ERROR: {scope} legacy comparison failed ({sum(row['status'] != 'unchanged' for row in rows)} differing gene sets)")
+            expected = "scientific comparability" if mapping["comparison"] == "scientific_comparability" else "legacy comparison"
+            messages.append(f"ERROR: {scope} {expected} failed ({sum(row['status'] not in {'unchanged', 'compared'} for row in rows)} differing gene sets)")
         else:
-            messages.append(f"INFO: {scope} legacy comparison passed ({len(rows)} gene sets)")
+            label = "scientifically comparable; not set-equivalent" if mapping["comparison"] == "scientific_comparability" else "legacy comparison passed"
+            messages.append(f"INFO: {scope} {label} ({len(rows)} gene sets)")
     if not mappings:
         messages.append("INFO: full legacy equivalence was not run because no comparison mapping is declared.")
     return messages, full_compared

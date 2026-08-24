@@ -150,6 +150,19 @@ was not run; submission remains blocked until the required full comparison is
 completed. An explicit `scope: smoke` mapping is allowed for a corresponding
 smoke reference, but is never selected automatically for a full legacy GMT.
 
+## Independent legacy implementations and close reimplementations
+
+When a legacy library was developed outside this architecture, use its scripts
+as read-only scientific evidence and recreate its substantive logic in DIG.
+Do not submit those scripts as wrapper runtime code. If a historical public
+input release cannot be recovered, declare
+`adoption.comparison_policy.mode: scientific_reimplementation`, document the
+evidence in `adoption/source_assessment.md`, and use explicit, predeclared
+scientific-comparability metrics and set mappings. A passing result is reported
+as **scientifically comparable; not set-equivalent** and requires an approving
+maintainer reference before a ready submission can pass. Exact reproductions
+continue to use the existing `set_equivalent` comparison unchanged.
+
 ## Advanced / low-level commands
 
 The existing lower-level commands remain available for debugging and unusual

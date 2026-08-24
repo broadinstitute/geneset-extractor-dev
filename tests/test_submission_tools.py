@@ -75,6 +75,26 @@ class SubmissionToolsTest(unittest.TestCase):
                 self.assertTrue((root / "reproduction/reproduce.sh").exists())
                 self.assertTrue(validate_submission(root).ok)
 
+    def test_ready_scientific_reimplementation_requires_assessment_and_review(self) -> None:
+        root = self.scaffold()
+        payload = self.payload(root)
+        payload["submission_status"] = "ready"
+        payload["dig"]["commit"] = "a" * 40
+        payload["adoption"] = {
+            "comparison_policy": {
+                "mode": "scientific_reimplementation",
+                "reason": "historical release is unavailable",
+                "source_assessment_path": "adoption/source_assessment.md",
+                "source_version_assessment": {"confidence": "best_available_public_release"},
+                "required_review": {"status": "pending", "approval_reference": "TBD"},
+            },
+            "reference_outputs": [],
+        }
+        self.write_payload(root, payload)
+        result = validate_submission(root)
+        self.assertFalse(result.ok)
+        self.assertTrue(any(issue.code == "comparison_review" for issue in result.issues))
+
     def test_missing_required_file(self) -> None:
         root = self.scaffold()
         (root / "config/model_list.tsv").unlink()

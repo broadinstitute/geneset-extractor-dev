@@ -130,6 +130,15 @@ blocker. Do not accept unexplained precomputed intermediates.
    parameters such as normalization, filtering, mapping, ranking, contrasts,
    thresholds, or model definitions.
 
+For an independently developed legacy implementation, treat its scripts as a
+read-only scientific specification, not code to submit. Recreate parsing,
+statistics, mapping, ranking, and GMT generation in DIG; the wrapper remains a
+thin dispatcher. If the historical public input release cannot be recovered,
+use `adoption.comparison_policy.mode: scientific_reimplementation`, complete
+`adoption/source_assessment.md`, and declare predefined comparability metrics
+and a one-to-one set mapping. A close result must be reported as
+`scientifically comparable; not set-equivalent`, never as exact reproduction.
+
 ## Mandatory completion gate
 
 The scaffold is only a starting point. Do not report this adoption as complete,

@@ -41,6 +41,14 @@ def write_receipt(submission_path: Path, dig_repo: Path, result: dict[str, Any],
         # Isolated workflows add their workspace identity without changing the
         # base, versioned receipt contract used by ordinary validation.
         receipt["workspace"] = workspace_context
+    adoption = payload.get("adoption")
+    if isinstance(adoption, dict):
+        policy = adoption.get("comparison_policy")
+        if isinstance(policy, dict):
+            receipt["adoption_comparison"] = {
+                "mode": policy.get("mode", "exact_reproduction"),
+                "claim": "scientifically comparable; not set-equivalent" if policy.get("mode") == "scientific_reimplementation" else "set-equivalent when declared mappings pass",
+            }
     out_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 

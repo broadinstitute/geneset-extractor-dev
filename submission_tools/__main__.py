@@ -62,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
     comparison.add_argument("--library", help="Adopted library directory; discovers the first legacy/new GMT pair.")
     comparison.add_argument("--legacy")
     comparison.add_argument("--new")
-    comparison.add_argument("--mode", default="set_equivalent", choices=["exact", "set_equivalent", "report_only"])
+    comparison.add_argument("--mode", default="set_equivalent", choices=["exact", "set_equivalent", "scientific_comparability", "report_only"])
     status = commands.add_parser("adoption-status", help="Show adoption progress without bypassing normal validation.")
     status.add_argument("--library", required=True)
     verify = commands.add_parser("verify-adoption", help="Verify an isolated adoption workspace.")

@@ -93,6 +93,20 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertTrue(states["NEW_FORMAT_VALID"])
             self.assertFalse(states["READY"])
 
+    def test_scientific_comparability_reports_close_non_equivalent_sets(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            legacy, regenerated = root / "legacy.gmt", root / "regenerated.gmt"
+            legacy.write_text("set_a\tna\tA\tB\tC\n", encoding="utf-8")
+            regenerated.write_text("set_a\tna\tA\tB\tD\n", encoding="utf-8")
+            passed, rows = compare_gmt(
+                legacy, regenerated, "scientific_comparability",
+                metrics={"min_named_set_recall": 1.0, "min_gene_set_jaccard_median": 0.5, "min_gene_set_jaccard_min": 0.5},
+            )
+            self.assertTrue(passed)
+            self.assertEqual(rows[0]["status"], "compared")
+            self.assertNotEqual(rows[0]["jaccard"], 1.0)
+
     def test_library_comparison_writes_reports(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
