@@ -139,16 +139,45 @@ each legacy output that must be compared, for example in `submission.yaml`:
 adoption:
   reference_outputs:
     - legacy: /read-only/legacy/genesets.gmt
-      regenerated: work/full/genesets.gmt
+      regenerated: outputs/full/genesets.gmt
       comparison: set_equivalent
       scope: full
 ```
 
-The regenerated path is relative to the submitted library. Without a declared
-full mapping, verification reports that smoke passed and that full equivalence
-was not run; submission remains blocked until the required full comparison is
-completed. An explicit `scope: smoke` mapping is allowed for a corresponding
-smoke reference, but is never selected automatically for a full legacy GMT.
+The regenerated path is a safe, repository-relative *logical* output path.
+New isolated adoption workspaces resolve it beneath `$WORKSPACE/work`, not
+beneath the wrapper checkout: their launchers receive
+`SUBMISSION_WORK_DIR=$WORKSPACE/work`. For example, a declared
+`outputs/full/genesets.gmt` is written to
+`$WORKSPACE/work/outputs/full/genesets.gmt`. Without a declared full mapping,
+verification reports that smoke passed and that full equivalence was not run;
+submission remains blocked until the required full comparison is completed. An
+explicit `scope: smoke` mapping is allowed for a corresponding smoke reference,
+but is never selected automatically for a full legacy GMT.
+
+Run a full reproduction with the same isolated artifact location:
+
+```bash
+cd "$WORKSPACE/geneset-extractor-dev/MY_LIBRARY"
+SUBMISSION_WORK_DIR="$WORKSPACE/work" bash reproduction/reproduce.sh full
+```
+
+Do not write downloaded inputs, generated GMTs, provenance sidecars, or run
+receipts into a submitted library directory. The workspace `work/` and
+`reports/` directories are untracked execution locations.
+
+To preserve one run while validating another, choose a distinct artifact
+directory and pass the same directory to verification:
+
+```bash
+cd "$WORKSPACE/geneset-extractor-dev/MY_LIBRARY"
+SUBMISSION_WORK_DIR="$WORKSPACE/work-rerun-20260902" bash reproduction/reproduce.sh full
+cd "$WORKSPACE"
+./verify-adoption --work-dir work-rerun-20260902
+```
+
+`--work-dir` must remain beneath the workspace and outside the DIG, wrapper,
+legacy, and reports directories. It never clears an existing directory.
 
 ## Independent legacy implementations and close reimplementations
 

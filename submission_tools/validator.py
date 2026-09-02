@@ -315,6 +315,12 @@ def validate_submission(submission: Path) -> ValidationResult:
         _wrapper_scan(root, paths["wrapper_directory"], data, result)
     if paths["reproduction_entry_point"]:
         _script_checks(root, paths["reproduction_entry_point"], result)
+        output_environment = reproduction.get("output_directory_environment")
+        if output_environment is not None:
+            if output_environment != "SUBMISSION_WORK_DIR":
+                result.add("error", "runtime_output_directory", "reproduction.output_directory_environment must be SUBMISSION_WORK_DIR when declared")
+            elif "SUBMISSION_WORK_DIR" not in paths["reproduction_entry_point"].read_text(encoding="utf-8", errors="ignore"):
+                result.add("error", "runtime_output_directory", "reproduction entry point declares SUBMISSION_WORK_DIR but does not reference it")
     adoption = data.get("adoption", {}) if isinstance(data.get("adoption"), dict) else {}
     policy = adoption.get("comparison_policy", {}) if isinstance(adoption.get("comparison_policy", {}), dict) else {}
     if policy.get("mode") == "scientific_reimplementation":

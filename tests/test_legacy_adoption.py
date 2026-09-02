@@ -235,8 +235,15 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertTrue(os.access(workspace / "submit-adoption", os.X_OK))
             self.assertIn("./verify-adoption", (workspace / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8"))
             self.assertIn("Baseline branch: `main`", (workspace / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8"))
+            self.assertIn("SUBMISSION_WORK_DIR", (workspace / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8"))
             self.assertEqual((legacy / "old.gmt").read_text(encoding="utf-8"), "set_a\tna\tA\tB\n")
             self.assertTrue((workspace / "geneset-extractor-dev/Adopted/submission.yaml").is_file())
+            payload = json.loads((workspace / "geneset-extractor-dev/Adopted/submission.yaml").read_text(encoding="utf-8"))
+            self.assertEqual(payload["reproduction"]["output_directory_environment"], "SUBMISSION_WORK_DIR")
+            self.assertEqual(adoption_workspace._runtime_output_root(workspace, workspace / "geneset-extractor-dev/Adopted", payload), workspace / "work")
+            self.assertEqual(adoption_workspace._resolve_work_directory(workspace, Path("work-rerun")), workspace / "work-rerun")
+            with self.assertRaisesRegex(ValueError, "outside its repository"):
+                adoption_workspace._resolve_work_directory(workspace, Path("geneset-extractor-dev/unsafe"))
 
     def test_workspace_prompt_uses_selected_pattern_and_workspace_helper(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -391,13 +398,14 @@ class LegacyAdoptionTest(unittest.TestCase):
             payload["submission_status"] = "ready"
             payload["dig"]["commit"] = subprocess.run(["git", "rev-parse", "HEAD"], cwd=workspace / "dig-gene-set-extractors", check=True, capture_output=True, text=True).stdout.strip()
             payload["dig"]["identifiers"] = ["rna_deg"]
-            (library / "work").mkdir()
-            (library / "work/full.gmt").write_text((legacy / "old.gmt").read_text(encoding="utf-8"), encoding="utf-8")
+            artifact_root = workspace / "work-rerun" / "outputs"
+            artifact_root.mkdir(parents=True)
+            (artifact_root / "full.gmt").write_text((legacy / "old.gmt").read_text(encoding="utf-8"), encoding="utf-8")
             (library / "expected/provenance_output_manifest.tsv").write_text(
                 "output_id\trelative_path\trole\trequired\tmodel_id\tpartition_id\n"
-                "full\twork/full.gmt\tgmt\ttrue\tM1\texample\n", encoding="utf-8"
+                "full\toutputs/full.gmt\tgmt\ttrue\tM1\texample\n", encoding="utf-8"
             )
-            (library / "work/geneset.provenance.json").write_text(json.dumps({
+            (artifact_root / "geneset.provenance.json").write_text(json.dumps({
                 "focus_node_id": "geneset:result",
                 "nodes": [
                     {"id": "file:input", "kind": "file", "role": "source_input", "label": "source", "access": {"canonical_uri": "urn:test:source"}},
@@ -411,14 +419,15 @@ class LegacyAdoptionTest(unittest.TestCase):
                     {"source": "geneset:result", "target": "file:output"},
                 ],
             }), encoding="utf-8")
-            payload["adoption"]["reference_outputs"] = [{"legacy": str(legacy / "old.gmt"), "regenerated": "work/full.gmt", "comparison": "set_equivalent", "scope": "full"}]
+            payload["adoption"]["reference_outputs"] = [{"legacy": str(legacy / "old.gmt"), "regenerated": "outputs/full.gmt", "comparison": "set_equivalent", "scope": "full"}]
             payload["provenance"] = {"contracts": [{"scope": "full", "output_manifest": "expected/provenance_output_manifest.tsv", "provenance_filename": "geneset.provenance.json", "required_input_ids": []}]}
             (library / "submission.yaml").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-            completed = self._workspace_command(workspace, "verify-adoption")
+            completed = self._workspace_command(workspace, "verify-adoption", "--work-dir", "work-rerun")
             self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
             self.assertIn("full legacy comparison passed", completed.stdout)
             manifest = json.loads((workspace / ".adoption-workspace.yaml").read_text(encoding="utf-8"))
             self.assertTrue(manifest["verification"]["full_comparison_completed"])
+            self.assertEqual(manifest["verification"]["work_directory"], "work-rerun")
 
     def test_full_legacy_reference_is_not_matched_to_smoke_or_ambiguous_gmts(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
