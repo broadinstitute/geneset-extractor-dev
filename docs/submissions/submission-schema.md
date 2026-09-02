@@ -30,3 +30,10 @@ request URL.
 The config paths must point inside the library to headered model, partition,
 and description TSVs. Model IDs must be unique; description and expected-output
 records cannot reference unknown model IDs.
+
+Isolated adoption workspaces may add
+`reproduction.output_directory_environment: SUBMISSION_WORK_DIR`. When
+declared, the reproduction entry point must reference that environment variable
+and write generated artifacts relative to its value. The workspace-local
+`verify-adoption --work-dir` option supplies the selected value; the manifest
+continues to contain only safe logical relative paths.

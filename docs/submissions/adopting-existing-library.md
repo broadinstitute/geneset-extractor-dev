@@ -6,6 +6,11 @@ fresh, isolated workspace containing contributor-fork clones of both
 repositories; it never changes the original legacy directory or unrelated
 local checkouts.
 
+For the complete maintainer procedure—including `exact_reproduction` versus
+`scientific_reimplementation`, preserving an earlier adoption branch, and
+workspace-local runtime artifacts—read
+[adopting-trusted-existing-submission.md](adopting-trusted-existing-submission.md).
+
 ```bash
 python3 -m submission_tools adopt \
   --existing /path/to/old_library \
@@ -155,16 +160,11 @@ submission remains blocked until the required full comparison is completed. An
 explicit `scope: smoke` mapping is allowed for a corresponding smoke reference,
 but is never selected automatically for a full legacy GMT.
 
-Run a full reproduction with the same isolated artifact location:
-
-```bash
-cd "$WORKSPACE/geneset-extractor-dev/MY_LIBRARY"
-SUBMISSION_WORK_DIR="$WORKSPACE/work" bash reproduction/reproduce.sh full
-```
-
-Do not write downloaded inputs, generated GMTs, provenance sidecars, or run
-receipts into a submitted library directory. The workspace `work/` and
-`reports/` directories are untracked execution locations.
+The implementation agent must run full reproduction with the same isolated
+artifact location before it reports completion. Do not write downloaded inputs,
+generated GMTs, provenance sidecars, or run receipts into a submitted library
+directory. The workspace `work/` and `reports/` directories are untracked
+execution locations.
 
 To preserve one run while validating another, choose a distinct artifact
 directory and pass the same directory to verification:
@@ -202,7 +202,7 @@ After migration, run ordinary validation and compare outputs:
 ```bash
 python3 -m submission_tools adopt --existing ../old_library --library-id MY_LIBRARY --output MY_LIBRARY
 python3 -m submission_tools validate --submission MY_LIBRARY/submission.yaml --dig-repo ../dig-gene-set-extractors --smoke --receipt-out MY_LIBRARY/run_receipt.json
-python3 -m submission_tools verify-adoption --workspace ~/gene-set-adoptions/MY_LIBRARY
+python3 -m submission_tools verify-adoption --workspace ~/gene-set-adoptions/MY_LIBRARY --work-dir work-rerun-20260902
 python3 -m submission_tools submit-adoption --workspace ~/gene-set-adoptions/MY_LIBRARY --yes
 python3 -m submission_tools compare-legacy --library MY_LIBRARY
 python3 -m submission_tools adoption-status --library MY_LIBRARY
