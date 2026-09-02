@@ -62,11 +62,12 @@ def main(argv: list[str] | None = None) -> int:
     comparison.add_argument("--library", help="Adopted library directory; discovers the first legacy/new GMT pair.")
     comparison.add_argument("--legacy")
     comparison.add_argument("--new")
-    comparison.add_argument("--mode", default="set_equivalent", choices=["exact", "set_equivalent", "report_only"])
+    comparison.add_argument("--mode", default="set_equivalent", choices=["exact", "set_equivalent", "scientific_comparability", "report_only"])
     status = commands.add_parser("adoption-status", help="Show adoption progress without bypassing normal validation.")
     status.add_argument("--library", required=True)
     verify = commands.add_parser("verify-adoption", help="Verify an isolated adoption workspace.")
     verify.add_argument("--workspace", required=True)
+    verify.add_argument("--work-dir", help="Workspace-relative or absolute generated-artifact directory; defaults to work.")
     submit = commands.add_parser("submit-adoption", help="Commit and push a verified isolated adoption workspace.")
     submit.add_argument("--workspace", required=True)
     submit.add_argument("--yes", action="store_true", help="Confirm the one local commit/push operation.")
@@ -190,7 +191,7 @@ def main(argv: list[str] | None = None) -> int:
                   f"  repository: {root / manifest['repositories']['wrapper']['path']}\n"
                   f"  commit: {commit}\n"
                   f"  module: {active}")
-            ok, messages = verify_workspace(Path(args.workspace))
+            ok, messages = verify_workspace(Path(args.workspace), work_dir=Path(args.work_dir) if args.work_dir else None)
         except (OSError, ValueError) as exc:
             print(f"ERROR: {exc}")
             return 2

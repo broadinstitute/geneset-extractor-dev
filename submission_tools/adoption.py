@@ -15,6 +15,7 @@ DATA_SUFFIXES = {".tsv", ".csv", ".gct", ".h5", ".h5ad", ".rds", ".parquet", ".R
 ENVIRONMENT_NAMES = {"environment.yml", "environment.yaml", "requirements.txt", "requirements-dev.txt", "pyproject.toml", "poetry.lock", "uv.lock", "renv.lock", "Dockerfile", "Makefile", "Snakefile", "nextflow.config"}
 NONPORTABLE = re.compile(r"(?:/home/|/Users/|/humgen/|/broad/|\bscratch/|\b(?:token|password|credential)s?\b)", re.I)
 MANUAL = re.compile(r"\b(?:manually|open in excel|edit this file|copy this file|download by hand|rename manually|filter rows|paste)\b", re.I)
+PUBLIC_URL = re.compile(r"https?://[^\s'\"<>]+")
 
 
 def gitignore_allowlist(library_id: str) -> str:
@@ -43,6 +44,10 @@ def gitignore_allowlist(library_id: str) -> str:
 !{library_id}/src/**/*.md
 !{library_id}/expected/
 !{library_id}/expected/*.tsv
+!{library_id}/adoption/
+!{library_id}/adoption/*.md
+!{library_id}/adoption/*.tsv
+!{library_id}/adoption/*.yaml
 !{library_id}/tests/
 !{library_id}/tests/fixtures/
 !{library_id}/tests/fixtures/**/
@@ -144,6 +149,36 @@ def inventory_legacy(root: Path) -> dict[str, Any]:
     return inventory
 
 
+def implementation_inventory(root: Path, inventory: dict[str, Any]) -> dict[str, Any]:
+    """Report legacy implementation clues without copying legacy code."""
+    entries: list[dict[str, Any]] = []
+    for item in inventory.get("code_files", []):
+        if not isinstance(item, dict) or not item.get("path"):
+            continue
+        path = root / str(item["path"])
+        text = _text_prefix(path)
+        entries.append({
+            "path": str(item["path"]), "language": item.get("language"),
+            "public_urls": sorted(set(PUBLIC_URL.findall(text))),
+            "input_filename_literals": sorted(set(re.findall(r"['\"]([^'\"]+\.(?:tsv|csv|gct|txt|gz|h5ad?|rds))['\"]", text, re.I))),
+            "gmt_path_literals": sorted(set(re.findall(r"['\"]([^'\"]+\.gmt)['\"]", text, re.I))),
+            "likely_operations": sorted({name for name, pattern in {
+                "normalization": r"normaliz", "differential_analysis": r"differential|limma|edger|deseq|ttest",
+                "gene_mapping": r"ortholog|gene.?map|ensembl", "ranking": r"rank|sort_values",
+                "gmt_writing": r"\.gmt|write_gmt|GMTWriter",
+            }.items() if re.search(pattern, text, re.I)}),
+        })
+    return {"schema_version": "1.0.0", "legacy_root": str(root.resolve()), "scripts": entries}
+
+
+def migration_map(inventory: dict[str, Any]) -> dict[str, Any]:
+    return {"schema_version": "1.0.0", "legacy_entry_points": [{"path": item["path"], "dig_module": "TODO", "dig_identifier": "TODO", "focused_test": "TODO"} for item in inventory.get("code_files", []) if isinstance(item, dict)], "wrapper_orchestration": {"model_config": "config/model_list.tsv", "dispatcher": "TODO", "launcher": "run/submit_models.sh"}, "behavior_preservation": {"source_inputs": "TODO", "filters": "TODO", "gene_mapping": "TODO", "ranking": "TODO", "gmt_conventions": "TODO", "known_deviations": []}}
+
+
+def source_assessment_template() -> str:
+    return "# Source assessment\n\nRecord every legacy URL, filename, accession, release clue, selected public release, retrieval date, checksum where feasible, and the expected scientific effect of any input-version difference. Do not claim exact reproduction when the historical release is unavailable.\n"
+
+
 def adoption_report(inventory: dict[str, Any]) -> str:
     lines = ["# Legacy adoption report", "", "## Inventory", "", f"- Code files: {len(inventory['code_files'])}", f"- Data files: {len(inventory['data_files'])}", f"- Gene-set outputs: {len(inventory['gene_set_outputs'])}", f"- Environment files: {len(inventory['environment_files'])}"]
     for heading, key, severity in (("Reproducibility risks", "manual_step_findings", "warning"), ("Portability/security risks", "nonportable_findings", "warning"), ("Possible unexplained intermediates", "possible_intermediates", "blocker")):
@@ -180,13 +215,16 @@ def adopt(existing: Path, output: Path, library_id: str, display_name: str | Non
     payload_path = output / "submission.yaml"
     payload = json.loads(payload_path.read_text(encoding="utf-8"))
     payload["submission_origin"] = {"type": "adopted", "legacy_inventory": "adoption/inventory.json"}
-    payload["adoption"] = {"reference_outputs": [{"path": item["path"], "comparison": "set_equivalent"} for item in inventory["gene_set_outputs"]]}
+    payload["adoption"] = {"comparison_policy": {"mode": "exact_reproduction"}, "reference_outputs": [{"path": item["path"], "comparison": "set_equivalent"} for item in inventory["gene_set_outputs"]]}
     payload_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     adoption_dir = output / "adoption"
     adoption_dir.mkdir()
     (adoption_dir / "inventory.json").write_text(json.dumps(inventory, indent=2) + "\n", encoding="utf-8")
     dependency_map = {"schema_version": "1.0.0", "intermediates": [{"path": item["path"], "producer": "TODO"} for item in inventory["possible_intermediates"]]}
     (adoption_dir / "dependency_map.json").write_text(json.dumps(dependency_map, indent=2) + "\n", encoding="utf-8")
+    (adoption_dir / "implementation_inventory.json").write_text(json.dumps(implementation_inventory(existing, inventory), indent=2) + "\n", encoding="utf-8")
+    (adoption_dir / "migration_map.yaml").write_text(json.dumps(migration_map(inventory), indent=2) + "\n", encoding="utf-8")
+    (adoption_dir / "source_assessment.md").write_text(source_assessment_template(), encoding="utf-8")
     (adoption_dir / "adoption_report.md").write_text(adoption_report(inventory), encoding="utf-8")
     (adoption_dir / "gitignore_allowlist.md").write_text(gitignore_allowlist(library_id), encoding="utf-8")
     (adoption_dir / "AI_ADOPTION_PROMPT.md").write_text(adoption_prompt(existing.resolve(), output.resolve(), inventory, dig_repo, pattern), encoding="utf-8")

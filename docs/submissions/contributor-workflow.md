@@ -15,7 +15,9 @@ For source files held locally, create an isolated two-repository workspace with
 creates `submit/<library_id>` branches, and supplies workspace-local
 `./verify-library` and `./submit-library` helpers. This is the preferred path
 for a new library; use [legacy adoption](adopting-existing-library.md) only
-when final gene sets were already independently generated.
+when final gene sets were already independently generated. Maintainers can use
+the [trusted-adoption tutorial](adopting-trusted-existing-submission.md) for a
+complete isolated adoption procedure.
 
 Then follow the paired-PR sequence:
 

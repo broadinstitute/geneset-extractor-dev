@@ -9,6 +9,7 @@ private helpers or depend on undocumented precomputed intermediates.
 ```text
 input_id  source_uri_or_access_instructions  version_release  checksum
 access_method  smoke_full  workflow_stage  redistribution_status
+committed_fixture  fixture_path
 ```
 
 Add `committed_fixture` when a small fixture is versioned with the submission.
@@ -20,6 +21,14 @@ the source and access instructions still must be explicit.
 required flag, model ID, and partition ID. It is a contract for review, not a
 generated-output requirement: large biological inputs and generated outputs
 must not be committed merely to satisfy validation.
+
+For an isolated adoption workspace that declares
+`reproduction.output_directory_environment: SUBMISSION_WORK_DIR`, each output
+path is logical: at runtime it is resolved beneath the selected external work
+directory. `./verify-adoption --work-dir DIR` supplies that directory for smoke
+reproduction and validates expected outputs, provenance sidecars, and declared
+comparison mappings there. `DIR` must be inside the adoption workspace and
+outside its repository, legacy, and reports directories.
 
 When one manifest contains outputs with different provenance-sidecar
 conventions, scope a provenance contract to the roles that actually have its

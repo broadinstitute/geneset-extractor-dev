@@ -186,7 +186,7 @@ def _graph_issues(graph: dict[str, Any], artifact: Path, required_inputs: list[s
     return issues
 
 
-def validate_provenance_complete(library_root: Path, submission: dict[str, Any], *, scope: str) -> ValidationResult:
+def validate_provenance_complete(library_root: Path, submission: dict[str, Any], *, scope: str, artifact_root: Path | None = None) -> ValidationResult:
     """Validate declared provenance sidecars for one smoke/full scope.
 
     A scope with no contract is not an error: draft scaffolds may not have
@@ -194,6 +194,7 @@ def validate_provenance_complete(library_root: Path, submission: dict[str, Any],
     declare a full contract.
     """
     result = ValidationResult()
+    runtime_root = artifact_root or library_root
     contracts = _contracts(submission, scope)
     if not contracts:
         result.add("warning", "provenance_not_declared", f"no {scope} provenance contract is declared")
@@ -217,24 +218,25 @@ def validate_provenance_complete(library_root: Path, submission: dict[str, Any],
             if not _safe_path(relative):
                 result.add("error", "provenance_contract", f"contract {index} has unsafe output path: {relative!r}")
                 continue
-            artifact = library_root / relative
+            artifact = runtime_root / relative
             sidecar = artifact.parent / filename
+            display_sidecar = str(sidecar.relative_to(runtime_root)) if sidecar.is_relative_to(runtime_root) else str(sidecar)
             if not sidecar.is_file():
-                _add(result, submission, "provenance_missing", f"{scope} provenance sidecar is missing for {relative}: {sidecar.relative_to(library_root)}")
+                _add(result, submission, "provenance_missing", f"{scope} provenance sidecar is missing for {relative}: {display_sidecar}")
                 continue
             try:
                 payload = json.loads(sidecar.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
-                result.add("error", "provenance_json", f"{sidecar.relative_to(library_root)} is not valid JSON: {exc}")
+                result.add("error", "provenance_json", f"{display_sidecar} is not valid JSON: {exc}")
                 continue
             graphs, error = _graphs(payload)
             if error:
-                result.add("error", "provenance_json", f"{sidecar.relative_to(library_root)} {error}")
+                result.add("error", "provenance_json", f"{display_sidecar} {error}")
                 continue
             for graph_id, graph in graphs:
                 label = f" graph {graph_id}" if graph_id else ""
                 for code, message, structural in _graph_issues(graph, artifact, required_inputs):
-                    _add(result, submission, code, f"{sidecar.relative_to(library_root)}{label}: {message}", structural=structural)
+                    _add(result, submission, code, f"{display_sidecar}{label}: {message}", structural=structural)
         if artifact_roles and not matched_rows:
             result.add("error", "provenance_contract", f"contract {index} artifact_roles did not match any required output: {sorted(artifact_roles)}")
     return result

@@ -1,4 +1,4 @@
-# New-library submissions
+# Gene-set library submissions
 
 **All substantive data processing and gene-set generation logic belongs in `dig-gene-set-extractors`. `geneset-extractor-dev` may configure, dispatch, execute, refresh, and publish that logic, but must not independently implement it.**
 
@@ -38,7 +38,9 @@ the proposal issue and paired-PR sequence.
 
 If gene sets already exist outside this framework, follow
 [adopting-existing-library.md](adopting-existing-library.md) to inventory and
-migrate them into the same contract.
+migrate them into the same contract. Maintainers adopting a trusted existing
+submission should use the complete
+[trusted-adoption tutorial](adopting-trusted-existing-submission.md).
 
 For a brand-new source library, use the isolated
 [creating-new-library workflow](creating-new-library.md). It creates a fresh

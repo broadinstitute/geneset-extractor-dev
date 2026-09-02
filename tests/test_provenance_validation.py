@@ -59,6 +59,18 @@ class ProvenanceValidationTest(unittest.TestCase):
         (artifact.parent / "geneset.provenance.json").write_text(json.dumps(graph(artifact.name)), encoding="utf-8")
         self.assertTrue(validate_provenance_complete(root, payload, scope="full").ok)
 
+    def test_external_workspace_artifact_root_passes(self) -> None:
+        root, payload = self.library()
+        workspace_work = root.parent / "workspace-work"
+        artifact = workspace_work / "work/model/genesets.gmt"
+        artifact.parent.mkdir(parents=True)
+        artifact.write_text("set\tna\tA\n", encoding="utf-8")
+        (artifact.parent / "geneset.provenance.json").write_text(json.dumps(graph(artifact.name)), encoding="utf-8")
+        self.assertTrue(
+            validate_provenance_complete(root, payload, scope="full", artifact_root=workspace_work).ok
+        )
+        self.assertFalse((root / "work/model/genesets.gmt").exists())
+
     def test_existing_dig_graph_map_sidecar_passes(self) -> None:
         root, payload = self.library(ready=True)
         artifact = root / "work/model/genesets.gmt"

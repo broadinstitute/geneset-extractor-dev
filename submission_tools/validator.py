@@ -136,6 +136,35 @@ def _validate_schema(data: dict[str, Any], result: ValidationResult) -> None:
         value = str(paired.get(key, ""))
         if value not in {"TBD", "N/A", ""} and not re.match(r"https://github\.com/[^/]+/[^/]+/pull/\d+$", value):
             result.add("error", "paired_pr", f"paired_pull_requests.{key} must be TBD, N/A, or a GitHub PR URL")
+    adoption = data.get("adoption", {})
+    if adoption and not isinstance(adoption, dict):
+        result.add("error", "adoption", "adoption must be a mapping")
+    elif isinstance(adoption, dict):
+        policy = adoption.get("comparison_policy", {"mode": "exact_reproduction"})
+        if not isinstance(policy, dict) or policy.get("mode", "exact_reproduction") not in {"exact_reproduction", "scientific_reimplementation"}:
+            result.add("error", "comparison_policy", "adoption.comparison_policy.mode must be exact_reproduction or scientific_reimplementation")
+        elif policy.get("mode") == "scientific_reimplementation":
+            assessment = policy.get("source_version_assessment")
+            review = policy.get("required_review")
+            if not isinstance(assessment, dict) or not policy.get("reason") or not policy.get("source_assessment_path"):
+                result.add("error", "comparison_policy", "scientific_reimplementation requires reason, source_assessment_path, and source_version_assessment")
+            if not isinstance(review, dict) or review.get("status") not in {"pending", "approved"}:
+                result.add("error", "comparison_policy", "scientific_reimplementation requires required_review.status pending or approved")
+            if data.get("submission_status") == "ready" and (not isinstance(review, dict) or review.get("status") != "approved" or not re.match(r"https://github\.com/[^/]+/[^/]+/(?:pull|issues)/\d+$", str(review.get("approval_reference", "")))):
+                result.add("error", "comparison_review", "ready scientific_reimplementation requires an approved GitHub PR or issue reference")
+        for index, item in enumerate(adoption.get("reference_outputs", [])):
+            if not isinstance(item, dict):
+                result.add("error", "comparison_policy", f"adoption.reference_outputs[{index}] must be a mapping")
+                continue
+            comparison = item.get("comparison", "set_equivalent")
+            if comparison not in {"exact", "set_equivalent", "scientific_comparability"}:
+                result.add("error", "comparison_policy", f"adoption.reference_outputs[{index}].comparison is unsupported")
+            if comparison == "scientific_comparability":
+                metrics = item.get("metrics")
+                if not isinstance(metrics, dict) or not all(isinstance(metrics.get(key), (int, float)) and 0 <= float(metrics[key]) <= 1 for key in ("min_named_set_recall", "min_gene_set_jaccard_median", "min_gene_set_jaccard_min")):
+                    result.add("error", "comparison_policy", f"adoption.reference_outputs[{index}] scientific_comparability requires 0..1 metrics")
+                if not _safe_relative(item.get("mapping_file")):
+                    result.add("error", "comparison_policy", f"adoption.reference_outputs[{index}].mapping_file must be a safe relative path")
 
 
 def _path(root: Path, value: object, label: str, result: ValidationResult) -> Path | None:
@@ -286,5 +315,29 @@ def validate_submission(submission: Path) -> ValidationResult:
         _wrapper_scan(root, paths["wrapper_directory"], data, result)
     if paths["reproduction_entry_point"]:
         _script_checks(root, paths["reproduction_entry_point"], result)
+        output_environment = reproduction.get("output_directory_environment")
+        if output_environment is not None:
+            if output_environment != "SUBMISSION_WORK_DIR":
+                result.add("error", "runtime_output_directory", "reproduction.output_directory_environment must be SUBMISSION_WORK_DIR when declared")
+            elif "SUBMISSION_WORK_DIR" not in paths["reproduction_entry_point"].read_text(encoding="utf-8", errors="ignore"):
+                result.add("error", "runtime_output_directory", "reproduction entry point declares SUBMISSION_WORK_DIR but does not reference it")
+    adoption = data.get("adoption", {}) if isinstance(data.get("adoption"), dict) else {}
+    policy = adoption.get("comparison_policy", {}) if isinstance(adoption.get("comparison_policy", {}), dict) else {}
+    if policy.get("mode") == "scientific_reimplementation":
+        _path(root, policy.get("source_assessment_path"), "adoption.source_assessment_path", result)
+        full_inputs = [row for row in input_rows if "full" in {item.strip() for item in row.get("smoke_full", "").split(",")}]
+        for row in full_inputs:
+            confidence = row.get("source_version_confidence", "").strip()
+            relationship = row.get("legacy_input_relationship", "").strip()
+            if confidence not in {"exact_historical", "provider_release", "best_available_public_release"}:
+                result.add("error", "source_version_confidence", f"full input {row.get('input_id')} requires source_version_confidence exact_historical, provider_release, or best_available_public_release")
+            if relationship not in {"identical", "documented_successor", "inferred_equivalent"}:
+                result.add("error", "legacy_input_relationship", f"full input {row.get('input_id')} requires a documented legacy_input_relationship")
+        scientific_mappings = [item for item in adoption.get("reference_outputs", []) if isinstance(item, dict) and item.get("comparison") == "scientific_comparability" and item.get("scope", "full") == "full"]
+        if not scientific_mappings:
+            result.add("error", "comparison_policy", "scientific_reimplementation requires at least one full scientific_comparability mapping")
+        for item in adoption.get("reference_outputs", []):
+            if isinstance(item, dict) and item.get("comparison") == "scientific_comparability":
+                _path(root, item.get("mapping_file"), "adoption.reference_outputs.mapping_file", result)
     _fixture_checks(root, input_rows, result)
     return result

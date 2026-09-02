@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .adoption import adoption_report, gitignore_allowlist, inventory_legacy
+from .adoption import adoption_report, gitignore_allowlist, implementation_inventory, inventory_legacy, migration_map, source_assessment_template
 from .adoption_prompt import architecture_guidance
 from .coordinated import coordinated_validate
 from .legacy_compare import compare_gmt
@@ -32,10 +32,12 @@ CANONICAL_DIG = "https://github.com/flannick/dig-gene-set-extractors.git"
 CANONICAL_WRAPPER = "https://github.com/broadinstitute/geneset-extractor-dev.git"
 DEFAULT_BASE_BRANCH = "main"
 WORKSPACE_MANIFEST = ".adoption-workspace.yaml"
+RUNTIME_OUTPUT_ENV = "SUBMISSION_WORK_DIR"
 
 
-def _run(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, cwd=cwd, text=True, capture_output=True, check=False)
+def _run(args: list[str], cwd: Path | None = None, *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    execution_env = None if env is None else {**os.environ, **env}
+    return subprocess.run(args, cwd=cwd, text=True, capture_output=True, check=False, env=execution_env)
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -152,6 +154,9 @@ def create_workspace(
         adoption_dir = workspace / "adoption"
         _write_json(adoption_dir / "inventory.json", inventory)
         _write_json(adoption_dir / "dependency_map.json", {"schema_version": "1.0.0", "intermediates": [{"path": item["path"], "producer": "TODO"} for item in inventory["possible_intermediates"]]})
+        _write_json(adoption_dir / "implementation_inventory.json", implementation_inventory(legacy, inventory))
+        _write_json(adoption_dir / "migration_map.yaml", migration_map(inventory))
+        (adoption_dir / "source_assessment.md").write_text(source_assessment_template(), encoding="utf-8")
         (adoption_dir / "adoption_report.md").write_text(adoption_report(inventory), encoding="utf-8")
         (adoption_dir / "gitignore_allowlist.md").write_text(gitignore_allowlist(library_id), encoding="utf-8")
         reference = _legacy_reference(legacy, inventory)
@@ -161,7 +166,8 @@ def create_workspace(
         submission = library / "submission.yaml"
         payload = load(submission)
         payload["submission_origin"] = {"type": "adopted", "legacy_inventory": "../../adoption/inventory.json"}
-        payload["adoption"] = {"reference_outputs": reference["reference_outputs"]}
+        payload["adoption"] = {"comparison_policy": {"mode": "exact_reproduction"}, "reference_outputs": reference["reference_outputs"]}
+        payload["reproduction"]["output_directory_environment"] = RUNTIME_OUTPUT_ENV
         _write_json(submission, payload)
         manifest = {
             "schema_version": "1.0.0", "library_id": library_id,
@@ -173,6 +179,7 @@ def create_workspace(
             },
             "tooling": {"wrapper_commit": _git(workspace / "geneset-extractor-dev", "rev-parse", "HEAD"), "submission_tools_path": "geneset-extractor-dev/submission_tools"},
             "submission": {"wrapper_library_path": f"geneset-extractor-dev/{library_id}", "pattern": pattern},
+            "runtime": {"work_directory": "work", "output_directory_environment": RUNTIME_OUTPUT_ENV},
             "verification": {"last_result": None, "last_receipt": None, "workspace_digest": None},
         }
         _write_json(workspace / WORKSPACE_MANIFEST, manifest)
@@ -210,6 +217,19 @@ Before submission, review and apply `adoption/gitignore_allowlist.md` to the
 wrapper root `.gitignore`. It deliberately permits only submission
 code/configuration and small fixtures. Do not use `git add -f`; keep `inputs/`,
 `outputs/`, `work/`, and `run_receipt.json` ignored.
+
+Runtime artifacts are deliberately outside both repository checkouts. This
+workspace declares `{RUNTIME_OUTPUT_ENV}={workspace / 'work'}`. Make every
+reproduction launcher honor that environment variable and write each generated
+output or sidecar at `${{{RUNTIME_OUTPUT_ENV}}}/<relative_path from the output
+manifest>`. Do not write generated outputs beneath
+`geneset-extractor-dev/{manifest['library_id']}`. For an explicit full run,
+use the same environment variable; `./verify-adoption` supplies it
+automatically for smoke validation.
+To validate a preserved alternate run, use the same workspace-local path in
+both places, for example set `SUBMISSION_WORK_DIR=<workspace>/work-rerun` for
+full reproduction and then run `./verify-adoption --work-dir work-rerun` from
+the workspace root.
 
 From this workspace root, run `./verify-adoption`; it deliberately imports `submission_tools` from `./geneset-extractor-dev`, not from another checkout or an installed package.
 
@@ -325,13 +345,13 @@ def _run_wrapper_submission_tests(wrapper: Path) -> tuple[bool, str] | None:
     return completed.returncode == 0, completed.stderr.strip() or completed.stdout.strip()
 
 
-def _reference_mappings(root: Path, library: Path, manifest: dict[str, Any], payload: dict[str, Any]) -> list[dict[str, str]]:
+def _reference_mappings(root: Path, library: Path, manifest: dict[str, Any], payload: dict[str, Any]) -> list[dict[str, Any]]:
     """Read explicit legacy/regenerated mappings without guessing GMT files."""
     raw = payload.get("adoption", {}).get("reference_outputs", []) if isinstance(payload.get("adoption"), dict) else []
     if not raw:
         reference_path = root / str(manifest["legacy"]["reference"])
         raw = json.loads(reference_path.read_text(encoding="utf-8")).get("reference_outputs", [])
-    mappings: list[dict[str, str]] = []
+    mappings: list[dict[str, Any]] = []
     for item in raw:
         if not isinstance(item, dict):
             continue
@@ -339,11 +359,43 @@ def _reference_mappings(root: Path, library: Path, manifest: dict[str, Any], pay
         regenerated = str(item.get("regenerated") or "")
         scope = str(item.get("scope") or "full")
         if legacy:
-            mappings.append({"legacy": legacy, "regenerated": regenerated, "comparison": str(item.get("comparison") or "set_equivalent"), "scope": scope})
+            mappings.append({"legacy": legacy, "regenerated": regenerated, "comparison": str(item.get("comparison") or "set_equivalent"), "scope": scope, "metrics": item.get("metrics") if isinstance(item.get("metrics"), dict) else {}, "mapping_file": str(item.get("mapping_file") or "")})
     return mappings
 
 
-def _compare_references(root: Path, library: Path, manifest: dict[str, Any], payload: dict[str, Any]) -> tuple[list[str], bool]:
+def _resolve_work_directory(workspace: Path, value: Path | None) -> Path:
+    """Resolve an explicit artifact directory without permitting repo paths."""
+    candidate = workspace / "work" if value is None else value.expanduser()
+    if not candidate.is_absolute():
+        candidate = workspace / candidate
+    candidate = candidate.resolve()
+    protected = (workspace / "dig-gene-set-extractors", workspace / "geneset-extractor-dev", workspace / "legacy", workspace / "reports")
+    if candidate == workspace or workspace not in candidate.parents or any(candidate == path or path in candidate.parents for path in protected):
+        raise ValueError("--work-dir must be a directory beneath the adoption workspace and outside its repository, legacy, and reports directories")
+    return candidate
+
+
+def _runtime_output_root(workspace: Path, library: Path, payload: dict[str, Any], *, work_dir: Path | None = None) -> Path:
+    """Return the artifact root declared for this isolated workspace.
+
+    New adoption workspaces declare ``SUBMISSION_WORK_DIR`` so generated
+    outputs never pollute the wrapper checkout.  Older workspaces have no such
+    declaration and deliberately retain their historical in-library layout.
+    """
+    reproduction = payload.get("reproduction", {})
+    environment = reproduction.get("output_directory_environment") if isinstance(reproduction, dict) else None
+    return _resolve_work_directory(workspace, work_dir) if environment == RUNTIME_OUTPUT_ENV else library
+
+
+def _runtime_environment(workspace: Path, library: Path, payload: dict[str, Any], *, work_dir: Path | None = None) -> dict[str, str] | None:
+    output_root = _runtime_output_root(workspace, library, payload, work_dir=work_dir)
+    if output_root == library:
+        return None
+    output_root.mkdir(parents=True, exist_ok=True)
+    return {RUNTIME_OUTPUT_ENV: str(output_root)}
+
+
+def _compare_references(root: Path, library: Path, manifest: dict[str, Any], payload: dict[str, Any], *, work_dir: Path | None = None) -> tuple[list[str], bool]:
     """Compare only declared pairs; smoke output is never chosen as a full GMT."""
     messages: list[str] = []
     full_compared = False
@@ -361,7 +413,7 @@ def _compare_references(root: Path, library: Path, manifest: dict[str, Any], pay
         if regenerated_value.is_absolute() or ".." in regenerated_value.parts:
             messages.append(f"ERROR: adoption reference mapping {index} has an unsafe regenerated path: {mapping['regenerated']}")
             continue
-        regenerated = library / regenerated_value
+        regenerated = _runtime_output_root(root, library, payload, work_dir=work_dir) / regenerated_value
         legacy = Path(mapping["legacy"])
         if not legacy.is_file():
             messages.append(f"ERROR: declared legacy reference does not exist: {legacy}")
@@ -370,19 +422,26 @@ def _compare_references(root: Path, library: Path, manifest: dict[str, Any], pay
             messages.append(f"ERROR: declared regenerated {scope} reference does not exist: {regenerated}")
             continue
         report = root / "adoption" / ("comparison_report.tsv" if scope == "full" else f"comparison_smoke_{index}.tsv")
-        passed, rows = compare_gmt(legacy, regenerated, mapping["comparison"], report)
+        mapping_file = library / mapping["mapping_file"] if mapping.get("mapping_file") else None
+        try:
+            passed, rows = compare_gmt(legacy, regenerated, mapping["comparison"], report, metrics=mapping.get("metrics"), mapping_path=mapping_file)
+        except ValueError as exc:
+            messages.append(f"ERROR: {scope} legacy comparison configuration failed: {exc}")
+            continue
         if scope == "full":
             full_compared = True
         if not passed:
-            messages.append(f"ERROR: {scope} legacy comparison failed ({sum(row['status'] != 'unchanged' for row in rows)} differing gene sets)")
+            expected = "scientific comparability" if mapping["comparison"] == "scientific_comparability" else "legacy comparison"
+            messages.append(f"ERROR: {scope} {expected} failed ({sum(row['status'] not in {'unchanged', 'compared'} for row in rows)} differing gene sets)")
         else:
-            messages.append(f"INFO: {scope} legacy comparison passed ({len(rows)} gene sets)")
+            label = "scientifically comparable; not set-equivalent" if mapping["comparison"] == "scientific_comparability" else "legacy comparison passed"
+            messages.append(f"INFO: {scope} {label} ({len(rows)} gene sets)")
     if not mappings:
         messages.append("INFO: full legacy equivalence was not run because no comparison mapping is declared.")
     return messages, full_compared
 
 
-def _check_declared_smoke_outputs(library: Path, payload: dict[str, Any]) -> list[str]:
+def _check_declared_smoke_outputs(library: Path, payload: dict[str, Any], *, artifact_root: Path | None = None) -> list[str]:
     """Check an optional smoke manifest without imposing it on old workspaces."""
     expected = payload.get("expected_outputs", {}) if isinstance(payload.get("expected_outputs"), dict) else {}
     manifest_value = expected.get("smoke_manifest")
@@ -396,14 +455,15 @@ def _check_declared_smoke_outputs(library: Path, payload: dict[str, Any]) -> lis
     messages: list[str] = []
     for row in rows:
         relative = Path(str(row.get("relative_path", "")))
-        if relative.is_absolute() or ".." in relative.parts or not (library / relative).is_file():
+        root = artifact_root or library
+        if relative.is_absolute() or ".." in relative.parts or not (root / relative).is_file():
             messages.append(f"ERROR: expected smoke output does not exist: {row.get('relative_path', '')}")
     return messages or ["INFO: declared smoke outputs exist."]
 
 
-def _provenance_stage(library: Path, payload: dict[str, Any], scope: str) -> tuple[list[str], dict[str, object]]:
+def _provenance_stage(library: Path, payload: dict[str, Any], scope: str, *, artifact_root: Path | None = None) -> tuple[list[str], dict[str, object]]:
     """Run the shared, DIG-output-only provenance completeness check."""
-    result = validate_provenance_complete(library, payload, scope=scope)
+    result = validate_provenance_complete(library, payload, scope=scope, artifact_root=artifact_root)
     contracts = payload.get("provenance", {}).get("contracts", []) if isinstance(payload.get("provenance"), dict) else []
     declared = any(isinstance(contract, dict) and contract.get("scope") == scope for contract in contracts)
     status = "NOT_RUN" if not declared else ("FAIL" if not result.ok else ("WARN" if result.issues else "PASS"))
@@ -415,7 +475,7 @@ def _provenance_stage(library: Path, payload: dict[str, Any], scope: str) -> tup
     return messages, {"status": status, "issues": [issue.__dict__ for issue in result.issues]}
 
 
-def verify_workspace(workspace: Path) -> tuple[bool, list[str]]:
+def verify_workspace(workspace: Path, *, work_dir: Path | None = None) -> tuple[bool, list[str]]:
     root, manifest = load_workspace(workspace)
     tooling_ok, expected_tooling, active_tooling, tooling_commit = _active_tooling(root, manifest)
     if not tooling_ok:
@@ -450,23 +510,28 @@ def verify_workspace(workspace: Path) -> tuple[bool, list[str]]:
     # A migrated library supplies the actual reproduction command.  It is only
     # executed by this explicit local command, never by CI automation.
     payload = load(library / "submission.yaml")
+    artifact_root = _runtime_output_root(root, library, payload, work_dir=work_dir)
+    runtime_environment = _runtime_environment(root, library, payload, work_dir=work_dir)
     smoke = str(payload["reproduction"]["smoke_test_command"]).split()
-    reproduced = _run(smoke, library)
+    reproduced = _run(smoke, library, env=runtime_environment)
     if reproduced.returncode:
         messages.append("ERROR: smoke reproduction failed: " + (reproduced.stderr.strip() or reproduced.stdout.strip()))
-    messages.extend(_check_declared_smoke_outputs(library, payload))
+    messages.extend(_check_declared_smoke_outputs(library, payload, artifact_root=artifact_root))
     provenance_stages: dict[str, object] = {}
-    provenance_messages, provenance_stages["smoke"] = _provenance_stage(library, payload, "smoke")
+    provenance_messages, provenance_stages["smoke"] = _provenance_stage(library, payload, "smoke", artifact_root=artifact_root)
     messages.extend(provenance_messages)
     messages.append("INFO: smoke verification completed; full legacy equivalence is evaluated only for explicitly declared full mappings.")
-    comparison_messages, full_compared = _compare_references(root, library, manifest, payload)
+    comparison_messages, full_compared = _compare_references(root, library, manifest, payload, work_dir=work_dir)
     messages.extend(comparison_messages)
-    provenance_messages, provenance_stages["full"] = _provenance_stage(library, payload, "full")
+    provenance_messages, provenance_stages["full"] = _provenance_stage(library, payload, "full", artifact_root=artifact_root)
     messages.extend(provenance_messages)
-    receipt = library / "run_receipt.json"
+    receipt = root / "reports" / "run_receipt.json"
     ok = not any(message.startswith("ERROR:") for message in messages)
-    write_receipt(library / "submission.yaml", dig, {"ok": ok, "messages": messages, "provenance_validation": provenance_stages}, receipt, [str(root / "verify-adoption")])
-    manifest["verification"] = {"last_result": "PASS" if ok else "FAILED", "last_receipt": str(receipt.relative_to(root)), "workspace_digest": _workspace_digest(root, manifest), "full_comparison_completed": full_compared, "provenance_complete": provenance_stages, "completed_at": datetime.now(timezone.utc).isoformat()}
+    command = [str(root / "verify-adoption")]
+    if work_dir is not None:
+        command.extend(["--work-dir", str(artifact_root)])
+    write_receipt(library / "submission.yaml", dig, {"ok": ok, "messages": messages, "provenance_validation": provenance_stages}, receipt, command)
+    manifest["verification"] = {"last_result": "PASS" if ok else "FAILED", "last_receipt": str(receipt.relative_to(root)), "workspace_digest": _workspace_digest(root, manifest), "work_directory": str(artifact_root.relative_to(root)) if artifact_root.is_relative_to(root) else str(artifact_root), "full_comparison_completed": full_compared, "provenance_complete": provenance_stages, "completed_at": datetime.now(timezone.utc).isoformat()}
     _write_json(root / WORKSPACE_MANIFEST, manifest)
     return ok, messages
 
