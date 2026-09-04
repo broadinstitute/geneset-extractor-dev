@@ -85,7 +85,7 @@ class SubmissionToolsTest(unittest.TestCase):
         self.assertTrue((root / "config/task_manifest.tsv").is_file())
         self.assertFalse((root / "run/submit_models.sh").exists())
 
-    def test_shared_cluster_launcher_writes_worklist_without_submitting(self) -> None:
+    def test_shared_cluster_launchers_write_worklist_without_submitting(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             library = root / "Toy"
@@ -100,17 +100,19 @@ class SubmissionToolsTest(unittest.TestCase):
                 "task_one\tM1\tP1\ttrue\trna_deg\tgenesets/P1/models/M1\n",
                 encoding="utf-8",
             )
-            launcher = Path(__file__).resolve().parents[1] / "run/submit_library_models_cluster_apptainer.sh"
-            completed = subprocess.run(
-                ["bash", str(launcher), "--library-id", "Toy", "--library-root", str(library), "--task-manifest", str(manifest)],
-                cwd=root,
-                env={**os.environ, "WORK_ROOT": str(root)},
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
-            self.assertIn("Worklist written:", completed.stdout)
-            self.assertTrue((root / "toy_worklist.tsv").is_file())
+            for launcher_name in ("submit_library_models_cluster.sh", "submit_library_models_cluster_apptainer.sh"):
+                with self.subTest(launcher=launcher_name):
+                    launcher = Path(__file__).resolve().parents[1] / "run" / launcher_name
+                    completed = subprocess.run(
+                        ["bash", str(launcher), "--library-id", "Toy", "--library-root", str(library), "--task-manifest", str(manifest)],
+                        cwd=root,
+                        env={**os.environ, "WORK_ROOT": str(root)},
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+                    self.assertIn("Worklist written:", completed.stdout)
+                    self.assertTrue((root / "toy_worklist.tsv").is_file())
 
     def test_ready_scientific_reimplementation_requires_assessment_and_review(self) -> None:
         root = self.scaffold()

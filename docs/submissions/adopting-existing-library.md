@@ -79,14 +79,17 @@ cluster execution, adoption also creates a thin root-level adapter:
 
 ```text
 run/submit_<library>_models_cluster_apptainer.sh
+run/submit_library_models_cluster.sh
+run/submit_library_models_cluster_apptainer.sh
 ```
 
-That adapter delegates to `run/submit_library_models_cluster_apptainer.sh`,
-which reads `task_manifest.tsv`. It writes a filtered worklist by default and
-submits a scheduler array only when passed `--submit`; it does not own
-scientific processing or output formatting. Set `SUBMISSION_WORK_DIR` (or the
-explicit `WORK_ROOT` scheduler override) to a location outside the wrapper
-checkout before using it.
+The per-library adapter delegates to the shared Apptainer launcher. The shared
+native launcher is available when a reviewed runtime does not need a container.
+Both read `task_manifest.tsv`, write a filtered worklist by default, and submit
+a scheduler array only when passed `--submit`; neither owns scientific
+processing or output formatting. Set `SUBMISSION_WORK_DIR` (or the explicit
+`WORK_ROOT` scheduler override) to a location outside the wrapper checkout
+before using either launcher.
 
 All substantive data processing and gene-set generation logic belongs in
 `dig-gene-set-extractors`. `geneset-extractor-dev` may configure, dispatch,
