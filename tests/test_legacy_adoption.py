@@ -238,6 +238,12 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertIn("SUBMISSION_WORK_DIR", (workspace / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8"))
             self.assertEqual((legacy / "old.gmt").read_text(encoding="utf-8"), "set_a\tna\tA\tB\n")
             self.assertTrue((workspace / "geneset-extractor-dev/Adopted/submission.yaml").is_file())
+            self.assertTrue((workspace / "geneset-extractor-dev/Adopted/config/task_manifest.tsv").is_file())
+            self.assertTrue((workspace / "geneset-extractor-dev/Adopted/run/build_adopted_genesets.sh").is_file())
+            cluster_adapter = workspace / "geneset-extractor-dev/run/submit_adopted_models_cluster_apptainer.sh"
+            self.assertTrue(cluster_adapter.is_file())
+            self.assertTrue(os.access(cluster_adapter, os.X_OK))
+            self.assertIn("submit_library_models_cluster_apptainer.sh", cluster_adapter.read_text(encoding="utf-8"))
             payload = json.loads((workspace / "geneset-extractor-dev/Adopted/submission.yaml").read_text(encoding="utf-8"))
             self.assertEqual(payload["reproduction"]["output_directory_environment"], "SUBMISSION_WORK_DIR")
             self.assertEqual(adoption_workspace._runtime_output_root(workspace, workspace / "geneset-extractor-dev/Adopted", payload), workspace / "work")

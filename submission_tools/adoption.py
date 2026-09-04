@@ -172,7 +172,7 @@ def implementation_inventory(root: Path, inventory: dict[str, Any]) -> dict[str,
 
 
 def migration_map(inventory: dict[str, Any]) -> dict[str, Any]:
-    return {"schema_version": "1.0.0", "legacy_entry_points": [{"path": item["path"], "dig_module": "TODO", "dig_identifier": "TODO", "focused_test": "TODO"} for item in inventory.get("code_files", []) if isinstance(item, dict)], "wrapper_orchestration": {"model_config": "config/model_list.tsv", "dispatcher": "TODO", "launcher": "run/submit_models.sh"}, "behavior_preservation": {"source_inputs": "TODO", "filters": "TODO", "gene_mapping": "TODO", "ranking": "TODO", "gmt_conventions": "TODO", "known_deviations": []}}
+    return {"schema_version": "1.1.0", "legacy_entry_points": [{"path": item["path"], "dig_module": "TODO", "dig_identifier": "TODO", "focused_test": "TODO"} for item in inventory.get("code_files", []) if isinstance(item, dict)], "wrapper_orchestration": {"model_config": "config/model_list.tsv", "task_manifest": "config/task_manifest.tsv", "dispatcher": "TODO", "launcher": "run/build_<library>_genesets.sh", "cluster_adapter": "run/submit_<library>_models_cluster_apptainer.sh"}, "behavior_preservation": {"source_inputs": "TODO", "filters": "TODO", "gene_mapping": "TODO", "ranking": "TODO", "gmt_conventions": "TODO", "known_deviations": []}}
 
 
 def source_assessment_template() -> str:

@@ -65,6 +65,29 @@ The target wrapper layout is small and explicit:
 <Library>/tests/fixtures/ small redistributable smoke fixtures
 ```
 
+Each adopted library has one canonical local execution path:
+
+```text
+<Library>/run/build_<library>_genesets.sh
+<Library>/config/task_manifest.tsv
+```
+
+The builder dispatches one declared task (or smoke selection) to the pinned
+DIG workflow. It is the path used by `reproduction/reproduce.sh`; do not add a
+second library-local `run/submit_models.sh` convention. When the library needs
+cluster execution, adoption also creates a thin root-level adapter:
+
+```text
+run/submit_<library>_models_cluster_apptainer.sh
+```
+
+That adapter delegates to `run/submit_library_models_cluster_apptainer.sh`,
+which reads `task_manifest.tsv`. It writes a filtered worklist by default and
+submits a scheduler array only when passed `--submit`; it does not own
+scientific processing or output formatting. Set `SUBMISSION_WORK_DIR` (or the
+explicit `WORK_ROOT` scheduler override) to a location outside the wrapper
+checkout before using it.
+
 All substantive data processing and gene-set generation logic belongs in
 `dig-gene-set-extractors`. `geneset-extractor-dev` may configure, dispatch,
 execute, refresh, and publish that logic, but must not independently implement

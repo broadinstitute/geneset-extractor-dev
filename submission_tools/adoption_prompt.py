@@ -100,9 +100,14 @@ blocker. Do not accept unexplained precomputed intermediates.
 3. Add missing substantive logic, its fixture, tests, and registered contract
    in DIG first. Pin the exact resulting DIG commit in the wrapper manifest.
 4. In the wrapper, create `config/model_list.tsv`, an optional model manifest,
-   a partition/tissue list when applicable, and
-   `config/model_description_templates.tsv`. Add only a strict `run/` launcher
-   and a thin `src/` model dispatcher.
+   a partition/tissue list when applicable, `config/task_manifest.tsv`, and
+   `config/model_description_templates.tsv`. Add a strict canonical
+   `run/build_<library>_genesets.sh` launcher and a thin `src/` task
+   dispatcher. Do not create the obsolete generic `run/submit_models.sh`.
+   The adoption workspace includes a root-level
+   `run/submit_<library>_models_cluster_apptainer.sh` adapter over the shared
+   worklist-driven launcher. It may submit only when explicitly given
+   `--submit`; its local task mode must call the same canonical builder.
 5. Declare every external input and fixture in `input_manifest.tsv`. Create
    `config/provenance_overlay.json` with stable source identifiers/URLs keyed
    by the DIG-supported input path or `role:<input-role>`, and pass it as
@@ -183,12 +188,12 @@ command = [sys.executable, "-m", "geneset_extractors", "workflows", workflow_id,
 subprocess.run(command, check=True)
 ```
 
-Its launcher should be similarly thin and strict:
+Its canonical local builder should be similarly thin and strict:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-exec "${{PYTHON_BIN:-python3}}" src/build_<library>_genesets.py "$@"
+exec "${{PYTHON_BIN:-python3}}" src/run_<library>_task.py "$@"
 ```
 
 ## Completion criteria

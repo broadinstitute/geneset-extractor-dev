@@ -32,9 +32,21 @@ The wrapper layer should expose a standard lifecycle:
 
 Every new library should add wrapper commands comparable to the existing ones.
 
-At minimum, a new library should provide:
+At minimum, a new library should provide one canonical local builder and, when
+cluster execution is declared, the shared-launcher adapter below. Do not add
+the obsolete library-local `run/submit_models.sh` scaffold.
 
-### 1. Cluster submit wrapper
+### 1. Canonical local builder
+
+```text
+<Library>/run/build_<library>_genesets.sh
+```
+
+It must dispatch a single task from `config/task_manifest.tsv`, honor
+`SUBMISSION_WORK_DIR`, and be the same execution path used by smoke, full, and
+cluster runs.
+
+### 2. Cluster submit wrapper
 
 Preferred pattern:
 
@@ -59,7 +71,7 @@ Purpose:
 
 The Apptainer-backed submit script is the main standard because it is the most reproducible cluster entrypoint.
 
-### 2. Model-sidecar writer
+### 3. Model-sidecar writer
 
 Preferred pattern:
 
@@ -79,7 +91,7 @@ In practice, this is optional if the submit script can already do:
 
 That is the better long-term pattern.
 
-### 3. Refresh wrapper
+### 4. Refresh wrapper
 
 Shared wrappers already exist:
 
@@ -99,7 +111,7 @@ Purpose:
 - preserve originals as `.orig`
 - optionally rewrite local paths to publish-safe locations
 
-### 4. Publish wrapper
+### 5. Publish wrapper
 
 Shared wrapper:
 
@@ -122,6 +134,7 @@ Before any wrapper command is run, the library should already have:
 
 - `LIBRARY/config/model_list.tsv`
 - `LIBRARY/config/model_manifest.tsv`
+- `LIBRARY/config/task_manifest.tsv`
 - `LIBRARY/config/model_description_templates.tsv`
 - one or more explicit partition list files where relevant
 
@@ -220,7 +233,8 @@ and final extractor outputs such as:
 
 - `genesets.gmt`
 - `geneset.meta.json`
-- `geneset.provenance.json`
+- `geneset.provenance.legacy.json`
+- `geneset.provenance.dapper.yaml`
 - `geneset.model.json`
 
 At this point, outputs are **run-complete**, but they are not yet assumed publishable.
@@ -254,7 +268,7 @@ This refresh step should:
 - rewrite GMT second-column descriptions
 - preserve original files as:
   - `geneset.meta.json.orig`
-  - `geneset.provenance.json.orig`
+  - `geneset.provenance.legacy.json.orig`
   - `genesets.gmt.orig`
 
 This is the point at which outputs should become **publishable**.
