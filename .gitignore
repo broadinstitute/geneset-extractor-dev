@@ -46,6 +46,7 @@
 !submission_tools/
 !tests/
 !examples/
+!translator/
 !.github/
 
 !LINCS_L1000/**/
@@ -66,6 +67,7 @@
 !submission_tools/**/
 !tests/**/
 !examples/**/
+!translator/**/
 !.github/**/
 
 # Allow certain filetypes
@@ -170,5 +172,11 @@
 !KOMP2/**/*.md
 !KOMP2/**/*.pdf
 !KOMP2/**/*.png
+!translator/**/*.py
+!translator/**/*.r
+!translator/**/*.R
+!translator/**/*.sh
+!translator/**/*.md
+!translator/src/*.json
 
 archive/

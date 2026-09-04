@@ -1,0 +1,152 @@
+{
+    "_comment": "Values equal to the key itself indicate a symmetric predicate (its own inverse). Entries with 'inverse' set to null have no formally defined inverse in the current biolink-model (as of v4.4.x). A few upstream/within-actor and sensitivity-affects inverses are inferred from the model's consistent naming pattern rather than an explicit owl:inverseOf declaration.",
+    "biolink:affects": {
+        "inverse": "affected_by"
+    },
+    "biolink:affects_sensitivity_to": {
+        "inverse": "sensitivity_affected_by"
+    },
+    "biolink:decreases_sensitivity_to": {
+        "inverse": "sensitivity_decreased_by"
+    },
+    "biolink:increases_sensitivity_to": {
+        "inverse": "sensitivity_increased_by"
+    },
+    "biolink:coexists_with": {
+        "inverse": "coexists_with",
+        "symmetric": true
+    },
+    "biolink:interacts_with": {
+        "inverse": "interacts_with",
+        "symmetric": true
+    },
+    "biolink:has_substrate": {
+        "inverse": "is_substrate_of"
+    },
+    "biolink:has_part": {
+        "inverse": "part_of"
+    },
+    "biolink:produces": {
+        "inverse": "produced_by"
+    },
+    "biolink:directly_physically_interacts_with": {
+        "inverse": "directly_physically_interacts_with",
+        "symmetric": true
+    },
+    "biolink:gene_associated_with_condition": {
+        "inverse": "condition_associated_with_gene"
+    },
+    "biolink:subclass_of": {
+        "inverse": "superclass_of"
+    },
+    "biolink:correlated_with": {
+        "inverse": "correlated_with",
+        "symmetric": true
+    },
+    "biolink:regulates": {
+        "inverse": "regulated_by"
+    },
+    "biolink:has_input": {
+        "inverse": "is_input_of"
+    },
+    "biolink:located_in": {
+        "inverse": "location_of"
+    },
+    "biolink:expressed_in": {
+        "inverse": "expresses"
+    },
+    "biolink:disrupts": {
+        "inverse": "disrupted_by"
+    },
+    "biolink:treats_or_applied_or_studied_to_treat": {
+        "inverse": "treated_by_or_treated_in_studies_by"
+    },
+    "biolink:associated_with": {
+        "inverse": "associated_with",
+        "symmetric": true
+    },
+    "biolink:causes": {
+        "inverse": "caused_by"
+    },
+    "biolink:related_to": {
+        "inverse": "related_to",
+        "symmetric": true,
+        "note": "root predicate; treated as symmetric/undirected"
+    },
+    "biolink:in_clinical_trials_for": {
+        "inverse": "tested_by_clinical_trials_of"
+    },
+    "biolink:predisposes_to_condition": {
+        "inverse": "condition_predisposed_by"
+    },
+    "biolink:physically_interacts_with": {
+        "inverse": "physically_interacts_with",
+        "symmetric": true
+    },
+    "biolink:orthologous_to": {
+        "inverse": "orthologous_to",
+        "symmetric": true
+    },
+    "biolink:enables": {
+        "inverse": "enabled_by"
+    },
+    "biolink:involved_in": {
+        "inverse": "involves"
+    },
+    "biolink:contributes_to": {
+        "inverse": "contribution_from"
+    },
+    "biolink:part_of": {
+        "inverse": "has_part"
+    },
+    "biolink:acts_upstream_of_or_within": {
+        "inverse": "has_upstream_or_within_actor"
+    },
+    "biolink:acts_upstream_of": {
+        "inverse": "has_upstream_actor"
+    },
+    "biolink:acts_upstream_of_positive_effect": {
+        "inverse": "has_positive_upstream_actor"
+    },
+    "biolink:acts_upstream_of_or_within_positive_effect": {
+        "inverse": "has_positive_upstream_or_within_actor"
+    },
+    "biolink:precedes": {
+        "inverse": "preceded_by"
+    },
+    "biolink:active_in": {
+        "inverse": "has_active_component"
+    },
+    "biolink:colocalizes_with": {
+        "inverse": "colocalizes_with",
+        "symmetric": true
+    },
+    "biolink:is_input_of": {
+        "inverse": "has_input"
+    },
+    "biolink:acts_upstream_of_or_within_negative_effect": {
+        "inverse": "has_negative_upstream_or_within_actor"
+    },
+    "biolink:acts_upstream_of_negative_effect": {
+        "inverse": "has_negative_upstream_actor"
+    },
+    "biolink:has_phenotype": {
+        "inverse": "phenotype_of"
+    },
+    "biolink:treats": {
+        "inverse": "treated_by"
+    },
+    "biolink:exacerbates_condition": {
+        "inverse": "condition_exacerbated_by"
+    },
+    "biolink:member_of": {
+        "inverse": "has_member"
+    },
+    "biolink:close_match": {
+        "inverse": "close_match",
+        "symmetric": true
+    },
+    "biolink:derives_from": {
+        "inverse": "derives_into"
+    }
+}
