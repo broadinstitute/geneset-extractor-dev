@@ -31,6 +31,8 @@ dependencies:
   - scikit-learn>=1.2
   - statsmodels>=0.14
   - jsonschema>=4.0
+  - pyyaml>=6.0
+  - rdflib>=7.0
   - pytest>=8
 
   # R runtime plus packages used by GTEx continuous-age runs and

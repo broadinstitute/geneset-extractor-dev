@@ -1,6 +1,6 @@
 FROM continuumio/miniconda3:latest
 
-ARG GIT_COMMIT=ede326a14816bccc1845d1d9d3cd4222f2fe2793
+ARG GIT_COMMIT=587d74cc8413a50378a582ef9f9884e010872fa3
 
 WORKDIR /opt
 
@@ -25,8 +25,9 @@ SHELL ["conda", "run", "-n", "geneset-extractors", "/bin/bash", "-c"]
 
 RUN pip install -e .
 
+RUN python -c "import rdflib, yaml; print('DAPPER provenance dependencies OK')"
+
 WORKDIR /work
 
 ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "geneset-extractors"]
 CMD ["geneset-extractors", "--help"]
-

@@ -135,6 +135,7 @@ From: ubuntu:22.04
         fastparquet \
         tqdm \
         pyyaml \
+        rdflib \
         click \
         jupyter \
         jupyterlab \
