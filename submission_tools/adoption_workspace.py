@@ -164,15 +164,19 @@ def create_workspace(
     dig_fork: str | None,
     wrapper_fork: str | None,
     base_branch: str = DEFAULT_BASE_BRANCH,
+    dig_base_branch: str | None = None,
+    wrapper_base_branch: str | None = None,
     allow_upstream_origin: bool = False,
 ) -> Path:
     workspace, legacy = validate_workspace_location(workspace, existing)
     dig_fork, wrapper_fork = _fork_urls(github_user, dig_fork, wrapper_fork, allow_upstream_origin=allow_upstream_origin)
+    dig_base_branch = dig_base_branch or base_branch
+    wrapper_base_branch = wrapper_base_branch or base_branch
     workspace.mkdir(parents=True, exist_ok=True)
     work_branch = f"adopt/{library_id}"
     try:
-        _clone_fork(dig_fork, workspace / "dig-gene-set-extractors", CANONICAL_DIG, base_branch, work_branch)
-        _clone_fork(wrapper_fork, workspace / "geneset-extractor-dev", CANONICAL_WRAPPER, base_branch, work_branch)
+        _clone_fork(dig_fork, workspace / "dig-gene-set-extractors", CANONICAL_DIG, dig_base_branch, work_branch)
+        _clone_fork(wrapper_fork, workspace / "geneset-extractor-dev", CANONICAL_WRAPPER, wrapper_base_branch, work_branch)
         inventory = inventory_legacy(legacy)
         adoption_dir = workspace / "adoption"
         _write_json(adoption_dir / "inventory.json", inventory)
@@ -198,8 +202,8 @@ def create_workspace(
             "workspace": {"root": str(workspace), "upstream_origin_mode": allow_upstream_origin},
             "legacy": {"source_path": str(legacy), "read_only": True, "inventory": "adoption/inventory.json", "reference": "adoption/legacy_reference.json"},
             "repositories": {
-                "dig": {"path": "dig-gene-set-extractors", "origin": dig_fork, "upstream": CANONICAL_DIG, "base_branch": base_branch, "work_branch": work_branch},
-                "wrapper": {"path": "geneset-extractor-dev", "origin": wrapper_fork, "upstream": CANONICAL_WRAPPER, "base_branch": base_branch, "work_branch": work_branch},
+                "dig": {"path": "dig-gene-set-extractors", "origin": dig_fork, "upstream": CANONICAL_DIG, "base_branch": dig_base_branch, "work_branch": work_branch},
+                "wrapper": {"path": "geneset-extractor-dev", "origin": wrapper_fork, "upstream": CANONICAL_WRAPPER, "base_branch": wrapper_base_branch, "work_branch": work_branch},
             },
             "tooling": {"wrapper_commit": _git(workspace / "geneset-extractor-dev", "rev-parse", "HEAD"), "submission_tools_path": "geneset-extractor-dev/submission_tools"},
             "submission": {"wrapper_library_path": f"geneset-extractor-dev/{library_id}", "pattern": pattern},
@@ -232,7 +236,8 @@ The original legacy submission at `{manifest['legacy']['source_path']}` is **REA
 
 DIG branch: `{manifest['repositories']['dig']['work_branch']}`
 Wrapper branch: `{manifest['repositories']['wrapper']['work_branch']}`
-Baseline branch: `{manifest['repositories']['dig']['base_branch']}`
+DIG baseline branch: `{manifest['repositories']['dig']['base_branch']}`
+Wrapper baseline branch: `{manifest['repositories']['wrapper']['base_branch']}`
 Maintainer upstream-origin mode: `{manifest['workspace']['upstream_origin_mode']}`
 
 {architecture_guidance(pattern, inventory)}

@@ -234,7 +234,9 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertTrue(os.access(workspace / "verify-adoption", os.X_OK))
             self.assertTrue(os.access(workspace / "submit-adoption", os.X_OK))
             self.assertIn("./verify-adoption", (workspace / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8"))
-            self.assertIn("Baseline branch: `main`", (workspace / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8"))
+            prompt = (workspace / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8")
+            self.assertIn("DIG baseline branch: `main`", prompt)
+            self.assertIn("Wrapper baseline branch: `main`", prompt)
             self.assertIn("SUBMISSION_WORK_DIR", (workspace / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8"))
             self.assertEqual((legacy / "old.gmt").read_text(encoding="utf-8"), "set_a\tna\tA\tB\n")
             self.assertTrue((workspace / "geneset-extractor-dev/Adopted/submission.yaml").is_file())
@@ -548,6 +550,31 @@ class LegacyAdoptionTest(unittest.TestCase):
             _open_draft_pr(Path("."), same_repo, "title", "body")
         same_repo_command = commands[-1]
         self.assertEqual(same_repo_command[same_repo_command.index("--head") + 1], "adopt/Adopted")
+
+    def test_repository_specific_base_branches_are_recorded_independently(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            legacy = self.legacy_library(root)
+            dig = self._remote(root, "dig", "dig-feature")
+            wrapper = self._remote(root, "wrapper", "wrapper-feature", with_tools=True)
+            old_constants = adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER
+            adoption_workspace.CANONICAL_DIG = str(dig); adoption_workspace.CANONICAL_WRAPPER = str(wrapper)
+            try:
+                workspace = create_workspace(
+                    existing=legacy, workspace=root / "isolated", library_id="Adopted",
+                    display_name=None, pattern="generic", github_user=None,
+                    dig_fork=str(dig), wrapper_fork=str(wrapper), base_branch="main",
+                    dig_base_branch="dig-feature", wrapper_base_branch="wrapper-feature",
+                    allow_upstream_origin=True,
+                )
+            finally:
+                adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER = old_constants
+            _root, manifest = load_workspace(workspace)
+            self.assertEqual(manifest["repositories"]["dig"]["base_branch"], "dig-feature")
+            self.assertEqual(manifest["repositories"]["wrapper"]["base_branch"], "wrapper-feature")
+            prompt = (workspace / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8")
+            self.assertIn("DIG baseline branch: `dig-feature`", prompt)
+            self.assertIn("Wrapper baseline branch: `wrapper-feature`", prompt)
 
     def test_safe_staging_rejects_secrets_and_canonical_origins(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

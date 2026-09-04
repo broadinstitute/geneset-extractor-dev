@@ -29,9 +29,10 @@ export LEGACY="/absolute/path/to/existing_submission"
 export LIBRARY_ID="MY_LIBRARY"
 export WORKSPACE="$HOME/gene-set-adoptions/$LIBRARY_ID"
 export WORK_DIR="$WORKSPACE/out"
-export BRANCH="main"
+export DIG_BRANCH="main"
+export WRAPPER_BRANCH="main"
 
-git clone --branch "$BRANCH" \
+git clone --branch "$WRAPPER_BRANCH" \
   https://github.com/broadinstitute/geneset-extractor-dev.git \
   submission-system-tools
 
@@ -43,7 +44,8 @@ python3 -m submission_tools adopt \
   --dig-fork https://github.com/flannick/dig-gene-set-extractors.git \
   --wrapper-fork https://github.com/broadinstitute/geneset-extractor-dev.git \
   --allow-upstream-origin \
-  --base-branch "$BRANCH"
+  --dig-base-branch "$DIG_BRANCH" \
+  --wrapper-base-branch "$WRAPPER_BRANCH"
 
 cd "$WORKSPACE"
 codex
@@ -165,7 +167,8 @@ export LEGACY="/absolute/path/to/existing_submission"
 export LIBRARY_ID="MY_LIBRARY"
 export WORKSPACE="$HOME/gene-set-adoptions/$LIBRARY_ID"
 export WORK_DIR="$WORKSPACE/out"
-export BRANCH="main"
+export DIG_BRANCH="main"
+export WRAPPER_BRANCH="main"
 ```
 
 `WORKSPACE` must be separate from `LEGACY`, outside any Git repository, and
@@ -173,14 +176,16 @@ empty when `adopt` starts. `WORK_DIR` must stay beneath the workspace but
 outside `dig-gene-set-extractors/`, `geneset-extractor-dev/`, `legacy/`, and
 `reports/`. It is persistent and is never cleared by verification.
 
-To test an unmerged feature branch, set `BRANCH` to that branch for both the
-tooling checkout and `--base-branch`. The branch must exist on the canonical
-upstream of both repositories. After merge, return to `BRANCH=main`.
+The wrapper tooling checkout must use `WRAPPER_BRANCH`. `DIG_BRANCH` and
+`WRAPPER_BRANCH` may be different: each must exist on its corresponding
+canonical upstream. `--base-branch` remains a convenient common fallback, but
+`--dig-base-branch` and `--wrapper-base-branch` independently override it.
+After merge, return both to `main`.
 
 ### 2. Obtain tooling and create the isolated workspace
 
 ```bash
-git clone --branch "$BRANCH" \
+git clone --branch "$WRAPPER_BRANCH" \
   https://github.com/broadinstitute/geneset-extractor-dev.git \
   submission-system-tools
 
@@ -192,7 +197,8 @@ python3 -m submission_tools adopt \
   --dig-fork https://github.com/flannick/dig-gene-set-extractors.git \
   --wrapper-fork https://github.com/broadinstitute/geneset-extractor-dev.git \
   --allow-upstream-origin \
-  --base-branch "$BRANCH"
+  --dig-base-branch "$DIG_BRANCH" \
+  --wrapper-base-branch "$WRAPPER_BRANCH"
 ```
 
 This creates fresh clones, read-only legacy inventory and reference data,
@@ -208,8 +214,8 @@ cat .adoption-workspace.yaml
 find adoption -maxdepth 1 -type f -print | sort
 ```
 
-Confirm the manifest records the expected baseline, work branches, remotes,
-and maintainer upstream-origin override.
+Confirm the manifest records the expected DIG and wrapper baselines, work
+branches, remotes, and maintainer upstream-origin override.
 
 ### 3. Complete the migration with Codex
 
