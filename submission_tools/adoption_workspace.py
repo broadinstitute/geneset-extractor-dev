@@ -130,21 +130,27 @@ def _write_workspace_helper(path: Path, command: str) -> None:
     path.chmod(path.stat().st_mode | 0o111)
 
 
-def _write_cluster_adapter(wrapper: Path, library_id: str) -> Path:
-    """Create the small per-library adapter over the shared cluster launcher."""
+def _write_cluster_adapters(wrapper: Path, library_id: str) -> list[Path]:
+    """Create small native and Apptainer adapters over shared launchers."""
     slug = re.sub(r"[^a-z0-9]+", "_", library_id.lower()).strip("_")
-    path = wrapper / "run" / f"submit_{slug}_models_cluster_apptainer.sh"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        "#!/usr/bin/env bash\nset -euo pipefail\n"
-        "SCRIPT_DIR=\"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd -P)\"\n"
-        "WRAPPER_ROOT=\"$(cd -- \"${SCRIPT_DIR}/..\" && pwd -P)\"\n"
-        f"exec \"${{WRAPPER_ROOT}}/run/submit_library_models_cluster_apptainer.sh\" --library-id {library_id} "
-        f"--library-root \"${{WRAPPER_ROOT}}/{library_id}\" --task-manifest \"${{WRAPPER_ROOT}}/{library_id}/config/task_manifest.tsv\" \"$@\"\n",
-        encoding="utf-8",
-    )
-    path.chmod(path.stat().st_mode | 0o111)
-    return path
+    adapters: list[Path] = []
+    for suffix, shared_launcher in (
+        ("cluster", "submit_library_models_cluster.sh"),
+        ("cluster_apptainer", "submit_library_models_cluster_apptainer.sh"),
+    ):
+        path = wrapper / "run" / f"submit_{slug}_models_{suffix}.sh"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "#!/usr/bin/env bash\nset -euo pipefail\n"
+            "SCRIPT_DIR=\"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd -P)\"\n"
+            "WRAPPER_ROOT=\"$(cd -- \"${SCRIPT_DIR}/..\" && pwd -P)\"\n"
+            f"exec \"${{WRAPPER_ROOT}}/run/{shared_launcher}\" --library-id {library_id} "
+            f"--library-root \"${{WRAPPER_ROOT}}/{library_id}\" --task-manifest \"${{WRAPPER_ROOT}}/{library_id}/config/task_manifest.tsv\" \"$@\"\n",
+            encoding="utf-8",
+        )
+        path.chmod(path.stat().st_mode | 0o111)
+        adapters.append(path)
+    return adapters
 
 
 def create_workspace(
@@ -180,7 +186,7 @@ def create_workspace(
         _write_json(adoption_dir / "legacy_reference.json", reference)
         library = workspace / "geneset-extractor-dev" / library_id
         scaffold(library, library_id, display_name or library_id, pattern)
-        _write_cluster_adapter(workspace / "geneset-extractor-dev", library_id)
+        _write_cluster_adapters(workspace / "geneset-extractor-dev", library_id)
         submission = library / "submission.yaml"
         payload = load(submission)
         payload["submission_origin"] = {"type": "adopted", "legacy_inventory": "../../adoption/inventory.json"}

@@ -240,6 +240,10 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertTrue((workspace / "geneset-extractor-dev/Adopted/submission.yaml").is_file())
             self.assertTrue((workspace / "geneset-extractor-dev/Adopted/config/task_manifest.tsv").is_file())
             self.assertTrue((workspace / "geneset-extractor-dev/Adopted/run/build_adopted_genesets.sh").is_file())
+            native_cluster_adapter = workspace / "geneset-extractor-dev/run/submit_adopted_models_cluster.sh"
+            self.assertTrue(native_cluster_adapter.is_file())
+            self.assertTrue(os.access(native_cluster_adapter, os.X_OK))
+            self.assertIn("submit_library_models_cluster.sh", native_cluster_adapter.read_text(encoding="utf-8"))
             cluster_adapter = workspace / "geneset-extractor-dev/run/submit_adopted_models_cluster_apptainer.sh"
             self.assertTrue(cluster_adapter.is_file())
             self.assertTrue(os.access(cluster_adapter, os.X_OK))
