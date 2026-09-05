@@ -80,6 +80,16 @@ generated outputs and provenance sidecars beneath that directory, never under
 geneset-extractor-dev/<library_id>.
 ```
 
+Before final verification, apply the reviewed allowlist so the wrapper can
+stage code and configuration without staging inputs or generated artifacts:
+
+```bash
+cd "$WORKSPACE/geneset-extractor-dev"
+sed -n '1,240p' ../adoption/gitignore_allowlist.md
+printf '\n' >> .gitignore
+cat ../adoption/gitignore_allowlist.md >> .gitignore
+```
+
 Then validate the artifacts Codex generated:
 
 ```bash
@@ -129,6 +139,11 @@ Use SUBMISSION_WORK_DIR="$WORK_DIR" for smoke and full reproduction. Write
 generated outputs and provenance sidecars beneath that directory, never under
 geneset-extractor-dev/<library_id>.
 ```
+
+Before final verification, also apply the reviewed generated allowlist (the
+same commands shown in the `exact_reproduction` short version). Do not use
+`git add -f`; the allowlist keeps `inputs/`, `outputs/`, `work/`, and
+`run_receipt.json` ignored.
 
 Run the same `./verify-adoption --work-dir "$WORK_DIR"` command. A draft may
 have a pending scientific review; a ready scientific reimplementation requires
@@ -239,7 +254,40 @@ isolated adoption workspace they resolve beneath `WORK_DIR`. For example,
 `outputs/full/genesets.gmt` resolves to
 `$WORK_DIR/outputs/full/genesets.gmt`.
 
-### 4. Verify the completed migration
+### 4. Apply the reviewed wrapper ignore allowlist
+
+The wrapper repository intentionally uses a deny-by-default `.gitignore`.
+Before the final verification, review and append the library-specific allowlist
+that `adopt` generated. This permits only committed source/configuration files;
+it does not permit inputs, generated outputs, runtime work, or receipts.
+
+```bash
+cd "$WORKSPACE/geneset-extractor-dev"
+sed -n '1,240p' ../adoption/gitignore_allowlist.md
+printf '\n' >> .gitignore
+cat ../adoption/gitignore_allowlist.md >> .gitignore
+```
+
+Confirm source files are no longer ignored (the first command should print no
+matching rule) while generated artifacts remain ignored (the second command
+should print matching ignore rules):
+
+```bash
+git check-ignore -v \
+  "$LIBRARY_ID/submission.yaml" \
+  "$LIBRARY_ID/config/model_list.tsv" \
+  "$LIBRARY_ID/reproduction/download_inputs.sh"
+
+git check-ignore -v \
+  "$LIBRARY_ID/inputs/example.tsv" \
+  "$LIBRARY_ID/outputs/example.gmt" \
+  "$LIBRARY_ID/run_receipt.json"
+```
+
+Do not use `git add -f`. The `.gitignore` update is an intentional wrapper PR
+change and must be included in the final verification digest.
+
+### 5. Verify the completed migration
 
 Codex should already have run the full reproduction. Do not rerun it merely to
 verify. Instead, validate the generated artifacts with the workspace-local
@@ -265,7 +313,7 @@ and require it to fix the migration without silently changing scientific
 parameters or comparing a full legacy GMT with a smoke output. Re-run only
 `./verify-adoption --work-dir "$WORK_DIR"` after Codex has repaired the work.
 
-### 5. Review and submit
+### 6. Review and submit
 
 Inspect comparison reports in `adoption/` and the receipt in `reports/`:
 
