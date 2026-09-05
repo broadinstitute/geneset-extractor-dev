@@ -1,0 +1,105 @@
+{
+  "inputs": {
+    "role:IGVFFI0331FOUT": {
+      "canonical_uri": "igvf:tabular-file:IGVFFI0331FOUT",
+      "download_url": "https://api.data.igvf.org/tabular-files/IGVFFI0331FOUT/@@download/IGVFFI0331FOUT.tsv.gz",
+      "provider": "IGVF Data Portal",
+      "version": "IGVF tabular-file accession IGVFFI0331FOUT"
+    },
+    "role:IGVFFI3445AYOJ": {
+      "canonical_uri": "igvf:tabular-file:IGVFFI3445AYOJ",
+      "download_url": "https://api.data.igvf.org/tabular-files/IGVFFI3445AYOJ/@@download/IGVFFI3445AYOJ.tsv.gz",
+      "provider": "IGVF Data Portal",
+      "version": "IGVF tabular-file accession IGVFFI3445AYOJ"
+    },
+    "role:IGVFFI1867ROFS": {
+      "canonical_uri": "igvf:tabular-file:IGVFFI1867ROFS",
+      "download_url": "https://api.data.igvf.org/tabular-files/IGVFFI1867ROFS/@@download/IGVFFI1867ROFS.csv.gz",
+      "provider": "IGVF Data Portal",
+      "version": "IGVF tabular-file accession IGVFFI1867ROFS"
+    },
+    "role:IGVFFI0726ZROO": {
+      "canonical_uri": "igvf:tabular-file:IGVFFI0726ZROO",
+      "download_url": "https://api.data.igvf.org/tabular-files/IGVFFI0726ZROO/@@download/IGVFFI0726ZROO.csv.gz",
+      "provider": "IGVF Data Portal",
+      "version": "IGVF tabular-file accession IGVFFI0726ZROO"
+    },
+    "role:IGVFFI2903THXX": {
+      "canonical_uri": "igvf:tabular-file:IGVFFI2903THXX",
+      "download_url": "https://api.data.igvf.org/tabular-files/IGVFFI2903THXX/@@download/IGVFFI2903THXX.tsv.gz",
+      "provider": "IGVF Data Portal",
+      "version": "IGVF tabular-file accession IGVFFI2903THXX"
+    },
+    "role:IGVFFI8750MLNP": {
+      "canonical_uri": "igvf:tabular-file:IGVFFI8750MLNP",
+      "download_url": "https://api.data.igvf.org/tabular-files/IGVFFI8750MLNP/@@download/IGVFFI8750MLNP.tsv.gz",
+      "provider": "IGVF Data Portal",
+      "version": "IGVF tabular-file accession IGVFFI8750MLNP"
+    },
+    "role:IGVFFI4354THUZ": {
+      "canonical_uri": "igvf:tabular-file:IGVFFI4354THUZ",
+      "download_url": "https://api.data.igvf.org/tabular-files/IGVFFI4354THUZ/@@download/IGVFFI4354THUZ.tsv.gz",
+      "provider": "IGVF Data Portal",
+      "version": "IGVF tabular-file accession IGVFFI4354THUZ"
+    },
+    "role:IGVFFI6770EFUQ": {
+      "canonical_uri": "igvf:tabular-file:IGVFFI6770EFUQ",
+      "download_url": "https://api.data.igvf.org/tabular-files/IGVFFI6770EFUQ/@@download/IGVFFI6770EFUQ.csv.gz",
+      "provider": "IGVF Data Portal",
+      "version": "IGVF tabular-file accession IGVFFI6770EFUQ"
+    },
+    "role:IGVFFI8786YBUA": {
+      "canonical_uri": "igvf:tabular-file:IGVFFI8786YBUA",
+      "download_url": "https://api.data.igvf.org/tabular-files/IGVFFI8786YBUA/@@download/IGVFFI8786YBUA.csv.gz",
+      "provider": "IGVF Data Portal",
+      "version": "IGVF tabular-file accession IGVFFI8786YBUA"
+    },
+    "role:IGVFFI7266NWTF": {
+      "canonical_uri": "igvf:tabular-file:IGVFFI7266NWTF",
+      "download_url": "https://api.data.igvf.org/tabular-files/IGVFFI7266NWTF/@@download/IGVFFI7266NWTF.csv.gz",
+      "provider": "IGVF Data Portal",
+      "version": "IGVF tabular-file accession IGVFFI7266NWTF"
+    },
+    "role:IGVFFI6830YLEK": {
+      "canonical_uri": "igvf:tabular-file:IGVFFI6830YLEK",
+      "download_url": "https://api.data.igvf.org/tabular-files/IGVFFI6830YLEK/@@download/IGVFFI6830YLEK.tsv.gz",
+      "provider": "IGVF Data Portal",
+      "version": "IGVF tabular-file accession IGVFFI6830YLEK"
+    },
+    "role:IGVFFI0830FXFI": {
+      "canonical_uri": "igvf:tabular-file:IGVFFI0830FXFI",
+      "download_url": "https://api.data.igvf.org/tabular-files/IGVFFI0830FXFI/@@download/IGVFFI0830FXFI.csv.gz",
+      "provider": "IGVF Data Portal",
+      "version": "IGVF tabular-file accession IGVFFI0830FXFI"
+    },
+    "role:IGVFFI0068OWUG": {
+      "canonical_uri": "igvf:tabular-file:IGVFFI0068OWUG",
+      "download_url": "https://api.data.igvf.org/tabular-files/IGVFFI0068OWUG/@@download/IGVFFI0068OWUG.csv.gz",
+      "provider": "IGVF Data Portal",
+      "version": "IGVF tabular-file accession IGVFFI0068OWUG"
+    },
+    "role:IGVFFI3272UWTY": {
+      "canonical_uri": "igvf:tabular-file:IGVFFI3272UWTY",
+      "download_url": "https://api.data.igvf.org/tabular-files/IGVFFI3272UWTY/@@download/IGVFFI3272UWTY.tsv.gz",
+      "provider": "IGVF Data Portal",
+      "version": "IGVF tabular-file accession IGVFFI3272UWTY"
+    },
+    "role:IGVFFI5883SVNN": {
+      "canonical_uri": "igvf:tabular-file:IGVFFI5883SVNN",
+      "download_url": "https://api.data.igvf.org/tabular-files/IGVFFI5883SVNN/@@download/IGVFFI5883SVNN.csv.gz",
+      "provider": "IGVF Data Portal",
+      "version": "IGVF tabular-file accession IGVFFI5883SVNN"
+    },
+    "role:IGVFFI5198JCCU": {
+      "canonical_uri": "igvf:tabular-file:IGVFFI5198JCCU",
+      "download_url": "https://api.data.igvf.org/tabular-files/IGVFFI5198JCCU/@@download/IGVFFI5198JCCU.tsv.gz",
+      "provider": "IGVF Data Portal",
+      "version": "IGVF tabular-file accession IGVFFI5198JCCU"
+    },
+    "role:igvf_smoke_fixture": {
+      "canonical_uri": "fixture:IGVF:igvf_smoke_fixture",
+      "provider": "committed test fixture",
+      "version": "fixture-v1"
+    }
+  }
+}

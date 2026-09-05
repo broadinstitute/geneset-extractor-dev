@@ -172,3 +172,45 @@
 !KOMP2/**/*.png
 
 archive/
+
+# IGVF submission source/configuration only
+!IGVF/
+!IGVF/submission.yaml
+!IGVF/README.md
+
+!IGVF/config/
+!IGVF/config/**
+!IGVF/reproduction/
+!IGVF/reproduction/*.sh
+!IGVF/reproduction/*.tsv
+!IGVF/reproduction/*.md
+!IGVF/run/
+!IGVF/run/**/
+!IGVF/run/*.sh
+!IGVF/run/*.py
+!IGVF/src/
+!IGVF/src/**/
+!IGVF/src/**/*.py
+!IGVF/src/**/*.R
+!IGVF/src/**/*.r
+!IGVF/src/**/*.sh
+!IGVF/src/**/*.md
+!IGVF/expected/
+!IGVF/expected/*.tsv
+!IGVF/adoption/
+!IGVF/adoption/*.md
+!IGVF/adoption/*.tsv
+!IGVF/adoption/*.yaml
+!IGVF/tests/
+!IGVF/tests/fixtures/
+!IGVF/tests/fixtures/**/
+!IGVF/tests/fixtures/**/*.tsv
+!IGVF/tests/fixtures/**/*.json
+!IGVF/tests/fixtures/**/*.txt
+!IGVF/tests/fixtures/**/*.md
+
+# Keep downloaded data and generated artifacts ignored.
+IGVF/inputs/
+IGVF/outputs/
+IGVF/work/
+IGVF/run_receipt.json
