@@ -128,6 +128,31 @@ def load_predicate_inverse_config(file_path: str = "predicate_inverse_config.jso
         return json.load(f)
 
 
+def load_node_names(file_path: str = "../data/nodes.jsonl"):
+    """
+    Load node names from a JSON-lines file.
+    
+    Args:
+        file_path: Path to the nodes.jsonl file.
+    
+    Returns:
+        dict: Mapping of node ID to node name.
+    """
+    node_names = {}
+    with open(file_path, "r") as f:
+        for line in f:
+            if line.strip():
+                try:
+                    node = json.loads(line)
+                    node_id = node.get("id")
+                    node_name = node.get("name")
+                    if node_id and node_name:
+                        node_names[node_id] = node_name
+                except json.JSONDecodeError:
+                    continue
+    return node_names
+
+
 def process_line(line: str, conn, hgnc_genes: dict, predicate_config: dict = None):
     """
     Process a single JSON line from the edges file and store in database if subject is a human gene.
@@ -182,9 +207,60 @@ def process_line(line: str, conn, hgnc_genes: dict, predicate_config: dict = Non
     return False
 
 
+def get_geneset_name(neighbor_id: str, predicate: str, is_inverse: bool, 
+                    predicate_config: dict, node_names: dict):
+    """
+    Generate geneset name from neighbor_id, predicate, and is_inverse flag.
+    
+    Args:
+        neighbor_id: The ID of the neighbor node.
+        predicate: The biolink predicate.
+        is_inverse: Whether the relationship is inverse.
+        predicate_config: Dictionary of predicate inverse configuration.
+        node_names: Dictionary mapping node IDs to node names.
+    
+    Returns:
+        tuple: (geneset_name, warning_msg or None)
+    """
+    # Get node name, fall back to neighbor_id if not found, and replace tabs/newlines with underscores
+    node_name = node_names.get(neighbor_id, neighbor_id)
+    if "\t" in node_name:
+        node_name = node_name.replace("\t", "_")
+    if "\n" in node_name:
+        node_name = node_name.replace("\n", "_")
+
+    warning_msg = None
+    
+    # Determine geneset name based on is_inverse
+    if is_inverse:
+        # Look up inverse predicate in config
+        if predicate in predicate_config:
+            inverse_pred = predicate_config[predicate].get("inverse")
+            if inverse_pred:
+                # Remove "biolink:" prefix if present
+                inverse_pred = inverse_pred.replace("biolink:", "")
+                geneset_name = f"{node_name}_{inverse_pred}"
+                description = f"{neighbor_id}|{inverse_pred}"
+            else:
+                warning_msg = f"Warning: Predicate {predicate} has no inverse mapping in config, using original predicate"
+                geneset_name = f"{node_name}_{predicate.replace('biolink:', '')}"
+                description = f"{neighbor_id}|{predicate.replace('biolink:', '')}"
+        else:
+            warning_msg = f"Warning: Predicate {predicate} not found in config, using original predicate"
+            geneset_name = f"{node_name}_{predicate.replace('biolink:', '')}"
+            description = f"{neighbor_id}|{predicate.replace('biolink:', '')}"
+    else:
+        # Use predicate as-is, remove "biolink:" prefix
+        pred_name = predicate.replace("biolink:", "")
+        geneset_name = f"{node_name}_{pred_name}"
+        description = f"{neighbor_id}|{pred_name}"
+    
+    return geneset_name, description, warning_msg
+
+
 def export_gene_sets(db_file: str = "../data/translator_gene_neighbors.sqlite", 
                      output_file: str = "../data/translator_gene_sets.gmt",
-                     min_genes: int = 5):
+                     min_genes: int = 5, max_genes = 2000):
     """
     Export gene neighbor relationships from database as GMT genesets.
     
@@ -195,12 +271,16 @@ def export_gene_sets(db_file: str = "../data/translator_gene_neighbors.sqlite",
         db_file: Path to the SQLite database file.
         output_file: Path to the output GMT file.
         min_genes: Minimum number of genes required per geneset (default 5).
+        max_genes: Maximum number of genes allowed per geneset (default 2000).
     """
     conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
     
     # Load predicate config to get inverse predicates
     predicate_config = load_predicate_inverse_config()
+    
+    # Load node names
+    node_names = load_node_names()
     
     # Get all unique combinations of (neighbor_id, predicate, is_inverse)
     cursor.execute("""
@@ -212,69 +292,62 @@ def export_gene_sets(db_file: str = "../data/translator_gene_neighbors.sqlite",
     combinations = cursor.fetchall()
     
     total_genesets_found = 0
-    total_genes_found = 0
     total_genesets_saved = 0
-    total_genes_saved = 0
-    warnings = []
+    total_genesets_excluded = 0
+    warnings = set()
+    warning_count = 0
     
     with open(output_file, "w") as f:
         for neighbor_id, predicate, is_inverse in combinations:
-            # Determine geneset name based on is_inverse
-            if is_inverse:
-                # Look up inverse predicate in config
-                if predicate in predicate_config:
-                    inverse_pred = predicate_config[predicate].get("inverse")
-                    if inverse_pred:
-                        # Remove "biolink:" prefix if present
-                        inverse_pred = inverse_pred.replace("biolink:", "")
-                        geneset_name = f"{neighbor_id}_{inverse_pred}"
-                    else:
-                        warning_msg = f"Warning: Predicate {predicate} not found inverse mapping in config, using original predicate"
-                        warnings.append(warning_msg)
-                        geneset_name = f"{neighbor_id}_{predicate.replace('biolink:', '')}"
-                else:
-                    warning_msg = f"Warning: Predicate {predicate} not found in config, using original predicate"
-                    warnings.append(warning_msg)
-                    geneset_name = f"{neighbor_id}_{predicate.replace('biolink:', '')}"
-            else:
-                # Use predicate as-is, remove "biolink:" prefix
-                pred_name = predicate.replace("biolink:", "")
-                geneset_name = f"{neighbor_id}_{pred_name}"
+            # Get geneset name using separate function
+            geneset_name, description, warning_msg = get_geneset_name(neighbor_id, predicate, is_inverse, 
+                                                                     predicate_config, node_names)
+            if warning_msg:
+                if warning_msg not in warnings:
+                    print(warning_msg)
+                    warnings.add(warning_msg)
+                warning_count += 1
             
             # Get all distinct genes for this combination
             cursor.execute("""
                 SELECT DISTINCT gene_symbol
                 FROM gene_neighbors
                 WHERE neighbor_id = ? AND predicate = ? AND is_inverse = ?
-            """, (neighbor_id, predicate, is_inverse))
+                LIMIT ?
+            """, (neighbor_id, predicate, is_inverse, max_genes + 1))  # Fetch one more than max_genes to check limit
             
             genes = [row[0] for row in cursor.fetchall()]
             total_genesets_found += 1
-            total_genes_found += len(genes)
             
             # Apply minimum gene count filter
             if len(genes) >= min_genes:
-                total_genesets_saved += 1
-                total_genes_saved += len(genes)
-                
-                # GMT format: geneset_name \t description \t gene1 \t gene2 \t ...
-                line = f"{geneset_name}\t{geneset_name}\t" + "\t".join(genes) + "\n"
-                f.write(line)
+                if len(genes) > max_genes:
+                    # Exclude geneset if it exceeds max_genes
+                    total_genesets_excluded += 1
+                    warning_count += 1
+                else:
+                    total_genesets_saved += 1
+                    # GMT format: geneset_name \t description \t gene1 \t gene2 \t ...
+                    # Use neighbor_id for description
+                    line = f"{geneset_name}\t{description}\t" + "\t".join(genes) + "\n"
+                    f.write(line)
+
+            if total_genesets_saved % 100 == 0:
+                f.buffer.flush()  
+            if total_genesets_found % 5000 == 0:
+                print(f"Processed {total_genesets_found} genesets, saved {total_genesets_saved}, excluded {total_genesets_excluded}")
     
     conn.close()
     
     # Print results and warnings
     print(f"\nExport complete:")
     print(f"  Total genesets found: {total_genesets_found}")
-    print(f"  Total genes found: {total_genes_found}")
     print(f"  Genesets saved (>= {min_genes} genes): {total_genesets_saved}")
-    print(f"  Genes saved: {total_genes_saved}")
     print(f"  Output file: {Path(output_file).absolute()}")
     
-    if warnings:
-        print(f"\nWarnings ({len(warnings)}):")
-        for warning in warnings:
-            print(f"  {warning}")
+    if warning_count > 0:
+        print(f"\nWarnings ({warning_count}):")
+        print(f"  {total_genesets_excluded} genesets excluded for exceeding max_genes")
 
 
 def create_index(conn):
