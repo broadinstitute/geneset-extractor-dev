@@ -600,7 +600,9 @@ def _changed_paths(repo: Path) -> list[Path]:
     return paths
 
 
-_GENERATED_LIBRARY_PARTS = {"inputs", "outputs", "work", "data", "__pycache__", ".pytest_cache"}
+_GENERATED_LIBRARY_PARTS = {"inputs", "outputs", "work", "data"}
+_GENERATED_CACHE_PARTS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
+_GENERATED_CACHE_SUFFIXES = {".pyc", ".pyo"}
 
 
 def _generated_library_path(rel: Path, library_root: str | None) -> bool:
@@ -611,7 +613,12 @@ def _generated_library_path(rel: Path, library_root: str | None) -> bool:
         inside = rel.relative_to(root)
     except ValueError:
         return False
-    return inside.name == "run_receipt.json" or bool(inside.parts and inside.parts[0] in _GENERATED_LIBRARY_PARTS)
+    return (
+        inside.name == "run_receipt.json"
+        or bool(inside.parts and inside.parts[0] in _GENERATED_LIBRARY_PARTS)
+        or any(part in _GENERATED_CACHE_PARTS for part in inside.parts)
+        or inside.suffix.lower() in _GENERATED_CACHE_SUFFIXES
+    )
 
 
 def _ignored_submission_files(repo: Path, library: Path) -> list[tuple[str, str]]:
