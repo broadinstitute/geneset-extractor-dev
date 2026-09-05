@@ -11,6 +11,7 @@ from .yaml_loader import load
 
 INPUT_HEADERS = {"input_id", "source_uri_or_access_instructions", "version_release", "checksum", "access_method", "smoke_full", "workflow_stage", "redistribution_status", "committed_fixture", "fixture_path"}
 OUTPUT_HEADERS = {"output_id", "relative_path", "role", "required", "model_id", "partition_id"}
+TASK_HEADERS = {"task_id", "model_id", "partition_id", "enabled", "dig_identifier", "output_relative_path"}
 MODEL_HEADERS = {"model_id"}
 PARTITION_HEADERS = {"partition_id", "tissue_id", "dataset_id", "signature_id"}
 DESCRIPTION_HEADERS = {"model_id", "description_template"}
@@ -244,6 +245,35 @@ def _script_checks(root: Path, entry: Path, result: ValidationResult) -> None:
         result.add("error", "smoke_mode", "reproduction entry point must support --smoke or document an equivalent")
 
 
+def _runtime_checks(root: Path, data: dict[str, Any], model_ids: set[str], result: ValidationResult) -> None:
+    runtime = data.get("runtime")
+    if runtime is None:
+        return
+    if not isinstance(runtime, dict) or runtime.get("mode") not in {"local", "apptainer_cluster"}:
+        result.add("error", "runtime", "runtime.mode must be local or apptainer_cluster")
+        return
+    task_path = _path(root, runtime.get("task_manifest"), "runtime.task_manifest", result)
+    builder = _path(root, runtime.get("local_builder"), "runtime.local_builder", result)
+    if task_path:
+        task_rows = _read_tsv(task_path, TASK_HEADERS, "task_id", result)
+        for row in task_rows:
+            if row.get("model_id") not in model_ids:
+                result.add("error", "config_cross_reference", f"task manifest references unknown model_id {row.get('model_id')}")
+            if row.get("enabled", "").lower() not in {"true", "false"}:
+                result.add("error", "task_manifest", f"task {row.get('task_id')} enabled must be true or false")
+            if not _safe_relative(row.get("output_relative_path", "")):
+                result.add("error", "task_manifest", f"task {row.get('task_id')} has unsafe output_relative_path")
+    if builder:
+        if not os.access(builder, os.X_OK):
+            result.add("error", "script_executable", f"{builder.relative_to(root)} is not executable")
+        if "set -euo pipefail" not in builder.read_text(encoding="utf-8", errors="ignore"):
+            result.add("warning", "shell_strict_mode", f"{builder.relative_to(root)} lacks set -euo pipefail")
+    if runtime.get("mode") == "apptainer_cluster":
+        adapter = runtime.get("cluster_submitter")
+        if not isinstance(adapter, str) or not adapter:
+            result.add("error", "runtime", "apptainer_cluster runtime requires runtime.cluster_submitter")
+
+
 def _fixture_checks(root: Path, input_rows: list[dict[str, str]], result: ValidationResult) -> None:
     declared: set[Path] = set()
     for row in input_rows:
@@ -321,6 +351,7 @@ def validate_submission(submission: Path) -> ValidationResult:
                 result.add("error", "runtime_output_directory", "reproduction.output_directory_environment must be SUBMISSION_WORK_DIR when declared")
             elif "SUBMISSION_WORK_DIR" not in paths["reproduction_entry_point"].read_text(encoding="utf-8", errors="ignore"):
                 result.add("error", "runtime_output_directory", "reproduction entry point declares SUBMISSION_WORK_DIR but does not reference it")
+    _runtime_checks(root, data, model_ids, result)
     adoption = data.get("adoption", {}) if isinstance(data.get("adoption"), dict) else {}
     policy = adoption.get("comparison_policy", {}) if isinstance(adoption.get("comparison_policy", {}), dict) else {}
     if policy.get("mode") == "scientific_reimplementation":

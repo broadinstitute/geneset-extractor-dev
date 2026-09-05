@@ -130,6 +130,29 @@ def _write_workspace_helper(path: Path, command: str) -> None:
     path.chmod(path.stat().st_mode | 0o111)
 
 
+def _write_cluster_adapters(wrapper: Path, library_id: str) -> list[Path]:
+    """Create small native and Apptainer adapters over shared launchers."""
+    slug = re.sub(r"[^a-z0-9]+", "_", library_id.lower()).strip("_")
+    adapters: list[Path] = []
+    for suffix, shared_launcher in (
+        ("cluster", "submit_library_models_cluster.sh"),
+        ("cluster_apptainer", "submit_library_models_cluster_apptainer.sh"),
+    ):
+        path = wrapper / "run" / f"submit_{slug}_models_{suffix}.sh"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "#!/usr/bin/env bash\nset -euo pipefail\n"
+            "SCRIPT_DIR=\"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd -P)\"\n"
+            "WRAPPER_ROOT=\"$(cd -- \"${SCRIPT_DIR}/..\" && pwd -P)\"\n"
+            f"exec \"${{WRAPPER_ROOT}}/run/{shared_launcher}\" --library-id {library_id} "
+            f"--library-root \"${{WRAPPER_ROOT}}/{library_id}\" --task-manifest \"${{WRAPPER_ROOT}}/{library_id}/config/task_manifest.tsv\" \"$@\"\n",
+            encoding="utf-8",
+        )
+        path.chmod(path.stat().st_mode | 0o111)
+        adapters.append(path)
+    return adapters
+
+
 def create_workspace(
     *,
     existing: Path,
@@ -141,15 +164,19 @@ def create_workspace(
     dig_fork: str | None,
     wrapper_fork: str | None,
     base_branch: str = DEFAULT_BASE_BRANCH,
+    dig_base_branch: str | None = None,
+    wrapper_base_branch: str | None = None,
     allow_upstream_origin: bool = False,
 ) -> Path:
     workspace, legacy = validate_workspace_location(workspace, existing)
     dig_fork, wrapper_fork = _fork_urls(github_user, dig_fork, wrapper_fork, allow_upstream_origin=allow_upstream_origin)
+    dig_base_branch = dig_base_branch or base_branch
+    wrapper_base_branch = wrapper_base_branch or base_branch
     workspace.mkdir(parents=True, exist_ok=True)
     work_branch = f"adopt/{library_id}"
     try:
-        _clone_fork(dig_fork, workspace / "dig-gene-set-extractors", CANONICAL_DIG, base_branch, work_branch)
-        _clone_fork(wrapper_fork, workspace / "geneset-extractor-dev", CANONICAL_WRAPPER, base_branch, work_branch)
+        _clone_fork(dig_fork, workspace / "dig-gene-set-extractors", CANONICAL_DIG, dig_base_branch, work_branch)
+        _clone_fork(wrapper_fork, workspace / "geneset-extractor-dev", CANONICAL_WRAPPER, wrapper_base_branch, work_branch)
         inventory = inventory_legacy(legacy)
         adoption_dir = workspace / "adoption"
         _write_json(adoption_dir / "inventory.json", inventory)
@@ -163,6 +190,7 @@ def create_workspace(
         _write_json(adoption_dir / "legacy_reference.json", reference)
         library = workspace / "geneset-extractor-dev" / library_id
         scaffold(library, library_id, display_name or library_id, pattern)
+        _write_cluster_adapters(workspace / "geneset-extractor-dev", library_id)
         submission = library / "submission.yaml"
         payload = load(submission)
         payload["submission_origin"] = {"type": "adopted", "legacy_inventory": "../../adoption/inventory.json"}
@@ -174,8 +202,8 @@ def create_workspace(
             "workspace": {"root": str(workspace), "upstream_origin_mode": allow_upstream_origin},
             "legacy": {"source_path": str(legacy), "read_only": True, "inventory": "adoption/inventory.json", "reference": "adoption/legacy_reference.json"},
             "repositories": {
-                "dig": {"path": "dig-gene-set-extractors", "origin": dig_fork, "upstream": CANONICAL_DIG, "base_branch": base_branch, "work_branch": work_branch},
-                "wrapper": {"path": "geneset-extractor-dev", "origin": wrapper_fork, "upstream": CANONICAL_WRAPPER, "base_branch": base_branch, "work_branch": work_branch},
+                "dig": {"path": "dig-gene-set-extractors", "origin": dig_fork, "upstream": CANONICAL_DIG, "base_branch": dig_base_branch, "work_branch": work_branch},
+                "wrapper": {"path": "geneset-extractor-dev", "origin": wrapper_fork, "upstream": CANONICAL_WRAPPER, "base_branch": wrapper_base_branch, "work_branch": work_branch},
             },
             "tooling": {"wrapper_commit": _git(workspace / "geneset-extractor-dev", "rev-parse", "HEAD"), "submission_tools_path": "geneset-extractor-dev/submission_tools"},
             "submission": {"wrapper_library_path": f"geneset-extractor-dev/{library_id}", "pattern": pattern},
@@ -208,7 +236,8 @@ The original legacy submission at `{manifest['legacy']['source_path']}` is **REA
 
 DIG branch: `{manifest['repositories']['dig']['work_branch']}`
 Wrapper branch: `{manifest['repositories']['wrapper']['work_branch']}`
-Baseline branch: `{manifest['repositories']['dig']['base_branch']}`
+DIG baseline branch: `{manifest['repositories']['dig']['base_branch']}`
+Wrapper baseline branch: `{manifest['repositories']['wrapper']['base_branch']}`
 Maintainer upstream-origin mode: `{manifest['workspace']['upstream_origin_mode']}`
 
 {architecture_guidance(pattern, inventory)}
@@ -571,7 +600,9 @@ def _changed_paths(repo: Path) -> list[Path]:
     return paths
 
 
-_GENERATED_LIBRARY_PARTS = {"inputs", "outputs", "work", "data", "__pycache__", ".pytest_cache"}
+_GENERATED_LIBRARY_PARTS = {"inputs", "outputs", "work", "data"}
+_GENERATED_CACHE_PARTS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
+_GENERATED_CACHE_SUFFIXES = {".pyc", ".pyo"}
 
 
 def _generated_library_path(rel: Path, library_root: str | None) -> bool:
@@ -582,7 +613,12 @@ def _generated_library_path(rel: Path, library_root: str | None) -> bool:
         inside = rel.relative_to(root)
     except ValueError:
         return False
-    return inside.name == "run_receipt.json" or bool(inside.parts and inside.parts[0] in _GENERATED_LIBRARY_PARTS)
+    return (
+        inside.name == "run_receipt.json"
+        or bool(inside.parts and inside.parts[0] in _GENERATED_LIBRARY_PARTS)
+        or any(part in _GENERATED_CACHE_PARTS for part in inside.parts)
+        or inside.suffix.lower() in _GENERATED_CACHE_SUFFIXES
+    )
 
 
 def _ignored_submission_files(repo: Path, library: Path) -> list[tuple[str, str]]:

@@ -29,9 +29,10 @@ export LEGACY="/absolute/path/to/existing_submission"
 export LIBRARY_ID="MY_LIBRARY"
 export WORKSPACE="$HOME/gene-set-adoptions/$LIBRARY_ID"
 export WORK_DIR="$WORKSPACE/out"
-export BRANCH="main"
+export DIG_BRANCH="main"
+export WRAPPER_BRANCH="main"
 
-git clone --branch "$BRANCH" \
+git clone --branch "$WRAPPER_BRANCH" \
   https://github.com/broadinstitute/geneset-extractor-dev.git \
   submission-system-tools
 
@@ -43,7 +44,8 @@ python3 -m submission_tools adopt \
   --dig-fork https://github.com/flannick/dig-gene-set-extractors.git \
   --wrapper-fork https://github.com/broadinstitute/geneset-extractor-dev.git \
   --allow-upstream-origin \
-  --base-branch "$BRANCH"
+  --dig-base-branch "$DIG_BRANCH" \
+  --wrapper-base-branch "$WRAPPER_BRANCH"
 
 cd "$WORKSPACE"
 codex
@@ -76,6 +78,16 @@ identifier and access blocker.
 Use SUBMISSION_WORK_DIR="$WORK_DIR" for smoke and full reproduction. Write
 generated outputs and provenance sidecars beneath that directory, never under
 geneset-extractor-dev/<library_id>.
+```
+
+Before final verification, apply the reviewed allowlist so the wrapper can
+stage code and configuration without staging inputs or generated artifacts:
+
+```bash
+cd "$WORKSPACE/geneset-extractor-dev"
+sed -n '1,240p' ../adoption/gitignore_allowlist.md
+printf '\n' >> .gitignore
+cat ../adoption/gitignore_allowlist.md >> .gitignore
 ```
 
 Then validate the artifacts Codex generated:
@@ -128,6 +140,11 @@ generated outputs and provenance sidecars beneath that directory, never under
 geneset-extractor-dev/<library_id>.
 ```
 
+Before final verification, also apply the reviewed generated allowlist (the
+same commands shown in the `exact_reproduction` short version). Do not use
+`git add -f`; the allowlist keeps `inputs/`, `outputs/`, `work/`, and
+`run_receipt.json` ignored.
+
 Run the same `./verify-adoption --work-dir "$WORK_DIR"` command. A draft may
 have a pending scientific review; a ready scientific reimplementation requires
 an approved GitHub PR or issue reference in `submission.yaml`.
@@ -165,7 +182,8 @@ export LEGACY="/absolute/path/to/existing_submission"
 export LIBRARY_ID="MY_LIBRARY"
 export WORKSPACE="$HOME/gene-set-adoptions/$LIBRARY_ID"
 export WORK_DIR="$WORKSPACE/out"
-export BRANCH="main"
+export DIG_BRANCH="main"
+export WRAPPER_BRANCH="main"
 ```
 
 `WORKSPACE` must be separate from `LEGACY`, outside any Git repository, and
@@ -173,14 +191,16 @@ empty when `adopt` starts. `WORK_DIR` must stay beneath the workspace but
 outside `dig-gene-set-extractors/`, `geneset-extractor-dev/`, `legacy/`, and
 `reports/`. It is persistent and is never cleared by verification.
 
-To test an unmerged feature branch, set `BRANCH` to that branch for both the
-tooling checkout and `--base-branch`. The branch must exist on the canonical
-upstream of both repositories. After merge, return to `BRANCH=main`.
+The wrapper tooling checkout must use `WRAPPER_BRANCH`. `DIG_BRANCH` and
+`WRAPPER_BRANCH` may be different: each must exist on its corresponding
+canonical upstream. `--base-branch` remains a convenient common fallback, but
+`--dig-base-branch` and `--wrapper-base-branch` independently override it.
+After merge, return both to `main`.
 
 ### 2. Obtain tooling and create the isolated workspace
 
 ```bash
-git clone --branch "$BRANCH" \
+git clone --branch "$WRAPPER_BRANCH" \
   https://github.com/broadinstitute/geneset-extractor-dev.git \
   submission-system-tools
 
@@ -192,7 +212,8 @@ python3 -m submission_tools adopt \
   --dig-fork https://github.com/flannick/dig-gene-set-extractors.git \
   --wrapper-fork https://github.com/broadinstitute/geneset-extractor-dev.git \
   --allow-upstream-origin \
-  --base-branch "$BRANCH"
+  --dig-base-branch "$DIG_BRANCH" \
+  --wrapper-base-branch "$WRAPPER_BRANCH"
 ```
 
 This creates fresh clones, read-only legacy inventory and reference data,
@@ -208,8 +229,8 @@ cat .adoption-workspace.yaml
 find adoption -maxdepth 1 -type f -print | sort
 ```
 
-Confirm the manifest records the expected baseline, work branches, remotes,
-and maintainer upstream-origin override.
+Confirm the manifest records the expected DIG and wrapper baselines, work
+branches, remotes, and maintainer upstream-origin override.
 
 ### 3. Complete the migration with Codex
 
@@ -233,7 +254,40 @@ isolated adoption workspace they resolve beneath `WORK_DIR`. For example,
 `outputs/full/genesets.gmt` resolves to
 `$WORK_DIR/outputs/full/genesets.gmt`.
 
-### 4. Verify the completed migration
+### 4. Apply the reviewed wrapper ignore allowlist
+
+The wrapper repository intentionally uses a deny-by-default `.gitignore`.
+Before the final verification, review and append the library-specific allowlist
+that `adopt` generated. This permits only committed source/configuration files;
+it does not permit inputs, generated outputs, runtime work, or receipts.
+
+```bash
+cd "$WORKSPACE/geneset-extractor-dev"
+sed -n '1,240p' ../adoption/gitignore_allowlist.md
+printf '\n' >> .gitignore
+cat ../adoption/gitignore_allowlist.md >> .gitignore
+```
+
+Confirm source files are no longer ignored (the first command should print no
+matching rule) while generated artifacts remain ignored (the second command
+should print matching ignore rules):
+
+```bash
+git check-ignore -v \
+  "$LIBRARY_ID/submission.yaml" \
+  "$LIBRARY_ID/config/model_list.tsv" \
+  "$LIBRARY_ID/reproduction/download_inputs.sh"
+
+git check-ignore -v \
+  "$LIBRARY_ID/inputs/example.tsv" \
+  "$LIBRARY_ID/outputs/example.gmt" \
+  "$LIBRARY_ID/run_receipt.json"
+```
+
+Do not use `git add -f`. The `.gitignore` update is an intentional wrapper PR
+change and must be included in the final verification digest.
+
+### 5. Verify the completed migration
 
 Codex should already have run the full reproduction. Do not rerun it merely to
 verify. Instead, validate the generated artifacts with the workspace-local
@@ -259,7 +313,7 @@ and require it to fix the migration without silently changing scientific
 parameters or comparing a full legacy GMT with a smoke output. Re-run only
 `./verify-adoption --work-dir "$WORK_DIR"` after Codex has repaired the work.
 
-### 5. Review and submit
+### 6. Review and submit
 
 Inspect comparison reports in `adoption/` and the receipt in `reports/`:
 

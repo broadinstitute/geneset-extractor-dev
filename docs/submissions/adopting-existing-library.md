@@ -22,8 +22,9 @@ python3 -m submission_tools adopt \
 1. Fork both repositories first. The tool uses those forks as writable
    `origin` remotes and configures the canonical repositories as read-only
    `upstream` remotes. It uses upstream `main` as the default baseline and PR
-   target; pass `--base-branch SOME_BRANCH` only when an alternate baseline is
-   explicitly required.
+   target. `--base-branch SOME_BRANCH` selects a common alternate baseline;
+   use `--dig-base-branch` and `--wrapper-base-branch` when the repositories
+   intentionally need different upstream baselines.
 2. Run `adopt` as above. It creates branches named `adopt/MY_LIBRARY`, an
    inventory, legacy-output checksums, and `AI_ADOPTION_PROMPT.md`.
 3. Start a coding agent in the generated workspace and tell it to follow that
@@ -64,6 +65,32 @@ The target wrapper layout is small and explicit:
 <Library>/expected/      expected-output manifest
 <Library>/tests/fixtures/ small redistributable smoke fixtures
 ```
+
+Each adopted library has one canonical local execution path:
+
+```text
+<Library>/run/build_<library>_genesets.sh
+<Library>/config/task_manifest.tsv
+```
+
+The builder dispatches one declared task (or smoke selection) to the pinned
+DIG workflow. It is the path used by `reproduction/reproduce.sh`; do not add a
+second library-local `run/submit_models.sh` convention. When the library needs
+cluster execution, adoption also creates a thin root-level adapter:
+
+```text
+run/submit_<library>_models_cluster.sh
+run/submit_<library>_models_cluster_apptainer.sh
+run/submit_library_models_cluster.sh
+run/submit_library_models_cluster_apptainer.sh
+```
+
+The per-library adapters delegate to their corresponding shared native or
+Apptainer launcher. Both read `task_manifest.tsv`, write a filtered worklist
+by default, and submit a scheduler array only when passed `--submit`; neither
+owns scientific processing or output formatting. Set `SUBMISSION_WORK_DIR` (or
+the explicit `WORK_ROOT` scheduler override) to a location outside the wrapper
+checkout before using either launcher.
 
 All substantive data processing and gene-set generation logic belongs in
 `dig-gene-set-extractors`. `geneset-extractor-dev` may configure, dispatch,

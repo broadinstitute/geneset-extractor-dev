@@ -44,7 +44,9 @@ def main(argv: list[str] | None = None) -> int:
     adopt_parser.add_argument("--github-user", help="GitHub username used to infer both contributor forks.")
     adopt_parser.add_argument("--dig-fork", help="Contributor DIG fork URL.")
     adopt_parser.add_argument("--wrapper-fork", help="Contributor wrapper fork URL.")
-    adopt_parser.add_argument("--base-branch", default=DEFAULT_BASE_BRANCH, help="Upstream baseline and pull-request target branch (default: main).")
+    adopt_parser.add_argument("--base-branch", default=DEFAULT_BASE_BRANCH, help="Fallback upstream baseline and pull-request target branch for both repositories (default: main).")
+    adopt_parser.add_argument("--dig-base-branch", help="DIG upstream baseline and pull-request target branch; overrides --base-branch.")
+    adopt_parser.add_argument("--wrapper-base-branch", help="Wrapper upstream baseline and pull-request target branch; overrides --base-branch.")
     adopt_parser.add_argument("--allow-upstream-origin", action="store_true", help="Advanced maintainer/test override; allow a canonical repository as origin for this isolated workspace.")
     new_library = commands.add_parser("create-library", help="Create an isolated workspace for a brand-new gene-set library.")
     new_library.add_argument("--inputs", required=True, help="Read-only source input file or directory.")
@@ -99,6 +101,7 @@ def main(argv: list[str] | None = None) -> int:
                     existing=Path(args.existing), workspace=Path(args.workspace), library_id=args.library_id,
                     display_name=args.display_name, pattern=args.pattern, github_user=args.github_user,
                     dig_fork=args.dig_fork, wrapper_fork=args.wrapper_fork, base_branch=args.base_branch,
+                    dig_base_branch=args.dig_base_branch, wrapper_base_branch=args.wrapper_base_branch,
                     allow_upstream_origin=args.allow_upstream_origin,
                 )
             except ValueError as exc:

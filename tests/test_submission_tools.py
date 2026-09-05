@@ -75,6 +75,45 @@ class SubmissionToolsTest(unittest.TestCase):
                 self.assertTrue((root / "reproduction/reproduce.sh").exists())
                 self.assertTrue(validate_submission(root).ok)
 
+    def test_scaffold_uses_canonical_builder_and_task_manifest(self) -> None:
+        root = self.scaffold()
+        payload = self.payload(root)
+        self.assertEqual(payload["runtime"]["task_manifest"], "config/task_manifest.tsv")
+        builder = root / payload["runtime"]["local_builder"]
+        self.assertTrue(builder.is_file())
+        self.assertTrue(os.access(builder, os.X_OK))
+        self.assertTrue((root / "config/task_manifest.tsv").is_file())
+        self.assertFalse((root / "run/submit_models.sh").exists())
+
+    def test_shared_cluster_launchers_write_worklist_without_submitting(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            library = root / "Toy"
+            (library / "config").mkdir(parents=True)
+            builder = library / "run/build_toy_genesets.sh"
+            builder.parent.mkdir()
+            builder.write_text("#!/usr/bin/env bash\nset -euo pipefail\n", encoding="utf-8")
+            builder.chmod(builder.stat().st_mode | 0o111)
+            manifest = library / "config/task_manifest.tsv"
+            manifest.write_text(
+                "task_id\tmodel_id\tpartition_id\tenabled\tdig_identifier\toutput_relative_path\n"
+                "task_one\tM1\tP1\ttrue\trna_deg\tgenesets/P1/models/M1\n",
+                encoding="utf-8",
+            )
+            for launcher_name in ("submit_library_models_cluster.sh", "submit_library_models_cluster_apptainer.sh"):
+                with self.subTest(launcher=launcher_name):
+                    launcher = Path(__file__).resolve().parents[1] / "run" / launcher_name
+                    completed = subprocess.run(
+                        ["bash", str(launcher), "--library-id", "Toy", "--library-root", str(library), "--task-manifest", str(manifest)],
+                        cwd=root,
+                        env={**os.environ, "WORK_ROOT": str(root)},
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+                    self.assertIn("Worklist written:", completed.stdout)
+                    self.assertTrue((root / "toy_worklist.tsv").is_file())
+
     def test_ready_scientific_reimplementation_requires_assessment_and_review(self) -> None:
         root = self.scaffold()
         payload = self.payload(root)
