@@ -1,0 +1,2 @@
+output_id	relative_path	role	required	model_id	partition_id
+smoke_extractor	genesets/SMOKE/models/PS1/extractor/genesets.gmt	gene_set	true	SMOKE	IGVF_SMOKE

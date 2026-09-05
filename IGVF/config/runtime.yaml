@@ -1,0 +1,2 @@
+mode: local
+# Set mode: apptainer_cluster only when a reviewed cluster adapter is needed.

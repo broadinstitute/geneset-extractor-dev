@@ -1,0 +1,18 @@
+model_id	description_template
+SMOKE	Synthetic fixture smoke task for the IGVF Perturb-seq DIG workflow.
+IGVFDS0523KGZP	IGVF released Perturb-seq differential-expression signatures.
+IGVFDS0790MEEM	IGVF released Perturb-seq differential-expression signatures.
+IGVFDS2266YDVM	IGVF released Perturb-seq differential-expression signatures.
+IGVFDS2873EPIU	IGVF released Perturb-seq differential-expression signatures.
+IGVFDS3405NGXF	IGVF released Perturb-seq differential-expression signatures.
+IGVFDS3578UWZK	IGVF released Perturb-seq differential-expression signatures.
+IGVFDS3959LESA	IGVF released Perturb-seq differential-expression signatures.
+IGVFDS4003HZAB	IGVF released Perturb-seq differential-expression signatures.
+IGVFDS4252LFRU	IGVF released Perturb-seq differential-expression signatures.
+IGVFDS4389OUWU	IGVF released Perturb-seq differential-expression signatures.
+IGVFDS5239SBBT	IGVF released Perturb-seq differential-expression signatures.
+IGVFDS6332VCTO	IGVF released Perturb-seq differential-expression signatures.
+IGVFDS6924DJAZ	IGVF released Perturb-seq differential-expression signatures.
+IGVFDS7132YVKO	IGVF released Perturb-seq differential-expression signatures.
+IGVFDS7340YDHF	IGVF released Perturb-seq differential-expression signatures.
+IGVFDS9445RJOU	IGVF released Perturb-seq differential-expression signatures.
