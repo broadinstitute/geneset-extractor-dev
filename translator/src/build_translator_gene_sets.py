@@ -52,6 +52,59 @@ def download_hgnc_genes(output_file: str = "../data/hgnc_ncbi_genes.json"):
     return ncbi_genes
 
 
+def download_file(url, output_path, chunk_size=1048576):
+    """
+    Download a file from URL in chunks without loading entire file to memory.
+    
+    Args:
+        url: URL to download from.
+        output_path: Path to save the downloaded file.
+        chunk_size: Size of chunks to download in bytes (default 1MB).
+    
+    Returns:
+        Path: Absolute path to the downloaded file.
+    """
+    response = requests.get(url, stream=True)
+    response.raise_for_status()
+    
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    bytes_downloaded = 0
+    with open(output_path, 'wb') as f:
+        for chunk in response.iter_content(chunk_size=chunk_size):
+            if chunk:
+                f.write(chunk)
+                bytes_downloaded += len(chunk)
+                if bytes_downloaded % (500 * 1048576) == 0:
+                    print(f"Downloaded {bytes_downloaded / 1048576:.1f}MB...")
+    
+    return output_path.absolute()
+
+
+def download_network():
+    """
+    Download the Translator network from https://kgx-storage.ci.transltr.io/releases/translator_kg_open/latest/
+    Downloads files in chunks to avoid loading entire files into memory.
+    """
+    network_url = "https://kgx-storage.ci.transltr.io/releases/translator_kg_open/latest/"
+    edges_file_url = network_url + "edges.jsonl"
+    nodes_file_url = network_url + "nodes.jsonl"
+    print(f"Downloading Translator network from {network_url}...")
+    edges_path = Path("../data/edges.jsonl")
+    nodes_path = Path("../data/nodes.jsonl")
+    
+    # Download edges file
+    print(f"Downloading edges from {edges_file_url}...")
+    edges_abs_path = download_file(edges_file_url, edges_path)
+    print(f"Downloaded edges to {edges_abs_path}")
+
+    # Download nodes file
+    print(f"Downloading nodes from {nodes_file_url}...")
+    nodes_abs_path = download_file(nodes_file_url, nodes_path)
+    print(f"Downloaded nodes to {nodes_abs_path}")
+
+
 def create_gene_neighbors_database(db_file: str = "../data/translator_gene_neighbors.sqlite"):
     """
     Create a SQLite database with a single table to store gene neighbor relationships.
@@ -153,15 +206,18 @@ def load_node_names(file_path: str = "../data/nodes.jsonl"):
     return node_names
 
 
-def process_line(line: str, conn, hgnc_genes: dict, predicate_config: dict = None):
+def process_line(line: str, conn, hgnc_genes: dict, predicate_config: dict):
     """
-    Process a single JSON line from the edges file and store in database if subject is a human gene.
+    Process a single JSON line from the edges file and store in database if either subject or object is a human gene.
     
     Args:
         line: A single JSON line from the edges file.
         conn: SQLite connection object.
         hgnc_genes: Dictionary of HGNC genes (mapping NCBIGene IDs to gene info).
         predicate_config: Dictionary of predicate inverse configuration.
+
+    Returns:
+        int: Number of human gene neighbor relationships stored (0, 1, or 2).
     """
     if predicate_config is None:
         predicate_config = {}
@@ -171,22 +227,22 @@ def process_line(line: str, conn, hgnc_genes: dict, predicate_config: dict = Non
     object_id = edge.get("object", "")
     predicate = edge.get("predicate", "")
     subject_id = edge.get("subject", "")
+    neighbor_count = 0
 
-    #check if object is a human gene
+    # Check if object is a human gene
     if object_id in hgnc_genes:
         gene_info = hgnc_genes[object_id]
         gene_symbol = gene_info.get("symbol", "")
         neighbor_id = subject_id
-        is_inverse = False  # Not inverse relationship since object is the human gene
+        is_inverse = False  # Not inverse: human gene is the object, subject is the neighbor
 
         if gene_symbol and neighbor_id and predicate:
             insert_gene_neighbor(conn, neighbor_id, predicate, is_inverse, gene_symbol)
-            return True
-        else:
-            return False
+            neighbor_count += 1
+    
 
     # Check if subject is a human gene
-    if subject_id in hgnc_genes:
+    if subject_id in hgnc_genes and object_id != subject_id:
         gene_info = hgnc_genes[subject_id]
         gene_symbol = gene_info.get("symbol", "")
         neighbor_id = object_id
@@ -196,15 +252,14 @@ def process_line(line: str, conn, hgnc_genes: dict, predicate_config: dict = Non
         if predicate in predicate_config:
             is_symmetric = predicate_config[predicate].get("symmetric", False)
         
-        # For symmetric predicates, don't mark as inverse
+        # For symmetric predicates, is_inverse=False; for directional, is_inverse=True
         is_inverse = not is_symmetric
 
         if gene_symbol and neighbor_id and predicate:
             insert_gene_neighbor(conn, neighbor_id, predicate, is_inverse, gene_symbol)
-            return True
-        else:
-            return False
-    return False
+            neighbor_count += 1
+
+    return neighbor_count
 
 
 def get_geneset_name(neighbor_id: str, predicate: str, is_inverse: bool, 
@@ -381,8 +436,8 @@ def process_edges_file():
     # Load predicate inverse configuration
     predicate_config = load_predicate_inverse_config()
     
-    # Process edges file - single line (replace with your actual edges file path)
-    edges_file = "../data/edges.jsonl"  # Update this path to your edges file
+    # Process edges file
+    edges_file = "../data/edges.jsonl"
     counter_in = 0
     counter_out = 0
     if Path(edges_file).exists():
@@ -418,22 +473,25 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build translator gene sets from HGNC and edges data.")
     parser.add_argument("-d", "--download", action="store_true", help="Download HGNC genes from the remote source")
     parser.add_argument("-p", "--process", action="store_true", help="Process edges file and populate the database")
-    parser.add_argument("-x", "--export", action="store_true", help="Export gene neighbors data (not implemented yet)")
+    parser.add_argument("-x", "--export", action="store_true", help="Export gene neighbors as GMT genesets")
     
     args = parser.parse_args()
     
-    # If no arguments provided, show help
+    # If no arguments provided, run all three steps
     if not any([args.download, args.process, args.export]):
-        parser.print_help()
-    else:
-        if args.download:
-            print("Downloading HGNC genes...")
-            download_hgnc_genes()
-        
-        if args.process:
-            print("Processing edges file...")
-            process_edges_file()
-        
-        if args.export:
-            print("Exporting gene sets to GMT format...")
-            export_gene_sets()
+        args.download = True
+        args.process = True
+        args.export = True
+    
+    if args.download:
+        print("Downloading HGNC genes...")
+        download_hgnc_genes()
+        download_network()
+    
+    if args.process:
+        print("Processing edges file...")
+        process_edges_file()
+    
+    if args.export:
+        print("Exporting gene sets to GMT format...")
+        export_gene_sets()
