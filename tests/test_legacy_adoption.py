@@ -13,7 +13,7 @@ from pathlib import Path
 
 from submission_tools.adoption import adopt, adoption_status, gitignore_allowlist, inventory_legacy
 from submission_tools import adoption_workspace
-from submission_tools.adoption_workspace import DEFAULT_BASE_BRANCH, _compare_references, _is_fork_origin, _open_draft_pr, _workspace_digest, _write_json, create_workspace, load_workspace, safe_stage, submit_workspace, validate_workspace_location, verify_workspace
+from submission_tools.adoption_workspace import DEFAULT_BASE_BRANCH, _compare_references, _is_fork_origin, _open_draft_pr, _workspace_digest, _write_json, create_workspace, export_adoption_handoff, import_adoption_handoff, load_workspace, safe_stage, submit_workspace, validate_workspace_location, verify_workspace
 from submission_tools.legacy_compare import compare_gmt
 from submission_tools.validator import validate_submission
 
@@ -391,6 +391,36 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertNotEqual(completed.returncode, 0)  # incomplete DIG fixture, not import origin
             self.assertIn(f"module: {expected}", completed.stdout)
             self.assertNotIn("outside this adoption workspace", completed.stdout)
+
+    def test_authoring_handoff_round_trip_excludes_runtime_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            legacy = self.legacy_library(root)
+            dig_upstream, dig = self._remote(root, "dig-upstream"), self._remote(root, "dig-fork")
+            wrapper_upstream, wrapper = self._remote(root, "wrapper-upstream", with_tools=True), self._remote(root, "wrapper-fork", with_tools=True)
+            old_constants = adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER
+            adoption_workspace.CANONICAL_DIG = str(dig_upstream); adoption_workspace.CANONICAL_WRAPPER = str(wrapper_upstream)
+            try:
+                source = create_workspace(
+                    existing=legacy, workspace=root / "remote-source", library_id="Adopted",
+                    display_name=None, pattern="generic", github_user=None, dig_fork=str(dig),
+                    wrapper_fork=str(wrapper), ai_mode="authoring",
+                )
+                generated = source / "geneset-extractor-dev" / "Adopted" / "outputs" / "generated.gmt"
+                generated.parent.mkdir(parents=True)
+                generated.write_text("not transportable\n", encoding="utf-8")
+                handoff = export_adoption_handoff(source, root / "authoring-handoff.tar.gz")
+                with __import__("tarfile").open(handoff, "r:gz") as archive:
+                    self.assertFalse(any("generated.gmt" in member.name for member in archive.getmembers()))
+                imported = import_adoption_handoff(handoff, root / "local-author", ai_mode="authoring")
+            finally:
+                adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER = old_constants
+            _import_root, manifest = load_workspace(imported)
+            self.assertEqual(manifest["workspace"]["ai_mode"], "authoring")
+            self.assertEqual(manifest["workspace"]["root"], str(imported))
+            self.assertTrue((imported / "AI_ADOPTION_PROMPT.md").is_file())
+            self.assertIn("Authoring-host mode", (imported / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8"))
+            self.assertFalse((imported / "geneset-extractor-dev" / "Adopted" / "outputs" / "generated.gmt").exists())
 
     def test_explicit_full_reference_mapping_allows_valid_workspace_verification(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

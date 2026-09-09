@@ -98,6 +98,30 @@ execute, refresh, and publish that logic, but must not independently implement
 it. The prompt identifies the selected `--pattern` (`gtex`, `motrpac`,
 `hubmap`, `lincs_l1000`, or `generic`) and directs the agent to the existing
 DIG submission contract before it creates a wrapper dispatcher.
+
+## Remote/HPC reproduction
+
+If the coding workstation should not run full datasets, pass
+`--ai-mode authoring` to `adopt`, transfer the code-only handoff made by
+`export-adoption`, and create a local workspace with `import-adoption`.
+Authoring mode runs only static and smoke checks:
+
+```bash
+./verify-adoption --stage authoring
+```
+
+It cannot authorize submission. Export the reviewed local workspace, import
+it into a fresh remote/HPC workspace with `--legacy-root`, explicitly run full
+reproduction there, and then run:
+
+```bash
+./verify-adoption --stage full --work-dir work-full
+./submit-adoption --yes
+```
+
+See [remote-reproduction.md](remote-reproduction.md) for the complete,
+copyable procedure. Handoffs exclude inputs, generated outputs, work
+directories, receipts, and caches; they are not biological-data transports.
 4. Verify the migration from the workspace root. This helper deliberately uses
    the `submission_tools` code in the workspace's `geneset-extractor-dev`
    clone, so it cannot silently use another checkout or installed package:

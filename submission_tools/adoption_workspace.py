@@ -13,6 +13,9 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
+import uuid
 import csv
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,6 +36,9 @@ CANONICAL_WRAPPER = "https://github.com/broadinstitute/geneset-extractor-dev.git
 DEFAULT_BASE_BRANCH = "main"
 WORKSPACE_MANIFEST = ".adoption-workspace.yaml"
 RUNTIME_OUTPUT_ENV = "SUBMISSION_WORK_DIR"
+HANDOFF_SCHEMA_VERSION = "1.0.0"
+HANDOFF_EXCLUDED_PARTS = {".git", "inputs", "outputs", "work", "reports", "__pycache__"}
+HANDOFF_EXCLUDED_NAMES = {"run_receipt.json"}
 
 
 def _run(args: list[str], cwd: Path | None = None, *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -167,7 +173,10 @@ def create_workspace(
     dig_base_branch: str | None = None,
     wrapper_base_branch: str | None = None,
     allow_upstream_origin: bool = False,
+    ai_mode: str = "full",
 ) -> Path:
+    if ai_mode not in {"full", "authoring"}:
+        raise ValueError("--ai-mode must be full or authoring")
     workspace, legacy = validate_workspace_location(workspace, existing)
     dig_fork, wrapper_fork = _fork_urls(github_user, dig_fork, wrapper_fork, allow_upstream_origin=allow_upstream_origin)
     dig_base_branch = dig_base_branch or base_branch
@@ -198,8 +207,8 @@ def create_workspace(
         payload["reproduction"]["output_directory_environment"] = RUNTIME_OUTPUT_ENV
         _write_json(submission, payload)
         manifest = {
-            "schema_version": "1.0.0", "library_id": library_id,
-            "workspace": {"root": str(workspace), "upstream_origin_mode": allow_upstream_origin},
+            "schema_version": "1.1.0", "library_id": library_id,
+            "workspace": {"root": str(workspace), "id": str(uuid.uuid4()), "upstream_origin_mode": allow_upstream_origin, "ai_mode": ai_mode},
             "legacy": {"source_path": str(legacy), "read_only": True, "inventory": "adoption/inventory.json", "reference": "adoption/legacy_reference.json"},
             "repositories": {
                 "dig": {"path": "dig-gene-set-extractors", "origin": dig_fork, "upstream": CANONICAL_DIG, "base_branch": dig_base_branch, "work_branch": work_branch},
@@ -208,7 +217,7 @@ def create_workspace(
             "tooling": {"wrapper_commit": _git(workspace / "geneset-extractor-dev", "rev-parse", "HEAD"), "submission_tools_path": "geneset-extractor-dev/submission_tools"},
             "submission": {"wrapper_library_path": f"geneset-extractor-dev/{library_id}", "pattern": pattern},
             "runtime": {"work_directory": "work", "output_directory_environment": RUNTIME_OUTPUT_ENV},
-            "verification": {"last_result": None, "last_receipt": None, "workspace_digest": None},
+            "verification": {"last_result": None, "last_receipt": None, "workspace_digest": None, "stage": None},
         }
         _write_json(workspace / WORKSPACE_MANIFEST, manifest)
         _write_workspace_helper(workspace / "verify-adoption", "verify-adoption")
@@ -223,6 +232,18 @@ def create_workspace(
 
 def _workspace_prompt(workspace: Path, manifest: dict[str, Any], inventory: dict[str, Any]) -> str:
     pattern = str(manifest.get("submission", {}).get("pattern", "generic"))
+    authoring = manifest.get("workspace", {}).get("ai_mode") == "authoring"
+    role_instructions = "" if not authoring else """
+## Authoring-host mode
+
+This workspace is intentionally for code authoring and lightweight local
+verification only. Implement the complete production path, but do **not**
+download full source inputs, submit scheduler jobs, run full reproduction, or
+claim full legacy equivalence here. Use only small redistributable fixtures.
+After local work, run `./verify-adoption --stage authoring`; it cannot make the
+adoption ready. Export a handoff and complete full reproduction, provenance,
+and comparison on the designated remote/HPC host.
+"""
     return f"""# AI adoption instructions
 
 You are operating inside an isolated adoption workspace: `{workspace}`.
@@ -239,6 +260,7 @@ Wrapper branch: `{manifest['repositories']['wrapper']['work_branch']}`
 DIG baseline branch: `{manifest['repositories']['dig']['base_branch']}`
 Wrapper baseline branch: `{manifest['repositories']['wrapper']['base_branch']}`
 Maintainer upstream-origin mode: `{manifest['workspace']['upstream_origin_mode']}`
+Workspace role: `{'authoring' if authoring else 'full'}`
 
 {architecture_guidance(pattern, inventory)}
 
@@ -262,8 +284,208 @@ the workspace root.
 
 From this workspace root, run `./verify-adoption`; it deliberately imports `submission_tools` from `./geneset-extractor-dev`, not from another checkout or an installed package.
 
+{role_instructions}
+
 Inventory: `adoption/inventory.json` ({len(inventory.get('gene_set_outputs', []))} legacy GMT candidates)
 """
+
+
+def _handoff_safe_path(path: Path) -> bool:
+    """Whether a repository-relative file is safe to transport as source."""
+    return (
+        not path.is_absolute()
+        and ".." not in path.parts
+        and not any(part in HANDOFF_EXCLUDED_PARTS for part in path.parts)
+        and path.name not in HANDOFF_EXCLUDED_NAMES
+    )
+
+
+def _handoff_overlay_paths(repo: Path, *, library_name: str | None = None) -> list[Path]:
+    """Return source/configuration files, never ignored runtime artifacts."""
+    listed = _run(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], repo)
+    if listed.returncode:
+        raise ValueError(listed.stderr.strip() or f"could not list handoff files for {repo}")
+    paths = {repo / item for item in listed.stdout.split("\0") if item}
+    # A deny-by-default wrapper .gitignore may hide a newly scaffolded library
+    # before its reviewed allowlist is applied.  Include its source tree after
+    # applying the same strict runtime exclusions.
+    if library_name:
+        library = repo / library_name
+        if library.is_dir():
+            paths.update(path for path in library.rglob("*") if path.is_file())
+    selected: list[Path] = []
+    for path in sorted(paths):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(repo)
+        if not _handoff_safe_path(rel) or path.stat().st_size > 5 * 1024 * 1024:
+            continue
+        selected.append(path)
+    return selected
+
+
+def _tar_add_file(archive: tarfile.TarFile, source: Path, name: str) -> None:
+    archive.add(source, arcname=name, recursive=False)
+
+
+def _safe_tar_members(archive: tarfile.TarFile) -> list[tarfile.TarInfo]:
+    members = archive.getmembers()
+    for member in members:
+        candidate = Path(member.name)
+        if candidate.is_absolute() or ".." in candidate.parts or member.issym() or member.islnk():
+            raise ValueError(f"unsafe handoff archive member: {member.name}")
+    return members
+
+
+def export_adoption_handoff(workspace: Path, output: Path) -> Path:
+    """Create a portable code/configuration handoff without runtime data.
+
+    Git bundles preserve the exact history and a small overlay preserves the
+    newly-created, potentially uncommitted submission scaffold.  The archive
+    intentionally excludes inputs, outputs, receipts, caches, and `.git`.
+    """
+    root, manifest = load_workspace(workspace)
+    output = output.expanduser().resolve()
+    if output.exists():
+        raise ValueError(f"handoff output already exists: {output}")
+    if root == output.parent or root in output.parents:
+        raise ValueError("handoff output must be outside the adoption workspace")
+    dig, wrapper, library, _legacy = _workspace_paths(root, manifest)
+    with tempfile.TemporaryDirectory(prefix="submission-handoff-") as temporary:
+        temporary_root = Path(temporary)
+        bundles = temporary_root / "repositories"
+        bundles.mkdir()
+        repository_heads: dict[str, str] = {}
+        for role, repo in (("dig", dig), ("wrapper", wrapper)):
+            bundle = bundles / f"{role}.bundle"
+            completed = _run(["git", "bundle", "create", str(bundle), "--all"], repo)
+            if completed.returncode:
+                raise ValueError(completed.stderr.strip() or f"could not create {role} Git bundle")
+            repository_heads[role] = _git(repo, "rev-parse", "HEAD")
+        handoff = {
+            "schema_version": HANDOFF_SCHEMA_VERSION,
+            "workspace_id": manifest.get("workspace", {}).get("id"),
+            "library_id": manifest.get("library_id"),
+            "adoption_mode": manifest.get("workspace", {}).get("ai_mode", "full"),
+            "repositories": manifest.get("repositories", {}),
+            "repository_heads": repository_heads,
+            "legacy": {"inventory": manifest.get("legacy", {}).get("inventory"), "reference": manifest.get("legacy", {}).get("reference")},
+            "excluded": [".git/", "inputs/", "outputs/", "work/", "reports/", "__pycache__/", "run_receipt.json"],
+        }
+        handoff_path = temporary_root / "handoff.json"
+        _write_json(handoff_path, handoff)
+        with tarfile.open(output, "w:gz") as archive:
+            _tar_add_file(archive, handoff_path, "handoff.json")
+            for role in ("dig", "wrapper"):
+                _tar_add_file(archive, bundles / f"{role}.bundle", f"repositories/{role}.bundle")
+            for path in (root / WORKSPACE_MANIFEST, root / "AI_ADOPTION_PROMPT.md", root / "verify-adoption", root / "submit-adoption"):
+                if path.is_file():
+                    _tar_add_file(archive, path, f"workspace/{path.name}")
+            adoption = root / "adoption"
+            if adoption.is_dir():
+                for path in sorted(item for item in adoption.rglob("*") if item.is_file()):
+                    rel = path.relative_to(root)
+                    if _handoff_safe_path(rel):
+                        _tar_add_file(archive, path, f"workspace/{rel}")
+            for role, repo, library_name in (("dig", dig, None), ("wrapper", wrapper, library.name)):
+                for path in _handoff_overlay_paths(repo, library_name=library_name):
+                    _tar_add_file(archive, path, f"overlay/{role}/{path.relative_to(repo)}")
+    return output
+
+
+def import_adoption_handoff(bundle: Path, workspace: Path, *, legacy_root: Path | None = None, ai_mode: str = "authoring") -> Path:
+    """Rehydrate an isolated workspace from a handoff on another host."""
+    if ai_mode not in {"full", "authoring"}:
+        raise ValueError("--ai-mode must be full or authoring")
+    bundle = bundle.expanduser().resolve()
+    if not bundle.is_file():
+        raise ValueError(f"handoff bundle does not exist: {bundle}")
+    workspace = workspace.expanduser().resolve()
+    if workspace.exists() and any(workspace.iterdir()):
+        raise ValueError(f"import workspace must be empty: {workspace}")
+    with tarfile.open(bundle, "r:gz") as archive, tempfile.TemporaryDirectory(prefix="submission-handoff-import-") as temporary:
+        temporary_root = Path(temporary)
+        members = _safe_tar_members(archive)
+        for member in members:
+            if member.isfile():
+                destination = temporary_root / member.name
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                source = archive.extractfile(member)
+                if source is None:
+                    raise ValueError(f"could not read handoff member: {member.name}")
+                destination.write_bytes(source.read())
+        handoff_path = temporary_root / "handoff.json"
+        if not handoff_path.is_file():
+            raise ValueError("handoff archive has no handoff.json")
+        handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+        if handoff.get("schema_version") != HANDOFF_SCHEMA_VERSION or not isinstance(handoff.get("repositories"), dict):
+            raise ValueError("unsupported or malformed adoption handoff")
+        workspace.mkdir(parents=True, exist_ok=True)
+        for role, target_name in (("dig", "dig-gene-set-extractors"), ("wrapper", "geneset-extractor-dev")):
+            source_bundle = temporary_root / "repositories" / f"{role}.bundle"
+            if not source_bundle.is_file():
+                raise ValueError(f"handoff archive has no {role} repository bundle")
+            destination = workspace / target_name
+            completed = _run(["git", "clone", str(source_bundle), str(destination)])
+            if completed.returncode:
+                raise ValueError(completed.stderr.strip() or f"could not clone {role} handoff bundle")
+            declared = handoff["repositories"].get(role, {})
+            branch = str(declared.get("work_branch", ""))
+            if not branch:
+                raise ValueError(f"handoff {role} repository has no work branch")
+            # A bundle clone may choose its historical default branch rather
+            # than the adoption work branch. Fetch that named ref explicitly.
+            fetched = _run(["git", "fetch", str(source_bundle), f"refs/heads/{branch}:refs/heads/{branch}"], destination)
+            if fetched.returncode:
+                raise ValueError(f"handoff {role} bundle does not contain {branch}: {fetched.stderr.strip()}")
+            _git(destination, "checkout", branch)
+            expected_head = str(handoff.get("repository_heads", {}).get(role, ""))
+            if expected_head and _git(destination, "rev-parse", "HEAD") != expected_head:
+                raise ValueError(f"handoff {role} work branch does not match its recorded commit")
+            _git(destination, "remote", "set-url", "origin", str(declared.get("origin", "")))
+            _git(destination, "remote", "add", "upstream", str(declared.get("upstream", "")))
+        for role, target_name in (("dig", "dig-gene-set-extractors"), ("wrapper", "geneset-extractor-dev")):
+            overlay = temporary_root / "overlay" / role
+            if overlay.is_dir():
+                for source in sorted(path for path in overlay.rglob("*") if path.is_file()):
+                    rel = source.relative_to(overlay)
+                    if not _handoff_safe_path(rel):
+                        raise ValueError(f"unsafe handoff overlay path: {rel}")
+                    destination = workspace / target_name / rel
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, destination)
+        workspace_source = temporary_root / "workspace"
+        if workspace_source.is_dir():
+            for source in sorted(path for path in workspace_source.rglob("*") if path.is_file()):
+                rel = source.relative_to(workspace_source)
+                if not _handoff_safe_path(rel):
+                    raise ValueError(f"unsafe handoff workspace path: {rel}")
+                destination = workspace / rel
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+    manifest_path = workspace / WORKSPACE_MANIFEST
+    manifest = load(manifest_path)
+    if not isinstance(manifest, dict):
+        raise ValueError("handoff workspace manifest is malformed")
+    manifest.setdefault("workspace", {})["root"] = str(workspace)
+    manifest["workspace"]["ai_mode"] = ai_mode
+    manifest["workspace"]["imported_from_handoff"] = bundle.name
+    if legacy_root is not None:
+        resolved_legacy = legacy_root.expanduser().resolve()
+        if not resolved_legacy.is_dir():
+            raise ValueError(f"--legacy-root does not exist: {resolved_legacy}")
+        manifest.setdefault("legacy", {})["source_path"] = str(resolved_legacy)
+    manifest.setdefault("handoff", {})["schema_version"] = HANDOFF_SCHEMA_VERSION
+    manifest["handoff"]["repository_heads"] = handoff["repository_heads"]
+    manifest["verification"] = {"last_result": None, "last_receipt": None, "workspace_digest": None, "stage": None}
+    _write_json(manifest_path, manifest)
+    inventory = json.loads((workspace / "adoption" / "inventory.json").read_text(encoding="utf-8"))
+    _write_workspace_helper(workspace / "verify-adoption", "verify-adoption")
+    _write_workspace_helper(workspace / "submit-adoption", "submit-adoption")
+    (workspace / "AI_ADOPTION_PROMPT.md").write_text(_workspace_prompt(workspace, manifest, inventory), encoding="utf-8")
+    for directory in (workspace / "reports", workspace / "work", workspace / "legacy"):
+        directory.mkdir(exist_ok=True)
+    return workspace
 
 
 def load_workspace(workspace: Path) -> tuple[Path, dict[str, Any]]:
@@ -504,7 +726,16 @@ def _provenance_stage(library: Path, payload: dict[str, Any], scope: str, *, art
     return messages, {"status": status, "issues": [issue.__dict__ for issue in result.issues]}
 
 
-def verify_workspace(workspace: Path, *, work_dir: Path | None = None) -> tuple[bool, list[str]]:
+def verify_workspace(workspace: Path, *, work_dir: Path | None = None, stage: str = "all") -> tuple[bool, list[str]]:
+    """Verify an adoption at an explicit stage.
+
+    ``authoring`` is deliberately limited to static and smoke validation; it
+    cannot be used to authorize a submission.  ``full`` validates full
+    artifacts already produced by an explicit remote run.  ``all`` preserves
+    the historical one-workspace behavior.
+    """
+    if stage not in {"all", "authoring", "full"}:
+        raise ValueError("--stage must be all, authoring, or full")
     root, manifest = load_workspace(workspace)
     tooling_ok, expected_tooling, active_tooling, tooling_commit = _active_tooling(root, manifest)
     if not tooling_ok:
@@ -519,7 +750,8 @@ def verify_workspace(workspace: Path, *, work_dir: Path | None = None) -> tuple[
         if _normalize_remote(str(declared["origin"])) == _normalize_remote(str(declared["upstream"])) and not maintainer_mode:
             messages.append(f"ERROR: {role} uses canonical upstream as origin without the recorded --allow-upstream-origin override")
     if not legacy.is_dir():
-        messages.append(f"ERROR: legacy source is missing: {legacy}")
+        level = "WARNING" if stage == "authoring" else "ERROR"
+        messages.append(f"{level}: legacy source is missing: {legacy}")
     else:
         changed = _legacy_changed(root, manifest, legacy)
         messages.extend(f"ERROR: Legacy source changed during adoption: {item}" for item in changed)
@@ -536,31 +768,38 @@ def verify_workspace(workspace: Path, *, work_dir: Path | None = None) -> tuple[
     dirty = bool(_git(dig, "status", "--porcelain"))
     coordinated = coordinated_validate(library, dig, smoke=True, development_dig_checkout=dirty)
     messages.extend(f"{issue.level.upper()}: DIG {issue.code}: {issue.message}" for issue in coordinated.issues)
-    # A migrated library supplies the actual reproduction command.  It is only
-    # executed by this explicit local command, never by CI automation.
     payload = load(library / "submission.yaml")
     artifact_root = _runtime_output_root(root, library, payload, work_dir=work_dir)
     runtime_environment = _runtime_environment(root, library, payload, work_dir=work_dir)
-    smoke = str(payload["reproduction"]["smoke_test_command"]).split()
-    reproduced = _run(smoke, library, env=runtime_environment)
-    if reproduced.returncode:
-        messages.append("ERROR: smoke reproduction failed: " + (reproduced.stderr.strip() or reproduced.stdout.strip()))
-    messages.extend(_check_declared_smoke_outputs(library, payload, artifact_root=artifact_root))
     provenance_stages: dict[str, object] = {}
-    provenance_messages, provenance_stages["smoke"] = _provenance_stage(library, payload, "smoke", artifact_root=artifact_root)
-    messages.extend(provenance_messages)
-    messages.append("INFO: smoke verification completed; full legacy equivalence is evaluated only for explicitly declared full mappings.")
-    comparison_messages, full_compared = _compare_references(root, library, manifest, payload, work_dir=work_dir)
-    messages.extend(comparison_messages)
-    provenance_messages, provenance_stages["full"] = _provenance_stage(library, payload, "full", artifact_root=artifact_root)
-    messages.extend(provenance_messages)
+    full_compared = False
+    if stage in {"all", "authoring"}:
+        # A migrated library supplies the actual reproduction command.  It is
+        # executed only by this explicit local command, never by CI.
+        smoke = str(payload["reproduction"]["smoke_test_command"]).split()
+        reproduced = _run(smoke, library, env=runtime_environment)
+        if reproduced.returncode:
+            messages.append("ERROR: smoke reproduction failed: " + (reproduced.stderr.strip() or reproduced.stdout.strip()))
+        messages.extend(_check_declared_smoke_outputs(library, payload, artifact_root=artifact_root))
+        provenance_messages, provenance_stages["smoke"] = _provenance_stage(library, payload, "smoke", artifact_root=artifact_root)
+        messages.extend(provenance_messages)
+    if stage == "authoring":
+        messages.append("INFO: authoring verification completed; full reproduction, full comparison, and full provenance are pending on the reproduction host.")
+    if stage in {"all", "full"}:
+        messages.append("INFO: full legacy equivalence is evaluated only for explicitly declared full mappings.")
+        comparison_messages, full_compared = _compare_references(root, library, manifest, payload, work_dir=work_dir)
+        messages.extend(comparison_messages)
+        provenance_messages, provenance_stages["full"] = _provenance_stage(library, payload, "full", artifact_root=artifact_root)
+        messages.extend(provenance_messages)
     receipt = root / "reports" / "run_receipt.json"
     ok = not any(message.startswith("ERROR:") for message in messages)
     command = [str(root / "verify-adoption")]
+    if stage != "all":
+        command.extend(["--stage", stage])
     if work_dir is not None:
         command.extend(["--work-dir", str(artifact_root)])
     write_receipt(library / "submission.yaml", dig, {"ok": ok, "messages": messages, "provenance_validation": provenance_stages}, receipt, command)
-    manifest["verification"] = {"last_result": "PASS" if ok else "FAILED", "last_receipt": str(receipt.relative_to(root)), "workspace_digest": _workspace_digest(root, manifest), "work_directory": str(artifact_root.relative_to(root)) if artifact_root.is_relative_to(root) else str(artifact_root), "full_comparison_completed": full_compared, "provenance_complete": provenance_stages, "completed_at": datetime.now(timezone.utc).isoformat()}
+    manifest["verification"] = {"last_result": "PASS" if ok else "FAILED", "last_receipt": str(receipt.relative_to(root)), "workspace_digest": _workspace_digest(root, manifest), "work_directory": str(artifact_root.relative_to(root)) if artifact_root.is_relative_to(root) else str(artifact_root), "full_comparison_completed": full_compared, "provenance_complete": provenance_stages, "stage": stage, "completed_at": datetime.now(timezone.utc).isoformat()}
     _write_json(root / WORKSPACE_MANIFEST, manifest)
     return ok, messages
 
@@ -779,6 +1018,8 @@ def submit_workspace(workspace: Path, *, yes: bool = False, allow_upstream_origi
     verification = manifest.get("verification", {})
     if verification.get("last_result") != "PASS" or verification.get("workspace_digest") != _workspace_digest(root, manifest):
         return False, ["ERROR: verification is missing or stale; run verify-adoption again"]
+    if verification.get("stage") == "authoring":
+        return False, ["ERROR: authoring-only verification cannot authorize submission; run full reproduction on the reproduction host and then verify-adoption --stage full"]
     if not verification.get("full_comparison_completed", False):
         return False, ["ERROR: full legacy equivalence is not complete; declare and verify an explicit full comparison mapping before submission"]
     if _legacy_changed(root, manifest, legacy):

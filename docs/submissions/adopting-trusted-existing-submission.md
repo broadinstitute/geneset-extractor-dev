@@ -22,6 +22,10 @@ The normal contributor workflow uses forks. This guide demonstrates the
 explicit maintainer/test override, in which same-repository
 `adopt/<library_id>` branches target canonical `main`.
 
+If Codex will author code on a workstation while full reproduction runs on a
+remote or HPC host, use the separate
+[remote authoring and full reproduction guide](remote-reproduction.md).
+
 ## Short version: `exact_reproduction`
 
 ```bash

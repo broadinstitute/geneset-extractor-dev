@@ -41,6 +41,8 @@ If gene sets already exist outside this framework, follow
 migrate them into the same contract. Maintainers adopting a trusted existing
 submission should use the complete
 [trusted-adoption tutorial](adopting-trusted-existing-submission.md).
+For local AI authoring with remote/HPC full reproduction, use
+[remote authoring and full reproduction](remote-reproduction.md).
 
 For a brand-new source library, use the isolated
 [creating-new-library workflow](creating-new-library.md). It creates a fresh

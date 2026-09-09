@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .discovery import discover_submissions
 from .adoption import adopt, adoption_status
-from .adoption_workspace import DEFAULT_BASE_BRANCH, _active_tooling, load_workspace, create_workspace, submit_workspace, verify_workspace
+from .adoption_workspace import DEFAULT_BASE_BRANCH, _active_tooling, export_adoption_handoff, import_adoption_handoff, load_workspace, create_workspace, submit_workspace, verify_workspace
 from .library_workspace import create_library_workspace, load_library_workspace, submit_library_workspace, verify_library_workspace
 from .coordinated import coordinated_validate
 from .legacy_compare import compare_gmt
@@ -48,6 +48,15 @@ def main(argv: list[str] | None = None) -> int:
     adopt_parser.add_argument("--dig-base-branch", help="DIG upstream baseline and pull-request target branch; overrides --base-branch.")
     adopt_parser.add_argument("--wrapper-base-branch", help="Wrapper upstream baseline and pull-request target branch; overrides --base-branch.")
     adopt_parser.add_argument("--allow-upstream-origin", action="store_true", help="Advanced maintainer/test override; allow a canonical repository as origin for this isolated workspace.")
+    adopt_parser.add_argument("--ai-mode", choices=["full", "authoring"], default="full", help="Generate a full-workflow or lightweight authoring-only AI prompt (default: full).")
+    export_handoff = commands.add_parser("export-adoption", help="Create a portable code/configuration handoff for another host.")
+    export_handoff.add_argument("--workspace", required=True)
+    export_handoff.add_argument("--output", required=True, help="New .tar.gz handoff archive outside the workspace.")
+    import_handoff = commands.add_parser("import-adoption", help="Create a fresh isolated workspace from an adoption handoff.")
+    import_handoff.add_argument("--bundle", required=True)
+    import_handoff.add_argument("--workspace", required=True)
+    import_handoff.add_argument("--legacy-root", help="Read-only legacy root available on this host; omit on an authoring-only host.")
+    import_handoff.add_argument("--ai-mode", choices=["full", "authoring"], default="authoring")
     new_library = commands.add_parser("create-library", help="Create an isolated workspace for a brand-new gene-set library.")
     new_library.add_argument("--inputs", required=True, help="Read-only source input file or directory.")
     new_library.add_argument("--library-id", required=True)
@@ -70,6 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     verify = commands.add_parser("verify-adoption", help="Verify an isolated adoption workspace.")
     verify.add_argument("--workspace", required=True)
     verify.add_argument("--work-dir", help="Workspace-relative or absolute generated-artifact directory; defaults to work.")
+    verify.add_argument("--stage", choices=["all", "authoring", "full"], default="all", help="Verification stage; authoring runs only static/smoke checks (default: all).")
     submit = commands.add_parser("submit-adoption", help="Commit and push a verified isolated adoption workspace.")
     submit.add_argument("--workspace", required=True)
     submit.add_argument("--yes", action="store_true", help="Confirm the one local commit/push operation.")
@@ -102,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
                     display_name=args.display_name, pattern=args.pattern, github_user=args.github_user,
                     dig_fork=args.dig_fork, wrapper_fork=args.wrapper_fork, base_branch=args.base_branch,
                     dig_base_branch=args.dig_base_branch, wrapper_base_branch=args.wrapper_base_branch,
-                    allow_upstream_origin=args.allow_upstream_origin,
+                    allow_upstream_origin=args.allow_upstream_origin, ai_mode=args.ai_mode,
                 )
             except ValueError as exc:
                 parser.error(str(exc))
@@ -113,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
                   "  codex\n\n"
                   "Then tell your agent: Follow AI_ADOPTION_PROMPT.md.\n\n"
                   "After the migration:\n"
-                  "  ./verify-adoption\n\n"
+                  f"  ./verify-adoption{' --stage authoring' if args.ai_mode == 'authoring' else ''}\n\n"
                   "After verification passes:\n"
                   "  ./submit-adoption\n\n"
                   "No existing repositories or legacy files were modified.")
@@ -121,6 +131,24 @@ def main(argv: list[str] | None = None) -> int:
         output = Path(args.output or args.library_id)
         created = adopt(Path(args.existing), output, args.library_id, args.display_name, args.pattern, Path(args.dig_repo) if args.dig_repo else None)
         print(f"created adopted submission {created}")
+        return 0
+    if args.command == "export-adoption":
+        try:
+            created = export_adoption_handoff(Path(args.workspace), Path(args.output))
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print(f"Created adoption handoff: {created}")
+        print("It contains code/configuration and Git history only; inputs, outputs, work, receipts, and caches were excluded.")
+        return 0
+    if args.command == "import-adoption":
+        try:
+            created = import_adoption_handoff(Path(args.bundle), Path(args.workspace), legacy_root=Path(args.legacy_root) if args.legacy_root else None, ai_mode=args.ai_mode)
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print(f"Imported adoption workspace: {created}")
+        print(f"Next: cd {created} && ./verify-adoption --stage {args.ai_mode}")
         return 0
     if args.command == "create-library":
         try:
@@ -194,7 +222,7 @@ def main(argv: list[str] | None = None) -> int:
                   f"  repository: {root / manifest['repositories']['wrapper']['path']}\n"
                   f"  commit: {commit}\n"
                   f"  module: {active}")
-            ok, messages = verify_workspace(Path(args.workspace), work_dir=Path(args.work_dir) if args.work_dir else None)
+            ok, messages = verify_workspace(Path(args.workspace), work_dir=Path(args.work_dir) if args.work_dir else None, stage=args.stage)
         except (OSError, ValueError) as exc:
             print(f"ERROR: {exc}")
             return 2
