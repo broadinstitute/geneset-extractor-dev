@@ -38,11 +38,9 @@ the proposal issue and paired-PR sequence.
 
 If gene sets already exist outside this framework, follow
 [adopting-existing-library.md](adopting-existing-library.md) to inventory and
-migrate them into the same contract. Maintainers adopting a trusted existing
-submission should use the complete
-[trusted-adoption tutorial](adopting-trusted-existing-submission.md).
-For local AI authoring with remote/HPC full reproduction, use
-[local authoring and remote full reproduction](remote-reproduction.md).
+migrate them into the same contract. Maintainers should start with the
+[trusted-adoption tutorial chooser](adopting-trusted-existing-submission.md);
+its local-authoring → remote-full-reproduction paths are the recommended mode.
 
 For a brand-new source library, use the isolated
 [creating-new-library workflow](creating-new-library.md). It creates a fresh

@@ -3,7 +3,7 @@
 This is the technical reference for the local-authoring → remote-full-
 reproduction path. For the complete copyable procedure, including the Codex
 instruction and final submission gate, use the
-[trusted-adoption tutorial](adopting-trusted-existing-submission.md#short-version-local-authoring--remote-full-reproduction).
+[exact local-to-remote tutorial](adopting-exact-reproduction-local-to-remote.md).
 
 **All substantive data processing and gene-set generation logic belongs in
 `dig-gene-set-extractors`. `geneset-extractor-dev` may configure, dispatch,
