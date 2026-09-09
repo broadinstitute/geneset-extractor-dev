@@ -175,15 +175,19 @@ an approved GitHub PR or issue reference in `submission.yaml`.
 
 Use this when Codex should work only with legacy evidence and small fixtures
 on the local machine, while the remote/HPC host owns full source data and
-expensive computation. `$LEGACY_LOCAL` need contain only read-only legacy
-code/configuration/reference GMTs; it does not need full source inputs.
+expensive computation. The variables in the following two blocks are set on
+different machines. The handoff archive is the only item transferred between
+them.
+
+### On the local authoring machine
+
+`$LEGACY_LOCAL` need contain only read-only legacy code/configuration/reference
+GMTs; it does not need full source inputs.
 
 ```bash
 export LEGACY_LOCAL="/absolute/path/to/local/legacy_evidence"
-export LEGACY_REMOTE="/absolute/path/to/remote/legacy_submission"
 export LIBRARY_ID="MY_LIBRARY"
 export LOCAL_WORKSPACE="$HOME/gene-set-adoptions/$LIBRARY_ID-authoring"
-export REMOTE_WORKSPACE="$HOME/gene-set-adoptions/$LIBRARY_ID-full"
 export SMALL_REDISRIBUTABLE_FIXTURES="/absolute/path/to/small_fixtures"
 
 git clone --branch main https://github.com/broadinstitute/geneset-extractor-dev.git submission-system-tools
@@ -222,6 +226,19 @@ python3 -m submission_tools export-adoption \
 # Transfer reproduction-handoff.tar.gz to the remote host.
 ```
 
+### On the remote/HPC reproduction machine
+
+Transfer `reproduction-handoff.tar.gz` to this machine before continuing. The
+remote host supplies its own path to the authoritative legacy references and
+its own untracked full-input binding file.
+
+```bash
+export LIBRARY_ID="MY_LIBRARY"
+export LEGACY_REMOTE="/absolute/path/to/remote/legacy_submission"
+export REMOTE_WORKSPACE="$HOME/gene-set-adoptions/$LIBRARY_ID-full"
+export REMOTE_BINDINGS="/secure/project/$LIBRARY_ID/input-bindings.yaml"
+```
+
 On the remote/HPC host, import, prepare inputs, run, validate, and submit:
 
 ```bash
@@ -231,14 +248,14 @@ python3 -m submission_tools import-adoption \
 
 less "$REMOTE_WORKSPACE/adoption/remote_input_requirements.md"
 cp "$REMOTE_WORKSPACE/adoption/remote_input_bindings.template.yaml" \
-  /secure/project/$LIBRARY_ID/input-bindings.yaml
+  "$REMOTE_BINDINGS"
 # Edit the copied binding file with authorized remote input paths.
 
 cd "$REMOTE_WORKSPACE/geneset-extractor-dev/$LIBRARY_ID"
 SUBMISSION_WORK_DIR="$REMOTE_WORKSPACE/work-full" bash reproduction/reproduce.sh full
 cd "$REMOTE_WORKSPACE"
 ./verify-adoption --stage full --work-dir work-full \
-  --input-bindings /secure/project/$LIBRARY_ID/input-bindings.yaml
+  --input-bindings "$REMOTE_BINDINGS"
 ./submit-adoption --yes --allow-upstream-origin
 ```
 
