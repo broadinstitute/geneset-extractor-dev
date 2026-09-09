@@ -57,6 +57,37 @@ manifest digests, environment identifier/digest, command, timestamps, expected
 and completed models, and validation result. It does not cryptographically
 prove reproducibility.
 
+## Remote full-input bindings
+
+For a handoff-based adoption, `export-adoption` creates
+`adoption/remote_input_requirements.md` and
+`adoption/remote_input_bindings.template.yaml` from the committed
+`input_manifest.tsv`. The remote operator copies the template outside the
+workspace and binds each non-fixture `full` input ID to one authorized file:
+
+```yaml
+schema_version: "1.0"
+library_id: MY_LIBRARY
+mode: full
+inputs:
+  expression_matrix:
+    path: /secure/project/MY_LIBRARY/expression_matrix.tsv.gz
+```
+
+Validate it before or while validating the full run:
+
+```bash
+python3 -m submission_tools validate-input-bindings \
+  --submission MY_LIBRARY --bindings /secure/project/MY_LIBRARY/input-bindings.yaml
+./verify-adoption --stage full --input-bindings /secure/project/MY_LIBRARY/input-bindings.yaml
+```
+
+Bindings are runtime-only. They must not be committed, included in handoffs,
+or contain credentials, tokens, passwords, or signed URLs. A binding may use
+`download: true` only when the manifest declares `access_method` as public
+download; controlled-access inputs must already be materialized by the
+authorized remote user.
+
 ## Source URLs versus local execution paths
 
 Use `config/provenance_overlay.json` to provide stable source identifiers,

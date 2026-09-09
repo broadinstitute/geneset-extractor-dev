@@ -401,17 +401,22 @@ class LegacyAdoptionTest(unittest.TestCase):
             old_constants = adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER
             adoption_workspace.CANONICAL_DIG = str(dig_upstream); adoption_workspace.CANONICAL_WRAPPER = str(wrapper_upstream)
             try:
+                smoke_input = root / "small_fixture.tsv"; smoke_input.write_text("gene\nA\n", encoding="utf-8")
                 source = create_workspace(
                     existing=legacy, workspace=root / "remote-source", library_id="Adopted",
                     display_name=None, pattern="generic", github_user=None, dig_fork=str(dig),
-                    wrapper_fork=str(wrapper), ai_mode="authoring",
+                    wrapper_fork=str(wrapper), ai_mode="authoring", smoke_inputs=smoke_input,
                 )
+                self.assertTrue((source / "geneset-extractor-dev/Adopted/tests/fixtures/user_supplied/small_fixture.tsv").is_file())
                 generated = source / "geneset-extractor-dev" / "Adopted" / "outputs" / "generated.gmt"
                 generated.parent.mkdir(parents=True)
                 generated.write_text("not transportable\n", encoding="utf-8")
                 handoff = export_adoption_handoff(source, root / "authoring-handoff.tar.gz")
                 with __import__("tarfile").open(handoff, "r:gz") as archive:
                     self.assertFalse(any("generated.gmt" in member.name for member in archive.getmembers()))
+                    names = {member.name for member in archive.getmembers()}
+                    self.assertIn("handoff/remote_input_requirements.md", names)
+                    self.assertIn("handoff/remote_input_bindings.template.yaml", names)
                 imported = import_adoption_handoff(handoff, root / "local-author", ai_mode="authoring")
             finally:
                 adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER = old_constants
@@ -420,6 +425,7 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertEqual(manifest["workspace"]["root"], str(imported))
             self.assertTrue((imported / "AI_ADOPTION_PROMPT.md").is_file())
             self.assertIn("Authoring-host mode", (imported / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8"))
+            self.assertTrue((imported / "adoption/remote_input_requirements.md").is_file())
             self.assertFalse((imported / "geneset-extractor-dev" / "Adopted" / "outputs" / "generated.gmt").exists())
 
     def test_explicit_full_reference_mapping_allows_valid_workspace_verification(self) -> None:

@@ -24,7 +24,7 @@ explicit maintainer/test override, in which same-repository
 
 If Codex will author code on a workstation while full reproduction runs on a
 remote or HPC host, use the separate
-[remote authoring and full reproduction guide](remote-reproduction.md).
+[local authoring and remote full reproduction guide](remote-reproduction.md).
 
 ## Short version: `exact_reproduction`
 

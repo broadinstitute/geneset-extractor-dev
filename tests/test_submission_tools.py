@@ -14,6 +14,7 @@ from submission_tools.coordinated import coordinated_validate, inspect_dig_check
 from submission_tools.receipt import validate_receipt, write_receipt
 from submission_tools.scaffold import scaffold
 from submission_tools.validator import validate_submission
+from submission_tools.input_bindings import remote_requirements, validate_bindings
 
 
 class SubmissionToolsTest(unittest.TestCase):
@@ -67,6 +68,30 @@ class SubmissionToolsTest(unittest.TestCase):
 
     def test_valid_minimal_submission(self) -> None:
         self.assertTrue(validate_submission(self.scaffold()).ok)
+
+    def test_remote_input_requirements_and_bindings_are_explicit(self) -> None:
+        root = self.scaffold()
+        manifest = root / "reproduction/input_manifest.tsv"
+        manifest.write_text(
+            "\t".join(["input_id", "source_uri_or_access_instructions", "version_release", "checksum", "access_method", "smoke_full", "workflow_stage", "redistribution_status", "committed_fixture", "fixture_path"]) + "\n"
+            "smoke_fixture\ttests/fixtures/tiny.tsv\tfixture\t\tcommitted_fixture\tsmoke\tworkflow_input\tredistributable\ttrue\ttests/fixtures/tiny.tsv\n"
+            "full_counts\thttps://example.org/counts.tsv\tv1\t\tpublic_download\tfull\tworkflow_input\tnot_redistributable\tfalse\t\n",
+            encoding="utf-8",
+        )
+        fixture = root / "tests/fixtures/tiny.tsv"; fixture.write_text("x\n", encoding="utf-8")
+        requirements, template = remote_requirements(root)
+        self.assertIn("full_counts", requirements)
+        self.assertNotIn("smoke_fixture", template)
+        bindings = root.parent / "bindings.yaml"
+        supplied = root.parent / "counts.tsv"; supplied.write_text("counts\n", encoding="utf-8")
+        bindings.write_text(json.dumps({"schema_version": "1.0", "library_id": "LibraryX", "mode": "full", "inputs": {"full_counts": {"path": str(supplied)}}}), encoding="utf-8")
+        ok, messages, digest = validate_bindings(root, bindings)
+        self.assertTrue(ok, messages)
+        self.assertEqual(len(digest), 64)
+        bindings.write_text(json.dumps({"schema_version": "1.0", "library_id": "LibraryX", "mode": "full", "inputs": {"full_counts": {"download": True}}}), encoding="utf-8")
+        self.assertTrue(validate_bindings(root, bindings)[0])
+        bindings.write_text(json.dumps({"schema_version": "1.0", "library_id": "LibraryX", "mode": "full", "inputs": {}}), encoding="utf-8")
+        self.assertFalse(validate_bindings(root, bindings)[0])
 
     def test_all_patterns_scaffold_and_validate(self) -> None:
         for pattern in ("gtex", "motrpac", "hubmap", "lincs_l1000", "generic"):

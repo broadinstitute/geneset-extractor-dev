@@ -12,6 +12,7 @@ from .legacy_compare import compare_gmt
 from .receipt import write_receipt
 from .scaffold import scaffold
 from .validator import validate_submission
+from .input_bindings import validate_bindings
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -49,6 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     adopt_parser.add_argument("--wrapper-base-branch", help="Wrapper upstream baseline and pull-request target branch; overrides --base-branch.")
     adopt_parser.add_argument("--allow-upstream-origin", action="store_true", help="Advanced maintainer/test override; allow a canonical repository as origin for this isolated workspace.")
     adopt_parser.add_argument("--ai-mode", choices=["full", "authoring"], default="full", help="Generate a full-workflow or lightweight authoring-only AI prompt (default: full).")
+    adopt_parser.add_argument("--smoke-inputs", help="User-selected small redistributable file or directory copied into tests/fixtures; never use this for full source data.")
     export_handoff = commands.add_parser("export-adoption", help="Create a portable code/configuration handoff for another host.")
     export_handoff.add_argument("--workspace", required=True)
     export_handoff.add_argument("--output", required=True, help="New .tar.gz handoff archive outside the workspace.")
@@ -80,6 +82,10 @@ def main(argv: list[str] | None = None) -> int:
     verify.add_argument("--workspace", required=True)
     verify.add_argument("--work-dir", help="Workspace-relative or absolute generated-artifact directory; defaults to work.")
     verify.add_argument("--stage", choices=["all", "authoring", "full"], default="all", help="Verification stage; authoring runs only static/smoke checks (default: all).")
+    verify.add_argument("--input-bindings", help="Untracked remote full-input bindings file; required for handoff-based full verification.")
+    binding = commands.add_parser("validate-input-bindings", help="Validate untracked remote input bindings before full reproduction.")
+    binding.add_argument("--submission", required=True, help="Submitted library directory or submission.yaml.")
+    binding.add_argument("--bindings", required=True)
     submit = commands.add_parser("submit-adoption", help="Commit and push a verified isolated adoption workspace.")
     submit.add_argument("--workspace", required=True)
     submit.add_argument("--yes", action="store_true", help="Confirm the one local commit/push operation.")
@@ -113,20 +119,35 @@ def main(argv: list[str] | None = None) -> int:
                     dig_fork=args.dig_fork, wrapper_fork=args.wrapper_fork, base_branch=args.base_branch,
                     dig_base_branch=args.dig_base_branch, wrapper_base_branch=args.wrapper_base_branch,
                     allow_upstream_origin=args.allow_upstream_origin, ai_mode=args.ai_mode,
+                    smoke_inputs=Path(args.smoke_inputs) if args.smoke_inputs else None,
                 )
             except ValueError as exc:
                 parser.error(str(exc))
-            print("Adoption workspace ready:\n\n"
-                  f"  {created}\n\n"
-                  "Next:\n"
-                  f"  cd {created}\n"
-                  "  codex\n\n"
-                  "Then tell your agent: Follow AI_ADOPTION_PROMPT.md.\n\n"
-                  "After the migration:\n"
-                  f"  ./verify-adoption{' --stage authoring' if args.ai_mode == 'authoring' else ''}\n\n"
-                  "After verification passes:\n"
-                  "  ./submit-adoption\n\n"
-                  "No existing repositories or legacy files were modified.")
+            authoring_next = (
+                "After authoring verification, create the code-only handoff for the reproduction host:\n"
+                f"  python3 -m submission_tools export-adoption --workspace {created} --output reproduction-handoff.tar.gz\n\n"
+                "On the reproduction host, run full reproduction and verify with:\n"
+                "  ./verify-adoption --stage full --work-dir work-full\n\n"
+                if args.ai_mode == "authoring" else ""
+            )
+            submit_next = (
+                "After full remote verification passes:\n"
+                "  ./submit-adoption\n\n"
+                if args.ai_mode == "authoring" else
+                "After verification passes:\n"
+                "  ./submit-adoption\n\n"
+            )
+            message = (
+                "Adoption workspace ready:\n\n"
+                f"  {created}\n\n"
+                "Next:\n"
+                f"  cd {created}\n"
+                "  codex\n\n"
+                "Then tell your agent: Follow AI_ADOPTION_PROMPT.md.\n\n"
+                "After the migration:\n"
+                f"  ./verify-adoption{' --stage authoring' if args.ai_mode == 'authoring' else ''}\n\n"
+            ) + authoring_next + submit_next + "No existing repositories or legacy files were modified."
+            print(message)
             return 0
         output = Path(args.output or args.library_id)
         created = adopt(Path(args.existing), output, args.library_id, args.display_name, args.pattern, Path(args.dig_repo) if args.dig_repo else None)
@@ -210,6 +231,19 @@ def main(argv: list[str] | None = None) -> int:
         for name, ok, detail in adoption_status(Path(args.library)):
             print(f"{'✓' if ok else '✗'} {name}: {detail}")
         return 0
+    if args.command == "validate-input-bindings":
+        library = Path(args.submission)
+        if library.is_file():
+            library = library.parent
+        try:
+            ok, messages, digest = validate_bindings(library, Path(args.bindings))
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        for message in messages:
+            print(message)
+        print(f"input bindings: {'valid' if ok else 'invalid'} (digest: {digest})")
+        return 0 if ok else 1
     if args.command == "verify-adoption":
         try:
             root, manifest = load_workspace(Path(args.workspace))
@@ -222,7 +256,7 @@ def main(argv: list[str] | None = None) -> int:
                   f"  repository: {root / manifest['repositories']['wrapper']['path']}\n"
                   f"  commit: {commit}\n"
                   f"  module: {active}")
-            ok, messages = verify_workspace(Path(args.workspace), work_dir=Path(args.work_dir) if args.work_dir else None, stage=args.stage)
+            ok, messages = verify_workspace(Path(args.workspace), work_dir=Path(args.work_dir) if args.work_dir else None, stage=args.stage, input_bindings=Path(args.input_bindings) if args.input_bindings else None)
         except (OSError, ValueError) as exc:
             print(f"ERROR: {exc}")
             return 2

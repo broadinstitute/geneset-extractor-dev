@@ -25,6 +25,7 @@ from .adoption import adoption_report, gitignore_allowlist, implementation_inven
 from .adoption_prompt import architecture_guidance
 from .coordinated import coordinated_validate
 from .legacy_compare import compare_gmt
+from .input_bindings import remote_requirements, validate_bindings
 from .receipt import write_receipt
 from .provenance_validation import validate_provenance_complete
 from .scaffold import scaffold
@@ -159,6 +160,33 @@ def _write_cluster_adapters(wrapper: Path, library_id: str) -> list[Path]:
     return adapters
 
 
+def _add_smoke_inputs(library: Path, supplied: Path) -> None:
+    """Copy a deliberately small user-selected fixture set into the wrapper."""
+    supplied = supplied.expanduser().resolve()
+    candidates = [supplied] if supplied.is_file() else sorted(path for path in supplied.rglob("*") if path.is_file()) if supplied.is_dir() else []
+    if not candidates:
+        raise ValueError(f"--smoke-inputs must be a non-empty file or directory: {supplied}")
+    fixture_root = library / "tests" / "fixtures" / "user_supplied"
+    rows: list[str] = []
+    for index, source in enumerate(candidates, start=1):
+        if source.is_symlink() or source.stat().st_size > 10 * 1024 * 1024:
+            raise ValueError(f"smoke fixture must be a regular file no larger than 10 MiB: {source}")
+        relative = source.name if supplied.is_file() else str(source.relative_to(supplied))
+        destination = fixture_root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        fixture_path = str(destination.relative_to(library))
+        rows.append("\t".join([
+            f"user_smoke_fixture_{index}", fixture_path, "user_supplied_fixture",
+            "sha256:" + _sha256(source), "committed_fixture", "smoke",
+            "smoke_fixture", "redistributable", "true", fixture_path,
+        ]))
+    manifest = library / "reproduction" / "input_manifest.tsv"
+    with manifest.open("a", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(row + "\n")
+
+
 def create_workspace(
     *,
     existing: Path,
@@ -174,6 +202,7 @@ def create_workspace(
     wrapper_base_branch: str | None = None,
     allow_upstream_origin: bool = False,
     ai_mode: str = "full",
+    smoke_inputs: Path | None = None,
 ) -> Path:
     if ai_mode not in {"full", "authoring"}:
         raise ValueError("--ai-mode must be full or authoring")
@@ -199,6 +228,8 @@ def create_workspace(
         _write_json(adoption_dir / "legacy_reference.json", reference)
         library = workspace / "geneset-extractor-dev" / library_id
         scaffold(library, library_id, display_name or library_id, pattern)
+        if smoke_inputs is not None:
+            _add_smoke_inputs(library, smoke_inputs)
         _write_cluster_adapters(workspace / "geneset-extractor-dev", library_id)
         submission = library / "submission.yaml"
         payload = load(submission)
@@ -241,8 +272,10 @@ verification only. Implement the complete production path, but do **not**
 download full source inputs, submit scheduler jobs, run full reproduction, or
 claim full legacy equivalence here. Use only small redistributable fixtures.
 After local work, run `./verify-adoption --stage authoring`; it cannot make the
-adoption ready. Export a handoff and complete full reproduction, provenance,
-and comparison on the designated remote/HPC host.
+adoption ready. Then run `python3 -m submission_tools export-adoption
+--workspace . --output reproduction-handoff.tar.gz`, transfer that handoff,
+and complete full reproduction, provenance, comparison, verification, and
+submission on the designated remote/HPC host.
 """
     return f"""# AI adoption instructions
 
@@ -283,6 +316,12 @@ full reproduction and then run `./verify-adoption --work-dir work-rerun` from
 the workspace root.
 
 From this workspace root, run `./verify-adoption`; it deliberately imports `submission_tools` from `./geneset-extractor-dev`, not from another checkout or an installed package.
+
+Complete `reproduction/input_manifest.tsv` for every full input required by
+the adopted workflow, including stable identifiers, release/version, checksum
+when feasible, and access instructions. The handoff generates remote input
+requirements and a binding-file template from this manifest. Do not put remote
+filesystem paths, credentials, or signed URLs in committed files.
 
 {role_instructions}
 
@@ -374,8 +413,15 @@ def export_adoption_handoff(workspace: Path, output: Path) -> Path:
         }
         handoff_path = temporary_root / "handoff.json"
         _write_json(handoff_path, handoff)
+        requirements, binding_template = remote_requirements(library)
+        requirements_path = temporary_root / "remote_input_requirements.md"
+        template_path = temporary_root / "remote_input_bindings.template.yaml"
+        requirements_path.write_text(requirements, encoding="utf-8")
+        template_path.write_text(binding_template, encoding="utf-8")
         with tarfile.open(output, "w:gz") as archive:
             _tar_add_file(archive, handoff_path, "handoff.json")
+            _tar_add_file(archive, requirements_path, "handoff/remote_input_requirements.md")
+            _tar_add_file(archive, template_path, "handoff/remote_input_bindings.template.yaml")
             for role in ("dig", "wrapper"):
                 _tar_add_file(archive, bundles / f"{role}.bundle", f"repositories/{role}.bundle")
             for path in (root / WORKSPACE_MANIFEST, root / "AI_ADOPTION_PROMPT.md", root / "verify-adoption", root / "submit-adoption"):
@@ -461,6 +507,12 @@ def import_adoption_handoff(bundle: Path, workspace: Path, *, legacy_root: Path 
                 if not _handoff_safe_path(rel):
                     raise ValueError(f"unsafe handoff workspace path: {rel}")
                 destination = workspace / rel
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+        handoff_source = temporary_root / "handoff"
+        if handoff_source.is_dir():
+            for source in sorted(path for path in handoff_source.rglob("*") if path.is_file()):
+                destination = workspace / "adoption" / source.name
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, destination)
     manifest_path = workspace / WORKSPACE_MANIFEST
@@ -726,7 +778,7 @@ def _provenance_stage(library: Path, payload: dict[str, Any], scope: str, *, art
     return messages, {"status": status, "issues": [issue.__dict__ for issue in result.issues]}
 
 
-def verify_workspace(workspace: Path, *, work_dir: Path | None = None, stage: str = "all") -> tuple[bool, list[str]]:
+def verify_workspace(workspace: Path, *, work_dir: Path | None = None, stage: str = "all", input_bindings: Path | None = None) -> tuple[bool, list[str]]:
     """Verify an adoption at an explicit stage.
 
     ``authoring`` is deliberately limited to static and smoke validation; it
@@ -786,6 +838,17 @@ def verify_workspace(workspace: Path, *, work_dir: Path | None = None, stage: st
     if stage == "authoring":
         messages.append("INFO: authoring verification completed; full reproduction, full comparison, and full provenance are pending on the reproduction host.")
     if stage in {"all", "full"}:
+        binding_context: dict[str, object] = {}
+        if input_bindings is not None:
+            bindings_ok, binding_messages, binding_digest = validate_bindings(library, input_bindings)
+            messages.extend(binding_messages)
+            binding_context = {"schema_version": "1.0", "digest": binding_digest, "valid": bindings_ok}
+        else:
+            # New handoffs always provide a template; older workspaces retain
+            # compatibility until their library explicitly adopts bindings.
+            template = root / "adoption" / "remote_input_bindings.template.yaml"
+            if template.is_file():
+                messages.append("ERROR: full verification requires --input-bindings; copy and complete adoption/remote_input_bindings.template.yaml outside the workspace")
         messages.append("INFO: full legacy equivalence is evaluated only for explicitly declared full mappings.")
         comparison_messages, full_compared = _compare_references(root, library, manifest, payload, work_dir=work_dir)
         messages.extend(comparison_messages)
@@ -798,7 +861,9 @@ def verify_workspace(workspace: Path, *, work_dir: Path | None = None, stage: st
         command.extend(["--stage", stage])
     if work_dir is not None:
         command.extend(["--work-dir", str(artifact_root)])
-    write_receipt(library / "submission.yaml", dig, {"ok": ok, "messages": messages, "provenance_validation": provenance_stages}, receipt, command)
+    if input_bindings is not None:
+        command.extend(["--input-bindings", str(input_bindings)])
+    write_receipt(library / "submission.yaml", dig, {"ok": ok, "messages": messages, "provenance_validation": provenance_stages, "input_binding_validation": binding_context if stage in {"all", "full"} else {}}, receipt, command)
     manifest["verification"] = {"last_result": "PASS" if ok else "FAILED", "last_receipt": str(receipt.relative_to(root)), "workspace_digest": _workspace_digest(root, manifest), "work_directory": str(artifact_root.relative_to(root)) if artifact_root.is_relative_to(root) else str(artifact_root), "full_comparison_completed": full_compared, "provenance_complete": provenance_stages, "stage": stage, "completed_at": datetime.now(timezone.utc).isoformat()}
     _write_json(root / WORKSPACE_MANIFEST, manifest)
     return ok, messages

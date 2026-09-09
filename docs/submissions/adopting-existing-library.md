@@ -102,17 +102,17 @@ DIG submission contract before it creates a wrapper dispatcher.
 ## Remote/HPC reproduction
 
 If the coding workstation should not run full datasets, pass
-`--ai-mode authoring` to `adopt`, transfer the code-only handoff made by
-`export-adoption`, and create a local workspace with `import-adoption`.
-Authoring mode runs only static and smoke checks:
+`--ai-mode authoring` to the **local** `adopt` command. The local machine needs
+the read-only legacy source/configuration and reference GMT evidence, but not
+full input datasets. Authoring mode runs only static and smoke checks:
 
 ```bash
 ./verify-adoption --stage authoring
 ```
 
-It cannot authorize submission. Export the reviewed local workspace, import
-it into a fresh remote/HPC workspace with `--legacy-root`, explicitly run full
-reproduction there, and then run:
+It cannot authorize submission. Export the reviewed local workspace, transfer
+it, and import it into a fresh remote/HPC workspace with `--legacy-root`.
+Explicitly run full reproduction there, and then run:
 
 ```bash
 ./verify-adoption --stage full --work-dir work-full
