@@ -22,9 +22,27 @@ The normal contributor workflow uses forks. This guide demonstrates the
 explicit maintainer/test override, in which same-repository
 `adopt/<library_id>` branches target canonical `main`.
 
-If Codex will author code on a workstation while full reproduction runs on a
-remote or HPC host, use the separate
-[local authoring and remote full reproduction guide](remote-reproduction.md).
+## Choose your path
+
+| Situation | Use this section |
+| --- | --- |
+| Legacy code/GMT references and full inputs are practical on one machine | [Exact reproduction](#short-version-exact_reproduction) or [scientific reimplementation](#short-version-scientific_reimplementation) below. |
+| Codex should author locally, but full inputs or compute belong on an HPC host | [Local authoring → remote full reproduction](#short-version-local-authoring--remote-full-reproduction). |
+| Legacy code/GMT references are available only on the remote host | The advanced reverse-handoff case in [remote-reproduction.md](remote-reproduction.md#advanced-reverse-handoff). |
+
+| Term | Meaning |
+| --- | --- |
+| Legacy source | Read-only historical code, configuration, and reference GMT material. |
+| Smoke fixtures | Small redistributable inputs used only for local authoring checks. |
+| Full inputs | The real source datasets materialized by the remote operator. |
+| Handoff | Code, configuration, adoption evidence, and Git history; never datasets. |
+| Input bindings | An untracked remote mapping from logical input IDs to authorized files. |
+| Work directory | Untracked generated artifacts beneath `SUBMISSION_WORK_DIR`. |
+
+| Verification stage | Runs where | Proves | Can submit? |
+| --- | --- | --- | --- |
+| `authoring` | Local | Structure, declared DIG interface, and smoke fixture path | No |
+| `full` | Remote/HPC | Full input bindings, outputs, provenance, and declared comparison | Yes |
 
 ## Short version: `exact_reproduction`
 
@@ -152,6 +170,82 @@ same commands shown in the `exact_reproduction` short version). Do not use
 Run the same `./verify-adoption --work-dir "$WORK_DIR"` command. A draft may
 have a pending scientific review; a ready scientific reimplementation requires
 an approved GitHub PR or issue reference in `submission.yaml`.
+
+## Short version: local authoring → remote full reproduction
+
+Use this when Codex should work only with legacy evidence and small fixtures
+on the local machine, while the remote/HPC host owns full source data and
+expensive computation. `$LEGACY_LOCAL` need contain only read-only legacy
+code/configuration/reference GMTs; it does not need full source inputs.
+
+```bash
+export LEGACY_LOCAL="/absolute/path/to/local/legacy_evidence"
+export LEGACY_REMOTE="/absolute/path/to/remote/legacy_submission"
+export LIBRARY_ID="MY_LIBRARY"
+export LOCAL_WORKSPACE="$HOME/gene-set-adoptions/$LIBRARY_ID-authoring"
+export REMOTE_WORKSPACE="$HOME/gene-set-adoptions/$LIBRARY_ID-full"
+export SMALL_REDISRIBUTABLE_FIXTURES="/absolute/path/to/small_fixtures"
+
+git clone --branch main https://github.com/broadinstitute/geneset-extractor-dev.git submission-system-tools
+cd submission-system-tools
+python3 -m submission_tools adopt \
+  --existing "$LEGACY_LOCAL" --library-id "$LIBRARY_ID" \
+  --workspace "$LOCAL_WORKSPACE" \
+  --dig-fork https://github.com/flannick/dig-gene-set-extractors.git \
+  --wrapper-fork https://github.com/broadinstitute/geneset-extractor-dev.git \
+  --allow-upstream-origin --smoke-inputs "$SMALL_REDISRIBUTABLE_FIXTURES" \
+  --ai-mode authoring
+
+cd "$LOCAL_WORKSPACE"
+codex
+```
+
+Tell Codex:
+
+```text
+Follow AI_ADOPTION_PROMPT.md completely.
+
+This is an exact_reproduction adoption. Work locally with only the supplied
+smoke fixtures. Do not download full source inputs, submit scheduler jobs, or
+claim full equivalence. Complete input_manifest.tsv for every full input,
+including stable identifiers, versions, checksums where feasible, and access
+instructions. The remote operator will use that manifest to materialize full
+inputs later.
+```
+
+After local smoke validation, export and transfer the handoff:
+
+```bash
+./verify-adoption --stage authoring
+python3 -m submission_tools export-adoption \
+  --workspace "$LOCAL_WORKSPACE" --output reproduction-handoff.tar.gz
+# Transfer reproduction-handoff.tar.gz to the remote host.
+```
+
+On the remote/HPC host, import, prepare inputs, run, validate, and submit:
+
+```bash
+python3 -m submission_tools import-adoption \
+  --bundle reproduction-handoff.tar.gz --workspace "$REMOTE_WORKSPACE" \
+  --legacy-root "$LEGACY_REMOTE" --ai-mode full
+
+less "$REMOTE_WORKSPACE/adoption/remote_input_requirements.md"
+cp "$REMOTE_WORKSPACE/adoption/remote_input_bindings.template.yaml" \
+  /secure/project/$LIBRARY_ID/input-bindings.yaml
+# Edit the copied binding file with authorized remote input paths.
+
+cd "$REMOTE_WORKSPACE/geneset-extractor-dev/$LIBRARY_ID"
+SUBMISSION_WORK_DIR="$REMOTE_WORKSPACE/work-full" bash reproduction/reproduce.sh full
+cd "$REMOTE_WORKSPACE"
+./verify-adoption --stage full --work-dir work-full \
+  --input-bindings /secure/project/$LIBRARY_ID/input-bindings.yaml
+./submit-adoption --yes --allow-upstream-origin
+```
+
+Do not commit the binding file, full inputs, generated outputs, receipts, or
+work directory. Stop before submission if the remote requirements report has
+missing source metadata, bindings are incomplete, full provenance fails, or a
+declared full comparison fails.
 
 ## Preserve an earlier adoption attempt
 

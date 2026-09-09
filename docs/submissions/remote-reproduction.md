@@ -1,9 +1,9 @@
 # Local authoring and remote full reproduction
 
-Use this optional workflow when the machine running Codex should create code
-and run only tiny fixtures, while a remote/HPC machine should obtain full
-inputs and perform expensive reproduction. The normal one-machine adoption
-workflow remains the default.
+This is the technical reference for the local-authoring → remote-full-
+reproduction path. For the complete copyable procedure, including the Codex
+instruction and final submission gate, use the
+[trusted-adoption tutorial](adopting-trusted-existing-submission.md#short-version-local-authoring--remote-full-reproduction).
 
 **All substantive data processing and gene-set generation logic belongs in
 `dig-gene-set-extractors`. `geneset-extractor-dev` may configure, dispatch,
