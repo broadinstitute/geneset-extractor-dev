@@ -50,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     adopt_parser.add_argument("--wrapper-base-branch", help="Wrapper upstream baseline and pull-request target branch; overrides --base-branch.")
     adopt_parser.add_argument("--allow-upstream-origin", action="store_true", help="Advanced maintainer/test override; allow a canonical repository as origin for this isolated workspace.")
     adopt_parser.add_argument("--ai-mode", choices=["full", "authoring"], default="full", help="Generate a full-workflow or lightweight authoring-only AI prompt (default: full).")
-    adopt_parser.add_argument("--smoke-inputs", help="User-selected small redistributable file or directory copied into tests/fixtures; never use this for full source data.")
+    adopt_parser.add_argument("--smoke-inputs", help="Small user-supplied redistributable file or directory copied into tests/fixtures; required with --ai-mode authoring and never used for full source data.")
     export_handoff = commands.add_parser("export-adoption", help="Create a portable code/configuration handoff for another host.")
     export_handoff.add_argument("--workspace", required=True)
     export_handoff.add_argument("--output", required=True, help="New .tar.gz handoff archive outside the workspace.")

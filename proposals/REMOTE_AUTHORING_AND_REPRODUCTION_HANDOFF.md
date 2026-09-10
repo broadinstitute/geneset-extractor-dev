@@ -6,8 +6,9 @@ An adoption may require a full source-data reproduction that is inappropriate
 for the machine used by an interactive coding agent.  This proposal separates
 the two roles without weakening the existing adoption contract:
 
-* a local **authoring host** creates DIG and thin-wrapper code, configuration, and
-  small deterministic fixtures;
+* a local **authoring host** creates DIG and thin-wrapper code and
+  configuration using a small deterministic fixture explicitly supplied by the
+  user;
 * a **reproduction host** (usually an HPC/login host) obtains declared inputs,
   runs the full workflow or explicit scheduler launchers, performs full
   comparison/provenance validation, and submits the paired PRs.
@@ -62,7 +63,14 @@ python3 -m submission_tools import-adoption \
   --legacy-root "$LEGACY_REMOTE" --ai-mode full
 ```
 
-The reproduction host explicitly downloads inputs and launches the full run.
+`--smoke-inputs` is mandatory in authoring mode. It copies only the user's
+small, redistributable smoke fixture into the isolated wrapper and records its
+checksum. The fixture must be sufficient to exercise the intended workflow and
+produce at least one deterministic gene set. Codex evaluates that fixture but
+must not download, discover, generate, or silently substitute local data. If
+it is inadequate, Codex reports the exact fixture requirement to the user.
+
+The reproduction host explicitly obtains full inputs and launches the full run.
 For example, it may use the generated native or Apptainer cluster adapter;
 the tools never submit scheduler jobs merely because a handoff was imported.
 It then runs `./verify-adoption --stage full --work-dir work-full` followed by

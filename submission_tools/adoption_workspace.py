@@ -206,6 +206,12 @@ def create_workspace(
 ) -> Path:
     if ai_mode not in {"full", "authoring"}:
         raise ValueError("--ai-mode must be full or authoring")
+    if ai_mode == "authoring" and smoke_inputs is None:
+        raise ValueError(
+            "--ai-mode authoring requires --smoke-inputs. Provide a small, "
+            "redistributable fixture that can exercise the intended gene-set path; "
+            "never provide complete source data."
+        )
     workspace, legacy = validate_workspace_location(workspace, existing)
     dig_fork, wrapper_fork = _fork_urls(github_user, dig_fork, wrapper_fork, allow_upstream_origin=allow_upstream_origin)
     dig_base_branch = dig_base_branch or base_branch
@@ -264,13 +270,19 @@ def create_workspace(
 def _workspace_prompt(workspace: Path, manifest: dict[str, Any], inventory: dict[str, Any]) -> str:
     pattern = str(manifest.get("submission", {}).get("pattern", "generic"))
     authoring = manifest.get("workspace", {}).get("ai_mode") == "authoring"
-    role_instructions = "" if not authoring else """
+    role_instructions = "" if not authoring else f"""
 ## Authoring-host mode
 
 This workspace is intentionally for code authoring and lightweight local
 verification only. Implement the complete production path, but do **not**
 download full source inputs, submit scheduler jobs, run full reproduction, or
-claim full legacy equivalence here. Use only small redistributable fixtures.
+claim full legacy equivalence here. The user supplied the only permitted local
+test inputs at `geneset-extractor-dev/{manifest['library_id']}/tests/fixtures/user_supplied/`.
+Inspect those fixtures and use them to exercise the intended workflow. They
+must be sufficient to produce at least one deterministic gene set; if they
+are not, report the exact fixture requirement rather than downloading, finding,
+or creating a replacement dataset. Any scientific transformation required to
+exercise a fixture belongs in DIG instead.
 After local work, run `./verify-adoption --stage authoring`; it cannot make the
 adoption ready. Then run `python3 -m submission_tools export-adoption
 --workspace . --output reproduction-handoff.tar.gz`, transfer that handoff,

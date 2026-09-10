@@ -6,6 +6,11 @@ machine holds full inputs and performs the full run.
 
 ## Local authoring machine
 
+Before creating the workspace, prepare `SMOKE_INPUTS` as a small,
+redistributable file or directory that exercises the intended path and can
+produce at least one deterministic gene set. It is the only source data Codex
+may use locally; do not provide or download the complete dataset here.
+
 ```bash
 export LIBRARY_ID="MY_LIBRARY"
 export GITHUB_USER="USERNAME"
@@ -31,7 +36,10 @@ Follow AI_ADOPTION_PROMPT.md completely.
 This is an exact_reproduction adoption. Preserve scientific behavior and map
 every authoritative full legacy GMT to its full regenerated counterpart using
 set_equivalent comparison. Work only with supplied smoke fixtures locally: do
-not download full inputs, submit jobs, or claim full equivalence. Complete
+not download, locate, or create replacement inputs; do not submit jobs or
+claim full equivalence. Inspect the supplied fixtures and ensure they exercise
+the intended path and produce at least one deterministic gene set. If they
+cannot, report the exact small fixture requirement to the user. Complete
 input_manifest.tsv with every full input's identifier, release, URL/access
 instructions, and feasible checksum. Keep substantive logic in DIG and the
 wrapper thin.

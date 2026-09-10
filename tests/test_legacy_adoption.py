@@ -401,6 +401,12 @@ class LegacyAdoptionTest(unittest.TestCase):
             old_constants = adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER
             adoption_workspace.CANONICAL_DIG = str(dig_upstream); adoption_workspace.CANONICAL_WRAPPER = str(wrapper_upstream)
             try:
+                with self.assertRaisesRegex(ValueError, "requires --smoke-inputs"):
+                    create_workspace(
+                        existing=legacy, workspace=root / "missing-fixture", library_id="Adopted",
+                        display_name=None, pattern="generic", github_user=None, dig_fork=str(dig),
+                        wrapper_fork=str(wrapper), ai_mode="authoring",
+                    )
                 smoke_input = root / "small_fixture.tsv"; smoke_input.write_text("gene\nA\n", encoding="utf-8")
                 source = create_workspace(
                     existing=legacy, workspace=root / "remote-source", library_id="Adopted",
@@ -425,6 +431,7 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertEqual(manifest["workspace"]["root"], str(imported))
             self.assertTrue((imported / "AI_ADOPTION_PROMPT.md").is_file())
             self.assertIn("Authoring-host mode", (imported / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8"))
+            self.assertIn("only permitted local", (source / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8"))
             self.assertTrue((imported / "adoption/remote_input_requirements.md").is_file())
             self.assertFalse((imported / "geneset-extractor-dev" / "Adopted" / "outputs" / "generated.gmt").exists())
 

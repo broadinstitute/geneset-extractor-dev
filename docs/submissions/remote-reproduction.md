@@ -31,10 +31,13 @@ thin wrapper/configuration work, and tiny redistributable fixtures only. Do
 not download full datasets, run full reproduction, submit scheduler jobs, or
 claim full equivalence locally.
 
-`--smoke-inputs` is optional but recommended: it copies a user-selected small
-redistributable file or directory into `tests/fixtures/user_supplied/`, records
-checksums in the committed input manifest, and rejects files larger than
-10 MiB. Do not pass full source data to this option.
+`--smoke-inputs` is required for local authoring mode. It copies a
+user-selected small redistributable file or directory into
+`tests/fixtures/user_supplied/`, records checksums in the committed input
+manifest, and rejects files larger than 10 MiB. The fixture must exercise the
+intended path and produce at least one deterministic gene set. Do not pass
+full source data to this option. Codex must not download, discover, or create
+replacement local inputs.
 
 ```bash
 ./verify-adoption --stage authoring

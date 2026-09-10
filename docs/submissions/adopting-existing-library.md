@@ -101,10 +101,13 @@ DIG submission contract before it creates a wrapper dispatcher.
 
 ## Remote/HPC reproduction
 
-If the coding workstation should not run full datasets, pass
-`--ai-mode authoring` to the **local** `adopt` command. The local machine needs
-the read-only legacy source/configuration and reference GMT evidence, but not
-full input datasets. Authoring mode runs only static and smoke checks:
+If the coding workstation should not run full datasets, pass both
+`--ai-mode authoring` and `--smoke-inputs /path/to/small_fixture` to the
+**local** `adopt` command. The local machine needs the read-only legacy
+source/configuration and reference GMT evidence plus the user-supplied small,
+redistributable fixture, but not full input datasets. The fixture must exercise
+the intended path and produce at least one deterministic gene set. Authoring
+mode runs only static and smoke checks:
 
 ```bash
 ./verify-adoption --stage authoring

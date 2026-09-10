@@ -6,6 +6,11 @@ not set equivalence.
 
 ## Local authoring machine
 
+Before creating the workspace, prepare `SMOKE_INPUTS` as a small,
+redistributable file or directory that exercises the intended path and can
+produce at least one deterministic gene set. It is the only source data Codex
+may use locally; do not provide or download the complete dataset here.
+
 ```bash
 export LIBRARY_ID="MY_LIBRARY"
 export GITHUB_USER="USERNAME"
@@ -34,7 +39,10 @@ the wrapper thin. Complete adoption/source_assessment.md and input_manifest.tsv
 with source_version_confidence and legacy_input_relationship for every full
 input. Declare scientific_comparability mappings, justified metrics, and any
 set-name mapping. Use only smoke fixtures locally; do not download full inputs
-or claim exact reproduction.
+or locate/create replacement inputs, and do not claim exact reproduction.
+Inspect the supplied fixtures and ensure they exercise the intended path and
+produce at least one deterministic gene set. If they cannot, report the exact
+small fixture requirement to the user.
 ```
 
 ```bash

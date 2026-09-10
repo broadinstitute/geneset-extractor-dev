@@ -88,6 +88,18 @@ or contain credentials, tokens, passwords, or signed URLs. A binding may use
 download; controlled-access inputs must already be materialized by the
 authorized remote user.
 
+## Local authoring smoke fixtures
+
+Local authoring uses a small redistributable fixture supplied explicitly by
+the user through `adopt --smoke-inputs`. The tool copies it into
+`tests/fixtures/user_supplied/`, records a checksum in `input_manifest.tsv`,
+and rejects files larger than 10 MiB. It is the only local data Codex may use
+during authoring: Codex must not download, locate, or generate replacement
+source data. The fixture must be adequate to exercise the intended workflow
+and produce at least one deterministic gene set; otherwise Codex reports the
+specific additional fixture requirement. Scientific transformations, if any,
+belong in DIG.
+
 ## Source URLs versus local execution paths
 
 Use `config/provenance_overlay.json` to provide stable source identifiers,
