@@ -740,7 +740,7 @@ def main() -> int:
             python_bin=args.python_bin,
             metadata_json=extractor_out / "geneset.meta.json",
             upstream_provenance_graph_json=workflow_out / "deg_long.provenance_graph.json",
-            provenance_out=extractor_out / "geneset.provenance.json",
+            provenance_out=extractor_out / "geneset.provenance.legacy.json",
             provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
             provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
         )

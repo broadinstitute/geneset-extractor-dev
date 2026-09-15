@@ -392,6 +392,10 @@ def build_provenance_rebuild_cmd(
     provenance_mirror_local_prefix: str | None,
     provenance_mirror_remote_prefix: str | None,
 ) -> list[str]:
+    # Existing manifest.tsv files may still name the pre-Dapper JSON sidecar.
+    # DIG now emits the paired legacy JSON and DAPPER YAML sidecars instead.
+    if provenance_out.name == "geneset.provenance.json":
+        provenance_out = provenance_out.with_name("geneset.provenance.legacy.json")
     cmd = [
         python_bin,
         "-m",
