@@ -26,6 +26,9 @@ WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEV_REPO_ROOT = WORKSPACE_ROOT / "geneset-extractor-dev"
 KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000")
 LEGACY_EXTRACTOR_DIR_NAMES = ("extractor", "tissue_extractor")
+TRANSITIONAL_PROVENANCE_FILENAME = "geneset.provenance.json"
+LEGACY_PROVENANCE_FILENAME = "geneset.provenance.legacy.json"
+DAPPER_PROVENANCE_FILENAME = "geneset.provenance.dapper.yaml"
 
 
 def parse_args() -> argparse.Namespace:
@@ -438,15 +441,26 @@ def write_orig_once(path: Path) -> None:
     shutil.copy2(path, orig_path)
 
 
+def provenance_sidecar_paths(metadata_path: Path) -> tuple[Path, Path, Path]:
+    """Return current paired sidecars plus the pre-Dapper migration fallback."""
+    directory = metadata_path.parent
+    return (
+        directory / LEGACY_PROVENANCE_FILENAME,
+        directory / DAPPER_PROVENANCE_FILENAME,
+        directory / TRANSITIONAL_PROVENANCE_FILENAME,
+    )
+
+
 def snapshot_originals(metadata_paths: list[Path]) -> None:
     for metadata_path in metadata_paths:
         write_orig_once(metadata_path)
-        write_orig_once(metadata_path.with_name("geneset.provenance.json"))
+        for path in provenance_sidecar_paths(metadata_path):
+            write_orig_once(path)
 
 
 def restore_from_originals(metadata_paths: list[Path]) -> None:
     for metadata_path in metadata_paths:
-        for path in (metadata_path, metadata_path.with_name("geneset.provenance.json")):
+        for path in (metadata_path, *provenance_sidecar_paths(metadata_path)):
             orig_path = Path(f"{path}.orig")
             if orig_path.exists():
                 shutil.copy2(orig_path, path)
@@ -1039,8 +1053,16 @@ def metadata_snapshot_path(metadata_path: Path) -> Path:
     return orig_path if orig_path.exists() else metadata_path
 
 
+def active_provenance_path(metadata_path: Path) -> Path:
+    legacy_path, _dapper_path, transitional_path = provenance_sidecar_paths(metadata_path)
+    for provenance_path in (legacy_path, transitional_path):
+        if provenance_path.exists():
+            return provenance_path
+    return legacy_path
+
+
 def provenance_snapshot_path(metadata_path: Path) -> Path:
-    provenance_path = metadata_path.with_name("geneset.provenance.json")
+    provenance_path = active_provenance_path(metadata_path)
     orig_path = Path(f"{provenance_path}.orig")
     return orig_path if orig_path.exists() else provenance_path
 
@@ -1107,7 +1129,8 @@ def rewrite_metadata_and_provenance(
     if not any(rewrite_passes):
         return
     for metadata_path in metadata_paths:
-        for path in (metadata_path, metadata_path.with_name("geneset.provenance.json")):
+        provenance_path = active_provenance_path(metadata_path)
+        for path in (metadata_path, provenance_path):
             if not path.exists():
                 continue
             payload = json.loads(path.read_text(encoding="utf-8"))
@@ -1117,6 +1140,27 @@ def rewrite_metadata_and_provenance(
                     continue
                 rewritten = rewrite_json_value(rewritten, replacements)
             path.write_text(json.dumps(rewritten, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def regenerate_dapper_sidecars(*, metadata_paths: list[Path], dig_dir: Path) -> None:
+    """Delegate DAPPER conversion to DIG after wrapper path rewrites are final."""
+    with prepend_sys_path(dig_dir / "src"):
+        module = importlib.import_module("geneset_extractors.core.dapper_provenance")
+        module_path = Path(str(getattr(module, "__file__", ""))).resolve()
+        if not is_within_directory(module_path, dig_dir):
+            raise SystemExit(f"DAPPER converter was not imported from declared DIG checkout: {module_path}")
+        write_dapper_provenance = module.write_dapper_provenance
+        for metadata_path in metadata_paths:
+            provenance_path = active_provenance_path(metadata_path)
+            if not provenance_path.exists():
+                continue
+            legacy_payload = json.loads(provenance_path.read_text(encoding="utf-8"))
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            write_dapper_provenance(
+                metadata_path.parent / DAPPER_PROVENANCE_FILENAME,
+                legacy_payload,
+                metadata,
+            )
 
 
 def main() -> int:
@@ -1202,6 +1246,7 @@ def main() -> int:
             metadata_paths=metadata_paths,
             rewrite_passes=rewrite_passes,
         )
+    regenerate_dapper_sidecars(metadata_paths=metadata_paths, dig_dir=dig_dir)
     if not args.show_template_vars:
         rewrite_gmt_descriptions(
             model_dir=model_dir,

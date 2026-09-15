@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from build_tissue_inputs import expanded_age_comparison_label
 from run_age_binned_model import build_extractor_cmd as build_age_binned_extractor_cmd
+from run_age_binned_model import build_provenance_rebuild_cmd
 from run_continuous_age_model import build_extractor_cmd as build_continuous_extractor_cmd
 from run_continuous_age_model import gtex_aging_signature_name
 
@@ -88,3 +89,16 @@ def test_continuous_age_extractor_cmd_uses_gtex_tissue_names():
     assert "--signature_name" in cmd and "GTEx_aging_AdiposeSubcutaneous" in cmd
     assert "--gmt_name_separator" in cmd and "_" in cmd
     assert "--gmt_signed_labels" in cmd and "up_dn" in cmd
+
+
+def test_provenance_rebuild_migrates_the_pre_dapper_sidecar_name():
+    cmd = build_provenance_rebuild_cmd(
+        python_bin="python3",
+        metadata_json=Path("/tmp/extractor/geneset.meta.json"),
+        upstream_provenance_graph_json=Path("/tmp/workflow/graph.json"),
+        provenance_out=Path("/tmp/extractor/geneset.provenance.json"),
+        provenance_mirror_local_prefix=None,
+        provenance_mirror_remote_prefix=None,
+    )
+
+    assert "/tmp/extractor/geneset.provenance.legacy.json" in cmd
