@@ -47,6 +47,9 @@ For a brand-new source library, use the isolated
 two-repository workspace and provides `./verify-library` and
 `./submit-library` helpers that use the workspace-local tooling.
 
+For documented external releases that provide precomputed GMTs but not complete
+regeneration code, use [the external GMT import workflow](importing-external-precomputed-gmts.md).
+
 See the explicitly non-biological, test-only
 [`examples/synthetic_submission`](../../examples/synthetic_submission/README.md)
 for a complete small package.

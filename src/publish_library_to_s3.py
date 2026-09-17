@@ -219,7 +219,9 @@ def iter_provenance_paths(local_output_root, model_ids=None):  # type: (Path, Op
     paths = []
     model_ids = model_ids or []
     print("scanning_provenance_files root={0}".format(local_output_root), flush=True)
-    for index, path in enumerate(sorted(local_output_root.rglob("geneset.provenance.json")), 1):
+    names = ("geneset.provenance.legacy.json", "geneset.provenance.dapper.yaml", "geneset.provenance.json")
+    candidates = sorted(path for name in names for path in local_output_root.rglob(name))
+    for index, path in enumerate(candidates, 1):
         if index == 1 or index % 250 == 0:
             print("scanning_provenance_files found={0}".format(index), flush=True)
         if should_skip_path(path):
@@ -278,6 +280,8 @@ def extract_local_output_paths_from_provenance(
     provenance_path,  # type: Path
     local_output_root,  # type: Path
 ):  # type: (...) -> List[Path]
+    if provenance_path.suffix in {".yaml", ".yml"}:
+        return []
     try:
         payload = json.loads(provenance_path.read_text(encoding="utf-8"))
     except Exception as exc:
@@ -298,6 +302,8 @@ def extract_local_output_paths_from_provenance(
 
 
 def extract_existing_file_paths_from_provenance(provenance_path):  # type: (Path) -> List[Path]
+    if provenance_path.suffix in {".yaml", ".yml"}:
+        return []
     try:
         payload = json.loads(provenance_path.read_text(encoding="utf-8"))
     except Exception as exc:
