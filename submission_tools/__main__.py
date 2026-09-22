@@ -12,6 +12,7 @@ from .legacy_compare import compare_gmt
 from .receipt import write_receipt
 from .scaffold import scaffold
 from .validator import validate_submission
+from .external_import import scaffold_external_library
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -33,6 +34,13 @@ def main(argv: list[str] | None = None) -> int:
     create.add_argument("--display-name", required=True)
     create.add_argument("--pattern", required=True, choices=["gtex", "motrpac", "hubmap", "lincs_l1000", "generic"])
     create.add_argument("--output", required=True, help="New library directory; it must not already exist.")
+    external = commands.add_parser("import-external-library", help="Scaffold a multi-model library that imports externally generated GMTs unchanged.")
+    external.add_argument("--library-id", required=True)
+    external.add_argument("--display-name", required=True)
+    external.add_argument("--source-manifest", required=True)
+    external.add_argument("--gmt-manifest", required=True)
+    external.add_argument("--gmt-root", required=True, help="Read-only root containing every source_gmt_path in the GMT manifest.")
+    external.add_argument("--output", required=True)
     adopt_parser = commands.add_parser("adopt", help="Create an isolated workspace for adopting a legacy library.")
     adopt_parser.add_argument("--existing", required=True, help="Legacy directory; it is never modified.")
     adopt_parser.add_argument("--library-id", required=True)
@@ -84,6 +92,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "scaffold":
         scaffold(Path(args.output), args.library_id, args.display_name, args.pattern)
         print(f"created {Path(args.output)}")
+        return 0
+    if args.command == "import-external-library":
+        try:
+            created = scaffold_external_library(
+                library_id=args.library_id, display_name=args.display_name,
+                source_manifest=Path(args.source_manifest), gmt_manifest=Path(args.gmt_manifest),
+                gmt_root=Path(args.gmt_root), output=Path(args.output),
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+        print(f"created external precomputed import library {created}")
         return 0
     if args.command == "discover":
         changed_paths = None

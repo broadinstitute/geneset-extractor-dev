@@ -14,6 +14,7 @@ from submission_tools.coordinated import coordinated_validate, inspect_dig_check
 from submission_tools.receipt import validate_receipt, write_receipt
 from submission_tools.scaffold import scaffold
 from submission_tools.validator import validate_submission
+from submission_tools.external_import import scaffold_external_library
 
 
 class SubmissionToolsTest(unittest.TestCase):
@@ -67,6 +68,31 @@ class SubmissionToolsTest(unittest.TestCase):
 
     def test_valid_minimal_submission(self) -> None:
         self.assertTrue(validate_submission(self.scaffold()).ok)
+
+    def test_external_precomputed_import_scaffolds_multiple_models(self) -> None:
+        temp = tempfile.TemporaryDirectory(); self.addCleanup(temp.cleanup)
+        root = Path(temp.name); inputs = root / "inputs"; inputs.mkdir()
+        (inputs / "one.gmt").write_text("One\tdesc\tGENE1\n", encoding="utf-8")
+        (inputs / "two.gmt").write_text("Two\tdesc\tGENE2\n", encoding="utf-8")
+        source = root / "source.yaml"
+        source.write_text("source:\n  name: External\n  uri_or_identifier: doi:test\n  release: v1\n  license: CC-BY-4.0\n  access_restrictions: public\n  organism: human\n  genome_build: hg38\n  assay: rna_seq\n  data_type: precomputed_gene_sets\n", encoding="utf-8")
+        manifest = root / "gmts.tsv"
+        manifest.write_text("model_id\tdisplay_name\tsource_gmt_path\tsha256\tdescription\tpartition_id\nM1\tOne\t" + str(inputs / "one.gmt") + "\t\tImported one\tp1\nM2\tTwo\t" + str(inputs / "two.gmt") + "\t\tImported two\tp2\n", encoding="utf-8")
+        library = scaffold_external_library(library_id="External", display_name="External", source_manifest=source, gmt_manifest=manifest, gmt_root=inputs, output=root / "External")
+        self.assertTrue(validate_submission(library).ok)
+        rows = (library / "config/external_model_manifest.tsv").read_text(encoding="utf-8")
+        self.assertIn("M1", rows); self.assertIn("M2", rows); self.assertIn("sha256:", rows)
+
+    def test_external_precomputed_import_rejects_checksum_mismatch(self) -> None:
+        temp = tempfile.TemporaryDirectory(); self.addCleanup(temp.cleanup)
+        root = Path(temp.name); inputs = root / "inputs"; inputs.mkdir()
+        gmt = inputs / "one.gmt"; gmt.write_text("One\tdesc\tGENE1\n", encoding="utf-8")
+        source = root / "source.yaml"
+        source.write_text("name: External\nuri_or_identifier: doi:test\nrelease: v1\nlicense: CC-BY-4.0\naccess_restrictions: public\norganism: human\ngenome_build: hg38\nassay: rna_seq\ndata_type: precomputed_gene_sets\n", encoding="utf-8")
+        manifest = root / "gmts.tsv"
+        manifest.write_text("model_id\tdisplay_name\tsource_gmt_path\tsha256\tdescription\tpartition_id\nM1\tOne\t" + str(gmt) + "\tsha256:bad\tImported one\tp1\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "checksum mismatch"):
+            scaffold_external_library(library_id="External", display_name="External", source_manifest=source, gmt_manifest=manifest, gmt_root=inputs, output=root / "External")
 
     def test_all_patterns_scaffold_and_validate(self) -> None:
         for pattern in ("gtex", "motrpac", "hubmap", "lincs_l1000", "generic"):
