@@ -246,7 +246,11 @@ def _candidate_strings_from_file_node(node):  # type: (Dict[str, Any]) -> List[s
     return values
 
 
-def _resolve_provenance_file_candidate(candidate, local_output_root):  # type: (str, Path) -> Optional[Path]
+def _resolve_provenance_file_candidate(
+    candidate,
+    local_output_root,
+    provenance_dir=None,
+):  # type: (str, Path, Optional[Path]) -> Optional[Path]
     if not candidate:
         return None
     parsed = urlparse(candidate)
@@ -260,6 +264,8 @@ def _resolve_provenance_file_candidate(candidate, local_output_root):  # type: (
     else:
         candidate_paths.append((local_output_root.parent / path))
         candidate_paths.append(local_output_root / path)
+        if provenance_dir is not None:
+            candidate_paths.append(provenance_dir / path)
 
     seen = set()  # type: Set[Path]
     for candidate_path in candidate_paths:
@@ -281,7 +287,20 @@ def extract_local_output_paths_from_provenance(
     local_output_root,  # type: Path
 ):  # type: (...) -> List[Path]
     if provenance_path.suffix in {".yaml", ".yml"}:
-        return []
+        # A DAPPER sidecar is deliberately YAML but this publisher does not
+        # otherwise need a YAML dependency.  DIG's additive row-level export
+        # has a fixed sibling-artifact name, so include only that declared
+        # contract rather than heuristically parsing arbitrary YAML.
+        paths = set()  # type: Set[Path]
+        for candidate in provenance_path.parent.glob("*.dapper-ids.gmt"):
+            resolved = candidate.resolve()
+            if (
+                resolved.is_file()
+                and not should_skip_path(resolved)
+                and is_within_directory(resolved, local_output_root)
+            ):
+                paths.add(resolved)
+        return sorted(paths)
     try:
         payload = json.loads(provenance_path.read_text(encoding="utf-8"))
     except Exception as exc:
