@@ -1,0 +1,2 @@
+task_id	model_id	partition_id	enabled	dig_identifier	output_relative_path
+gtex_ab4_adipose_subcutaneous	AB4	adipose_subcutaneous	true	gtex_age_binned	outputs/genesets/adipose_subcutaneous/models/AB4/extractor/genesets.gmt
