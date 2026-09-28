@@ -22,6 +22,80 @@ The normal contributor workflow uses forks. This guide demonstrates the
 explicit maintainer/test override, in which same-repository
 `adopt/<library_id>` branches target canonical `main`.
 
+## Short version: extend an existing library
+
+Use this path only to add models or partitions to a library that already has a
+valid `submission.yaml`. It is deliberately explicit: without
+`--extend-existing`, an existing `LIBRARY_ID` is rejected rather than being
+scaffolded over. It does not migrate a pre-submission-system legacy directory;
+migrate that directory as its own adoption first.
+
+```bash
+export LEGACY="/absolute/path/to/new_model_reference_material"
+export LIBRARY_ID="EXISTING_LIBRARY"
+export WORKSPACE="$HOME/gene-set-adoptions/$LIBRARY_ID-extension"
+export WORK_DIR="$WORKSPACE/out"
+export DIG_BRANCH="main"
+export WRAPPER_BRANCH="main"
+
+git clone --branch "$WRAPPER_BRANCH" \
+  https://github.com/broadinstitute/geneset-extractor-dev.git \
+  submission-system-tools
+
+cd submission-system-tools
+python3 -m submission_tools adopt \
+  --existing "$LEGACY" \
+  --library-id "$LIBRARY_ID" \
+  --workspace "$WORKSPACE" \
+  --dig-fork https://github.com/flannick/dig-gene-set-extractors.git \
+  --wrapper-fork https://github.com/broadinstitute/geneset-extractor-dev.git \
+  --allow-upstream-origin \
+  --dig-base-branch "$DIG_BRANCH" \
+  --wrapper-base-branch "$WRAPPER_BRANCH" \
+  --extend-existing
+
+cd "$WORKSPACE"
+codex
+```
+
+Tell Codex:
+
+```text
+Follow AI_ADOPTION_PROMPT.md completely.
+
+This is an extension of the existing LIBRARY_ID library, not a new library
+scaffold. Preserve every existing model, launcher, output path, and publishing
+behavior. Add only the requested models/partitions and their configuration,
+thin wrapper dispatch, tests, and—when required—reusable DIG support.
+
+Do not overwrite or rename established library files just to match a new
+template. Keep substantive data processing, statistical analysis, mapping,
+ranking, and GMT generation in DIG. Update submission.yaml only when the new
+models require a genuine declared-contract change.
+
+Use SUBMISSION_WORK_DIR="$WORK_DIR" for generated smoke/full artifacts. Keep
+inputs and generated artifacts untracked. Run the existing library's required
+smoke/full reproduction and declared validation for the added models.
+```
+
+Before submission, review and apply the generated allowlist to the wrapper
+clone. It allows source/configuration changes but keeps inputs, outputs, work,
+and receipts ignored:
+
+```bash
+cd "$WORKSPACE/geneset-extractor-dev"
+sed -n '1,240p' ../adoption/gitignore_allowlist.md
+printf '\n' >> .gitignore
+cat ../adoption/gitignore_allowlist.md >> .gitignore
+
+cd "$WORKSPACE"
+./verify-adoption --work-dir "$WORK_DIR"
+./submit-adoption --yes --allow-upstream-origin
+```
+
+Submit only after verification reports `PASS`. The extension remains on
+`adopt/$LIBRARY_ID`; it never changes `main` directly.
+
 ## Short version: `exact_reproduction`
 
 ```bash

@@ -10,6 +10,8 @@ For the complete maintainer procedure—including `exact_reproduction` versus
 `scientific_reimplementation`, preserving an earlier adoption branch, and
 workspace-local runtime artifacts—read
 [adopting-trusted-existing-submission.md](adopting-trusted-existing-submission.md).
+That tutorial also includes a complete short command sequence for extending an
+existing new-format library.
 
 ## Extend an existing new-format library
 
