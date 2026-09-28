@@ -12,7 +12,7 @@
     {"scope": "full", "output_manifest": "expected/output_manifest.tsv", "provenance_filename": "geneset.provenance.legacy.json", "required_input_ids": ["gtex_v10"]}
   ]},
   "environment": {"declaration": "environment.modernization.md"},
-  "runtime": {"mode": "local", "task_manifest": "config/task_manifest.tsv", "local_builder": "modern/run/build_gtex_models.sh"},
+  "runtime": {"mode": "local", "task_manifest": "config/task_manifest.tsv", "local_builder": "run/run_submission_models.sh"},
   "adoption": {"comparison_policy": {"mode": "exact_reproduction"}, "reference_outputs": []},
   "deviations": {"from_standard_architecture": ["Legacy GTEx launchers remain available unchanged while model-family output equivalence is established.", "The submitted modern dispatcher is thin; it invokes existing DIG-backed GTEx execution paths."], "allow_wrapper_findings": [], "allow_provenance_findings": []},
   "paired_pull_requests": {"geneset_extractor_dev": "TBD", "dig_gene_set_extractors": "TBD"}

@@ -1,4 +1,4 @@
-"""Thin GTEx dispatch adapter; DIG retains analysis and GMT construction."""
+"""Thin GTEx submission adapter; DIG retains analysis and GMT construction."""
 from __future__ import annotations
 
 import argparse
@@ -19,7 +19,7 @@ def main() -> int:
     parser.add_argument("mode", choices=("--smoke", "full"))
     parser.add_argument("--out-root", required=True)
     args = parser.parse_args()
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[1]
     if args.mode == "--smoke":
         inputs = {
             "GTEX_COUNTS_GCT": root / "tests/fixtures/gtex_smoke_expression.gct",
@@ -34,7 +34,7 @@ def main() -> int:
         inputs = {name: Path(_file_from_environment(name)) for name in (
             "GTEX_COUNTS_GCT", "GTEX_SAMPLE_ATTRIBUTES_TSV", "GTEX_SUBJECT_PHENOTYPES_TSV", "GTEX_GTF",
         )}
-    dig_repo = Path(os.environ.get("DIG_REPO", root.parents[1] / "dig-gene-set-extractors")).resolve()
+    dig_repo = Path(os.environ.get("DIG_REPO", root.parents[0].parent / "dig-gene-set-extractors")).resolve()
     if not (dig_repo / "src/geneset_extractors").is_dir():
         raise SystemExit("DIG_REPO must identify a dig-gene-set-extractors checkout")
     command = [
