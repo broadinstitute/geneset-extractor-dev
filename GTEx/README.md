@@ -37,6 +37,15 @@ The first command is a non-submitting review step. The second delegates to the
 established GTEx array launcher with the declared V10/V8 input split and writes
 outputs under `SUBMISSION_WORK_DIR/genesets/`.
 
+Set scheduler resources through the submission-facing variables, which the
+wrapper maps to the legacy launcher internally:
+
+```bash
+export SUBMISSION_ARRAY_MEMORY="24G"
+export SUBMISSION_ARRAY_WALLTIME="48:00:00"
+export SUBMISSION_JOB_NAME="gtex_complete"
+```
+
 To test one enabled model or one model–tissue task before submitting the full
 matrix, pass the same filters to both review and submission commands:
 

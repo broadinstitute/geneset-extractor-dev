@@ -62,13 +62,22 @@ class GTExModernSubmissionTest(unittest.TestCase):
                     "--full", "--model-id", "AB1", "--tissue-id", "adipose_tissue",
                 ],
                 cwd=root,
-                env={**os.environ, "SUBMISSION_WORK_DIR": temp},
+                env={
+                    **os.environ,
+                    "SUBMISSION_WORK_DIR": temp,
+                    "SUBMISSION_ARRAY_MEMORY": "24G",
+                    "SUBMISSION_ARRAY_WALLTIME": "48:00:00",
+                    "SUBMISSION_JOB_NAME": "gtex_filtered_test",
+                },
                 text=True,
                 capture_output=True,
             )
         self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
         self.assertIn("--model_id AB1", completed.stdout)
         self.assertIn("--tissue_id adipose_tissue", completed.stdout)
+        self.assertIn("GTEX_ARRAY_MEMORY=24G", completed.stdout)
+        self.assertIn("GTEX_ARRAY_WALLTIME=48:00:00", completed.stdout)
+        self.assertIn("GTEX_JOB_NAME=gtex_filtered_test", completed.stdout)
 
     def test_full_contract_covers_all_enabled_model_tissue_pairs(self) -> None:
         root = Path(__file__).resolve().parents[1]

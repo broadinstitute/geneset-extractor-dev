@@ -8,6 +8,12 @@ mode="full"
 submit=0
 model_id=""
 tissue_id=""
+array_memory="${SUBMISSION_ARRAY_MEMORY:-${GTEX_ARRAY_MEMORY:-16G}}"
+array_walltime="${SUBMISSION_ARRAY_WALLTIME:-${GTEX_ARRAY_WALLTIME:-24:00:00}}"
+array_job_name="${SUBMISSION_JOB_NAME:-${GTEX_JOB_NAME:-gtex_submission_apptainer}}"
+smoke_memory="${SUBMISSION_SMOKE_MEMORY:-${GTEX_SUBMISSION_MEMORY:-4G}}"
+smoke_walltime="${SUBMISSION_SMOKE_WALLTIME:-${GTEX_SUBMISSION_WALLTIME:-01:00:00}}"
+smoke_job_name="${SUBMISSION_SMOKE_JOB_NAME:-${GTEX_SUBMISSION_JOB_NAME:-gtex_submission_smoke}}"
 
 usage() {
   cat <<'EOF'
@@ -26,6 +32,11 @@ Full mode additionally requires GTEX_V10_COUNTS_GCT,
 GTEX_V10_SAMPLE_ATTRIBUTES_TSV, GTEX_V10_SUBJECT_PHENOTYPES_TSV,
 GTEX_V8_COUNTS_GCT, GTEX_V8_SAMPLE_ATTRIBUTES_TSV,
 GTEX_V8_SUBJECT_PHENOTYPES_TSV, GTEX_V8_HUMAN_GENE_INFO, and GTEX_GTF.
+
+Resource settings: SUBMISSION_ARRAY_MEMORY, SUBMISSION_ARRAY_WALLTIME, and
+SUBMISSION_JOB_NAME for full arrays; SUBMISSION_SMOKE_MEMORY,
+SUBMISSION_SMOKE_WALLTIME, and SUBMISSION_SMOKE_JOB_NAME for smoke jobs.
+Legacy GTEX_* resource variables remain fallbacks only.
 EOF
 }
 
@@ -50,10 +61,10 @@ if [[ "${mode}" == "--smoke" ]]; then
     exit 0
   fi
   mkdir -p "${SUBMISSION_WORK_DIR}/qsub_logs"
-  exec "${QSUB_BIN:-qsub}" -N "${GTEX_SUBMISSION_JOB_NAME:-gtex_submission_smoke}" \
+  exec "${QSUB_BIN:-qsub}" -N "${smoke_job_name}" \
     -o "${SUBMISSION_WORK_DIR}/qsub_logs/gtex_submission_smoke.out" \
     -e "${SUBMISSION_WORK_DIR}/qsub_logs/gtex_submission_smoke.err" \
-    -l "h_vmem=${GTEX_SUBMISSION_MEMORY:-4G},h_rt=${GTEX_SUBMISSION_WALLTIME:-01:00:00}" \
+    -l "h_vmem=${smoke_memory},h_rt=${smoke_walltime}" \
     bash "${root}/run/run_submission_models_apptainer.sh" --smoke
 fi
 
@@ -67,6 +78,7 @@ if [[ -n "${tissue_id}" ]]; then
 fi
 
 command=(env "WORK_ROOT=${SUBMISSION_WORK_DIR}" "GTEX_OUT_ROOT=${SUBMISSION_WORK_DIR}" "DIG_DIR=${DIG_REPO:-}" \
+  "GTEX_ARRAY_MEMORY=${array_memory}" "GTEX_ARRAY_WALLTIME=${array_walltime}" "GTEX_JOB_NAME=${array_job_name}" \
   "GTEX_V10_COUNTS_GCT=${GTEX_V10_COUNTS_GCT:-}" "GTEX_V10_SAMPLE_ATTRIBUTES_TSV=${GTEX_V10_SAMPLE_ATTRIBUTES_TSV:-}" "GTEX_V10_SUBJECT_PHENOTYPES_TSV=${GTEX_V10_SUBJECT_PHENOTYPES_TSV:-}" \
   "GTEX_V8_COUNTS_GCT=${GTEX_V8_COUNTS_GCT:-}" "GTEX_V8_SAMPLE_ATTRIBUTES_TSV=${GTEX_V8_SAMPLE_ATTRIBUTES_TSV:-}" "GTEX_V8_SUBJECT_PHENOTYPES_TSV=${GTEX_V8_SUBJECT_PHENOTYPES_TSV:-}" "GTEX_V8_HUMAN_GENE_INFO=${GTEX_V8_HUMAN_GENE_INFO:-}" "GTEX_GTF=${GTEX_GTF:-}" \
   "${legacy_launcher}" --submit)
