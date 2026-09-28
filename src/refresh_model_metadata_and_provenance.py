@@ -1143,13 +1143,30 @@ def rewrite_metadata_and_provenance(
 
 
 def regenerate_dapper_sidecars(*, metadata_paths: list[Path], dig_dir: Path) -> None:
-    """Delegate DAPPER conversion to DIG after wrapper path rewrites are final."""
+    """Delegate derived provenance/report sidecars to DIG after path rewrites."""
     with prepend_sys_path(dig_dir / "src"):
         module = importlib.import_module("geneset_extractors.core.dapper_provenance")
         module_path = Path(str(getattr(module, "__file__", ""))).resolve()
         if not is_within_directory(module_path, dig_dir):
             raise SystemExit(f"DAPPER converter was not imported from declared DIG checkout: {module_path}")
         write_dapper_provenance = module.write_dapper_provenance
+        try:
+            white_paper_module = importlib.import_module("geneset_extractors.core.white_paper")
+        except ModuleNotFoundError as exc:
+            if exc.name != "geneset_extractors.core.white_paper":
+                raise
+            write_white_paper_from_metadata = None
+        else:
+            white_paper_module_path = Path(str(getattr(white_paper_module, "__file__", ""))).resolve()
+            if not is_within_directory(white_paper_module_path, dig_dir):
+                raise SystemExit(
+                    f"White-paper generator was not imported from declared DIG checkout: {white_paper_module_path}"
+                )
+            write_white_paper_from_metadata = getattr(
+                white_paper_module,
+                "write_white_paper_from_metadata",
+                None,
+            )
         for metadata_path in metadata_paths:
             provenance_path = active_provenance_path(metadata_path)
             if not provenance_path.exists():
@@ -1161,6 +1178,8 @@ def regenerate_dapper_sidecars(*, metadata_paths: list[Path], dig_dir: Path) -> 
                 legacy_payload,
                 metadata,
             )
+            if callable(write_white_paper_from_metadata):
+                write_white_paper_from_metadata(metadata_path)
 
 
 def main() -> int:
