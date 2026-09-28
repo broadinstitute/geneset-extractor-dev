@@ -56,7 +56,7 @@ def resolve_input_path(path_value: str | None, *, base_dir: Path) -> str | None:
 
 def compact_name_token(value: str) -> str:
     parts = [part for part in re.sub(r"[^A-Za-z0-9]+", " ", str(value).strip()).split() if part]
-    return "".join(parts) or "tissue"
+    return "_".join(parts) or "tissue"
 
 
 def gtex_aging_signature_name(tissue_label: str) -> str:

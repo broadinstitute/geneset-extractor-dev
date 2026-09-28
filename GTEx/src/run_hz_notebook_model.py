@@ -74,7 +74,8 @@ def write_json(path: Path, payload: dict[str, object]) -> None:
 
 
 def compact_name_token(value: str) -> str:
-    return "".join(ch for ch in value.strip().title() if ch.isalnum())
+    parts = [part for part in re.sub(r"[^A-Za-z0-9]+", " ", value.strip()).split() if part]
+    return "_".join(parts) or "tissue"
 
 
 def gtex_aging_signature_name(tissue_label: str) -> str:
