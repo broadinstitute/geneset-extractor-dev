@@ -53,6 +53,23 @@ class GTExModernSubmissionTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
         self.assertIn("Would run one smoke job", completed.stdout)
 
+    def test_apptainer_scheduler_wrapper_forwards_full_task_filters(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp:
+            completed = subprocess.run(
+                [
+                    "bash", "run/submit_submission_models_cluster_apptainer.sh",
+                    "--full", "--model-id", "AB1", "--tissue-id", "adipose_tissue",
+                ],
+                cwd=root,
+                env={**os.environ, "SUBMISSION_WORK_DIR": temp},
+                text=True,
+                capture_output=True,
+            )
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertIn("--model_id AB1", completed.stdout)
+        self.assertIn("--tissue_id adipose_tissue", completed.stdout)
+
     def test_full_contract_covers_all_enabled_model_tissue_pairs(self) -> None:
         root = Path(__file__).resolve().parents[1]
         with (root / "config/task_manifest.tsv").open(encoding="utf-8", newline="") as handle:

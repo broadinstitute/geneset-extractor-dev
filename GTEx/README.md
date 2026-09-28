@@ -37,6 +37,14 @@ The first command is a non-submitting review step. The second delegates to the
 established GTEx array launcher with the declared V10/V8 input split and writes
 outputs under `SUBMISSION_WORK_DIR/genesets/`.
 
+To test one enabled model or one model–tissue task before submitting the full
+matrix, pass the same filters to both review and submission commands:
+
+```bash
+bash run/submit_submission_models_cluster_apptainer.sh --full --model-id AB1
+bash run/submit_submission_models_cluster_apptainer.sh --full --model-id AB1 --tissue-id adipose_tissue --submit
+```
+
 `config/partition_list.tsv`, `config/task_manifest.tsv`,
 `expected/output_manifest.tsv`, and `expected/smoke_output_manifest.tsv` are
 generated declarative contract files. Regenerate them after changing enabled
