@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import csv
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,32 @@ class GTExModernSubmissionTest(unittest.TestCase):
             )
             self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
             self.assertTrue((work / "genesets/adipose_subcutaneous/models/AB4/extractor/genesets.gmt").is_file())
+
+    def test_apptainer_scheduler_wrapper_dry_run_never_submits(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp:
+            completed = subprocess.run(
+                ["bash", "run/submit_submission_models_cluster_apptainer.sh", "--smoke"],
+                cwd=root,
+                env={**os.environ, "SUBMISSION_WORK_DIR": temp},
+                text=True,
+                capture_output=True,
+            )
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertIn("Would run one smoke job", completed.stdout)
+
+    def test_full_contract_covers_all_enabled_model_tissue_pairs(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with (root / "config/task_manifest.tsv").open(encoding="utf-8", newline="") as handle:
+            tasks = list(csv.DictReader(handle, delimiter="\t"))
+        with (root / "expected/output_manifest.tsv").open(encoding="utf-8", newline="") as handle:
+            outputs = list(csv.DictReader(handle, delimiter="\t"))
+        self.assertEqual(len(tasks), 991)
+        self.assertEqual(len(outputs), 990)
+        self.assertEqual({row["dig_identifier"] for row in tasks}, {
+            "gtex_age_binned", "gtex_continuous_age", "gtex_aging_signatures",
+        })
+        self.assertTrue(any(row["model_id"] == "HZ1" for row in tasks))
 
 
 if __name__ == "__main__":

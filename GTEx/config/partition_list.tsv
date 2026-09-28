@@ -1,2 +1,32 @@
 partition_id	tissue_id	tissue_name
+adipose_tissue	adipose_tissue	Adipose Tissue
+adrenal_gland	adrenal_gland	Adrenal Gland
+blood_vessel	blood_vessel	Blood Vessel
+bladder	bladder	Bladder
+brain	brain	Brain
+breast	breast	Breast
+skin	skin	Skin
+blood	blood	Blood
+cervix_uteri	cervix_uteri	Cervix Uteri
+colon	colon	Colon
+esophagus	esophagus	Esophagus
+fallopian_tube	fallopian_tube	Fallopian Tube
+heart	heart	Heart
+kidney	kidney	Kidney
+liver	liver	Liver
+lung	lung	Lung
+salivary_gland	salivary_gland	Salivary Gland
+muscle	muscle	Muscle
+nerve	nerve	Nerve
+ovary	ovary	Ovary
+pancreas	pancreas	Pancreas
+pituitary	pituitary	Pituitary
+prostate	prostate	Prostate
+small_intestine	small_intestine	Small Intestine
+spleen	spleen	Spleen
+stomach	stomach	Stomach
+testis	testis	Testis
+thyroid	thyroid	Thyroid
+uterus	uterus	Uterus
+vagina	vagina	Vagina
 adipose_subcutaneous	adipose_subcutaneous	Adipose - Subcutaneous
