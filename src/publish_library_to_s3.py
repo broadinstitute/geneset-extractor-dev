@@ -280,14 +280,20 @@ def extract_local_output_paths_from_provenance(
     provenance_path,  # type: Path
     local_output_root,  # type: Path
 ):  # type: (...) -> List[Path]
+    white_paper_paths = set()  # type: Set[Path]
+    for candidate in provenance_path.parent.glob("*.whitepaper.*"):
+        if candidate.suffix not in {".md", ".pdf"}:
+            continue
+        if candidate.is_file() and not should_skip_path(candidate) and is_within_directory(candidate, local_output_root):
+            white_paper_paths.add(candidate.resolve())
     if provenance_path.suffix in {".yaml", ".yml"}:
-        return []
+        return sorted(white_paper_paths)
     try:
         payload = json.loads(provenance_path.read_text(encoding="utf-8"))
     except Exception as exc:
         raise SystemExit(f"Unable to parse provenance JSON {provenance_path}: {exc}") from exc
 
-    paths = set()  # type: Set[Path]
+    paths = set(white_paper_paths)  # type: Set[Path]
     for graph in payload.values():
         for node in graph.get("nodes", []):
             if node.get("type") != "File":

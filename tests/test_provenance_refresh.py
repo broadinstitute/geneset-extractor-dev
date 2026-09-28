@@ -68,3 +68,39 @@ class ProvenanceRefreshTest(unittest.TestCase):
 
             self.assertEqual(observed["provenance"], {"graph": {"nodes": []}})
             self.assertTrue(dapper.exists())
+
+    def test_refresh_regenerates_white_paper_when_declared_dig_support_is_available(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            metadata = directory / "geneset.meta.json"
+            metadata.write_text('{"gene_set": {"name": "example"}}\n', encoding="utf-8")
+            legacy, dapper, _transitional = REFRESH.provenance_sidecar_paths(metadata)
+            legacy.write_text('{"graph": {"nodes": []}}\n', encoding="utf-8")
+            dig_dir = directory / "dig"
+            core = dig_dir / "src/geneset_extractors/core"
+            core.mkdir(parents=True)
+            converter_path = core / "dapper_provenance.py"
+            white_paper_path = core / "white_paper.py"
+            converter_path.write_text("# fake converter\n", encoding="utf-8")
+            white_paper_path.write_text("# fake white-paper module\n", encoding="utf-8")
+            observed: dict[str, object] = {}
+
+            def write_dapper(output: Path, provenance: dict, meta: dict) -> None:
+                output.write_text("gene_sets: []\n", encoding="utf-8")
+
+            def write_white_paper(path: Path) -> None:
+                observed["white_paper_metadata"] = path
+
+            converter = SimpleNamespace(__file__=str(converter_path), write_dapper_provenance=write_dapper)
+            white_paper = SimpleNamespace(
+                __file__=str(white_paper_path),
+                write_white_paper_from_metadata=write_white_paper,
+            )
+            with patch.object(
+                REFRESH.importlib,
+                "import_module",
+                side_effect=lambda name: converter if name.endswith("dapper_provenance") else white_paper,
+            ):
+                REFRESH.regenerate_dapper_sidecars(metadata_paths=[metadata], dig_dir=dig_dir)
+
+            self.assertEqual(observed["white_paper_metadata"], metadata)
