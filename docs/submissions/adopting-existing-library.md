@@ -11,6 +11,39 @@ For the complete maintainer procedure—including `exact_reproduction` versus
 workspace-local runtime artifacts—read
 [adopting-trusted-existing-submission.md](adopting-trusted-existing-submission.md).
 
+## Extend an existing new-format library
+
+`--library-id` normally names a **new** wrapper library directory. If that
+directory already exists on the selected wrapper baseline, `adopt` stops rather
+than scaffolding into it. This prevents an accidental replacement of an
+existing library's configuration or models.
+
+To deliberately add models or partitions to an existing library that already
+uses the submission contract, pass `--extend-existing`:
+
+```bash
+python3 -m submission_tools adopt \
+  --existing /path/to/legacy_material \
+  --library-id EXISTING_LIBRARY \
+  --workspace ~/gene-set-adoptions/EXISTING_LIBRARY-extension \
+  --dig-fork https://github.com/YOU/dig-gene-set-extractors.git \
+  --wrapper-fork https://github.com/YOU/geneset-extractor-dev.git \
+  --extend-existing
+```
+
+The command still creates fresh isolated clones and an
+`adopt/EXISTING_LIBRARY` branch. It does not modify `main`, the legacy source,
+or the existing library while creating the workspace. It also does not merge
+models automatically: inspect and preserve the library's established config,
+launchers, output layout, and tests, then add only the intended model-specific
+changes.
+
+Extension mode requires the baseline library to contain a valid
+`submission.yaml`, so the normal validator, reproduction contract, exact DIG
+commit pin, receipt, and submit safeguards remain available. A legacy library
+without `submission.yaml` must first be migrated as its own adoption; it is not
+safe to treat it as an implicit extension target.
+
 ```bash
 python3 -m submission_tools adopt \
   --existing /path/to/old_library \

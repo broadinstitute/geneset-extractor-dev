@@ -56,6 +56,7 @@ def main(argv: list[str] | None = None) -> int:
     adopt_parser.add_argument("--dig-base-branch", help="DIG upstream baseline and pull-request target branch; overrides --base-branch.")
     adopt_parser.add_argument("--wrapper-base-branch", help="Wrapper upstream baseline and pull-request target branch; overrides --base-branch.")
     adopt_parser.add_argument("--allow-upstream-origin", action="store_true", help="Advanced maintainer/test override; allow a canonical repository as origin for this isolated workspace.")
+    adopt_parser.add_argument("--extend-existing", action="store_true", help="Explicitly extend an existing new-format wrapper library instead of scaffolding a new one.")
     new_library = commands.add_parser("create-library", help="Create an isolated workspace for a brand-new gene-set library.")
     new_library.add_argument("--inputs", required=True, help="Read-only source input file or directory.")
     new_library.add_argument("--library-id", required=True)
@@ -121,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
                     display_name=args.display_name, pattern=args.pattern, github_user=args.github_user,
                     dig_fork=args.dig_fork, wrapper_fork=args.wrapper_fork, base_branch=args.base_branch,
                     dig_base_branch=args.dig_base_branch, wrapper_base_branch=args.wrapper_base_branch,
-                    allow_upstream_origin=args.allow_upstream_origin,
+                    allow_upstream_origin=args.allow_upstream_origin, extend_existing=args.extend_existing,
                 )
             except ValueError as exc:
                 parser.error(str(exc))

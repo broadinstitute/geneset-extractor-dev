@@ -167,6 +167,7 @@ def create_workspace(
     dig_base_branch: str | None = None,
     wrapper_base_branch: str | None = None,
     allow_upstream_origin: bool = False,
+    extend_existing: bool = False,
 ) -> Path:
     workspace, legacy = validate_workspace_location(workspace, existing)
     dig_fork, wrapper_fork = _fork_urls(github_user, dig_fork, wrapper_fork, allow_upstream_origin=allow_upstream_origin)
@@ -189,14 +190,41 @@ def create_workspace(
         reference = _legacy_reference(legacy, inventory)
         _write_json(adoption_dir / "legacy_reference.json", reference)
         library = workspace / "geneset-extractor-dev" / library_id
-        scaffold(library, library_id, display_name or library_id, pattern)
-        _write_cluster_adapters(workspace / "geneset-extractor-dev", library_id)
         submission = library / "submission.yaml"
-        payload = load(submission)
-        payload["submission_origin"] = {"type": "adopted", "legacy_inventory": "../../adoption/inventory.json"}
-        payload["adoption"] = {"comparison_policy": {"mode": "exact_reproduction"}, "reference_outputs": reference["reference_outputs"]}
-        payload["reproduction"]["output_directory_environment"] = RUNTIME_OUTPUT_ENV
-        _write_json(submission, payload)
+        if library.exists() and not extend_existing:
+            raise ValueError(
+                f"wrapper library already exists on {wrapper_base_branch}: {library_id}. "
+                "Use a distinct --library-id, or pass --extend-existing to make a deliberate "
+                "model/configuration extension."
+            )
+        if extend_existing:
+            if not library.is_dir():
+                raise ValueError(
+                    f"cannot extend wrapper library {library_id}: it does not exist on {wrapper_base_branch}. "
+                    "Omit --extend-existing to create a new adopted library."
+                )
+            if not submission.is_file():
+                raise ValueError(
+                    f"cannot extend wrapper library {library_id}: it has no submission.yaml. "
+                    "The extension workflow only supports existing new-format libraries; migrate a legacy "
+                    "library as a standalone adoption before extending it."
+                )
+            payload = load(submission)
+            validation = validate_submission(library)
+            if not validation.ok:
+                detail = "; ".join(issue.message for issue in validation.issues if issue.level == "error")
+                raise ValueError(
+                    f"cannot extend wrapper library {library_id}: its existing submission.yaml is invalid"
+                    + (f": {detail}" if detail else "")
+                )
+        else:
+            scaffold(library, library_id, display_name or library_id, pattern)
+            _write_cluster_adapters(workspace / "geneset-extractor-dev", library_id)
+            payload = load(submission)
+            payload["submission_origin"] = {"type": "adopted", "legacy_inventory": "../../adoption/inventory.json"}
+            payload["adoption"] = {"comparison_policy": {"mode": "exact_reproduction"}, "reference_outputs": reference["reference_outputs"]}
+            payload["reproduction"]["output_directory_environment"] = RUNTIME_OUTPUT_ENV
+            _write_json(submission, payload)
         manifest = {
             "schema_version": "1.0.0", "library_id": library_id,
             "workspace": {"root": str(workspace), "upstream_origin_mode": allow_upstream_origin},
@@ -206,7 +234,11 @@ def create_workspace(
                 "wrapper": {"path": "geneset-extractor-dev", "origin": wrapper_fork, "upstream": CANONICAL_WRAPPER, "base_branch": wrapper_base_branch, "work_branch": work_branch},
             },
             "tooling": {"wrapper_commit": _git(workspace / "geneset-extractor-dev", "rev-parse", "HEAD"), "submission_tools_path": "geneset-extractor-dev/submission_tools"},
-            "submission": {"wrapper_library_path": f"geneset-extractor-dev/{library_id}", "pattern": pattern},
+            "submission": {
+                "wrapper_library_path": f"geneset-extractor-dev/{library_id}",
+                "pattern": pattern,
+                "mode": "extend_existing" if extend_existing else "adopt_new_library",
+            },
             "runtime": {"work_directory": "work", "output_directory_environment": RUNTIME_OUTPUT_ENV},
             "verification": {"last_result": None, "last_receipt": None, "workspace_digest": None},
         }
@@ -223,6 +255,20 @@ def create_workspace(
 
 def _workspace_prompt(workspace: Path, manifest: dict[str, Any], inventory: dict[str, Any]) -> str:
     pattern = str(manifest.get("submission", {}).get("pattern", "generic"))
+    extension = str(manifest.get("submission", {}).get("mode", "")) == "extend_existing"
+    extension_guidance = "" if not extension else f"""
+## Existing-library extension
+
+`geneset-extractor-dev/{manifest['library_id']}` already exists on the selected
+wrapper baseline. This workspace was created with `--extend-existing`: do not
+scaffold over it, rename it, or replace its established model/configuration
+files. Inspect its existing README, configuration, launchers, and tests first.
+Add only the new model/partition/configuration entries and the minimal thin
+wrapper dispatch needed for those entries. Preserve existing models, commands,
+output paths, and publication behavior. The existing `submission.yaml` remains
+the contract; update it only where the added models genuinely require a
+declared contract change.
+"""
     return f"""# AI adoption instructions
 
 You are operating inside an isolated adoption workspace: `{workspace}`.
@@ -239,6 +285,8 @@ Wrapper branch: `{manifest['repositories']['wrapper']['work_branch']}`
 DIG baseline branch: `{manifest['repositories']['dig']['base_branch']}`
 Wrapper baseline branch: `{manifest['repositories']['wrapper']['base_branch']}`
 Maintainer upstream-origin mode: `{manifest['workspace']['upstream_origin_mode']}`
+
+{extension_guidance}
 
 {architecture_guidance(pattern, inventory)}
 

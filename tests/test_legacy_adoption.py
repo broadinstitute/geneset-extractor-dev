@@ -15,6 +15,7 @@ from submission_tools.adoption import adopt, adoption_status, gitignore_allowlis
 from submission_tools import adoption_workspace
 from submission_tools.adoption_workspace import DEFAULT_BASE_BRANCH, _compare_references, _is_fork_origin, _open_draft_pr, _workspace_digest, _write_json, create_workspace, load_workspace, safe_stage, submit_workspace, validate_workspace_location, verify_workspace
 from submission_tools.legacy_compare import compare_gmt
+from submission_tools.scaffold import scaffold
 from submission_tools.validator import validate_submission
 
 
@@ -128,7 +129,7 @@ class LegacyAdoptionTest(unittest.TestCase):
         self._git(repo, "config", "user.name", self.TEST_GIT_NAME)
         self._git(repo, "config", "user.email", self.TEST_GIT_EMAIL)
 
-    def _remote(self, root: Path, name: str, branch: str = "main", *, with_tools: bool = False, dig_interface: bool = False) -> Path:
+    def _remote(self, root: Path, name: str, branch: str = "main", *, with_tools: bool = False, dig_interface: bool = False, existing_library_id: str | None = None) -> Path:
         source = root / (name + "-source")
         source.mkdir()
         self._git(source, "init", "-b", branch)
@@ -137,6 +138,11 @@ class LegacyAdoptionTest(unittest.TestCase):
         (source / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
         if with_tools:
             shutil.copytree(Path(__file__).resolve().parents[1] / "submission_tools", source / "submission_tools", ignore=shutil.ignore_patterns("__pycache__"))
+        if existing_library_id:
+            library = source / existing_library_id
+            scaffold(library, existing_library_id, f"{existing_library_id} library", "generic")
+            (library / "README.md").write_text("# Existing library\n\nPreserve this file.\n", encoding="utf-8")
+            (library / "config/model_list.tsv").write_text("model_id\tenabled\nM1\ttrue\n", encoding="utf-8")
         if dig_interface:
             package = source / "src" / "geneset_extractors"
             package.mkdir(parents=True)
@@ -256,6 +262,40 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertEqual(adoption_workspace._resolve_work_directory(workspace, Path("work-rerun")), workspace / "work-rerun")
             with self.assertRaisesRegex(ValueError, "outside its repository"):
                 adoption_workspace._resolve_work_directory(workspace, Path("geneset-extractor-dev/unsafe"))
+
+    def test_existing_library_requires_explicit_extension_mode_and_is_not_scaffolded(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            legacy = self.legacy_library(root)
+            dig_upstream = self._remote(root, "dig-upstream")
+            dig_fork = self._remote(root, "dig-fork")
+            wrapper_upstream = self._remote(root, "wrapper-upstream", with_tools=True, existing_library_id="Existing")
+            wrapper_fork = self._remote(root, "wrapper-fork", with_tools=True, existing_library_id="Existing")
+            old_constants = adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER
+            adoption_workspace.CANONICAL_DIG = str(dig_upstream)
+            adoption_workspace.CANONICAL_WRAPPER = str(wrapper_upstream)
+            try:
+                with self.assertRaisesRegex(ValueError, "already exists.*--extend-existing"):
+                    create_workspace(
+                        existing=legacy, workspace=root / "rejected", library_id="Existing", display_name=None,
+                        pattern="generic", github_user=None, dig_fork=str(dig_fork), wrapper_fork=str(wrapper_fork),
+                    )
+                workspace = create_workspace(
+                    existing=legacy, workspace=root / "extension", library_id="Existing", display_name=None,
+                    pattern="generic", github_user=None, dig_fork=str(dig_fork), wrapper_fork=str(wrapper_fork),
+                    extend_existing=True,
+                )
+            finally:
+                adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER = old_constants
+            library = workspace / "geneset-extractor-dev" / "Existing"
+            self.assertEqual((library / "README.md").read_text(encoding="utf-8"), "# Existing library\n\nPreserve this file.\n")
+            self.assertIn("M1\ttrue", (library / "config/model_list.tsv").read_text(encoding="utf-8"))
+            self.assertFalse((workspace / "geneset-extractor-dev/run/submit_existing_models_cluster.sh").exists())
+            _root, manifest = load_workspace(workspace)
+            self.assertEqual(manifest["submission"]["mode"], "extend_existing")
+            prompt = (workspace / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8")
+            self.assertIn("Existing-library extension", prompt)
+            self.assertIn("do not\nscaffold over it", prompt)
 
     def test_workspace_prompt_uses_selected_pattern_and_workspace_helper(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
