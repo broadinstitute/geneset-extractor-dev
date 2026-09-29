@@ -223,7 +223,9 @@ append_bind_path() {
 }
 
 prepare_common() {
-  mkdir -p "${WORK_ROOT}" "${QSUB_LOG_ROOT}"
+  # Apptainer requires every bind source to exist. LINCS_OUT_ROOT is bound by
+  # array workers even before their model-specific directories are generated.
+  mkdir -p "${WORK_ROOT}" "${QSUB_LOG_ROOT}" "${LINCS_OUT_ROOT}"
   require_dir "${DIG_DIR}"
 
   if [[ -z "${GENESET_EXTRACTORS_IN_APPTAINER:-}" ]]; then

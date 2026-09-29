@@ -34,6 +34,11 @@ class LincsModernSubmissionTests(unittest.TestCase):
         source = (ROOT / "run/run_submission_models_apptainer.sh").read_text(encoding="utf-8")
         self.assertIn("--smoke|--full", source)
         self.assertIn("--full|full", source)
+        self.assertIn('mkdir -p "${SUBMISSION_WORK_DIR}"', source)
+
+    def test_legacy_array_launcher_creates_the_output_bind_source(self) -> None:
+        source = (ROOT.parent / "run/submit_lincs_l1000_models_cluster_apptainer.sh").read_text(encoding="utf-8")
+        self.assertIn('"${LINCS_OUT_ROOT}"', source)
 
     @unittest.skipUnless((DIG / "src/geneset_extractors").is_dir(), "requires sibling DIG checkout")
     def test_smoke_reproduction_runs_hz1(self) -> None:
