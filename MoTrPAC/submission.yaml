@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0.0",
+  "submission_status": "draft",
+  "library": {"id": "MoTrPAC", "display_name": "MoTrPAC rat endurance-training gene sets", "organism": "human", "genome_build": "hg38", "assay_types": ["bulk_rna_seq"], "closest_reference_pattern": "motrpac", "wrapper_directory": "run"},
+  "sources": [
+    {"name": "motrpac_raw_counts", "uri_or_identifier": "MoTrPAC Rat Training 6-month transcriptomics raw counts", "release": "Rat Training 6-month release", "access_restrictions": "obtain the complete released raw-count bundle", "license": "MoTrPAC data-use terms"},
+    {"name": "motrpac_transcript_metadata", "uri_or_identifier": "MoTrPAC Rat Training 6-month transcript sample metadata", "release": "Rat Training 6-month release", "access_restrictions": "obtain the complete released metadata bundle", "license": "MoTrPAC data-use terms"},
+    {"name": "motrpac_phenotype_metadata", "uri_or_identifier": "MoTrPAC Rat Training 6-month phenotype sample metadata", "release": "Rat Training 6-month release", "access_restrictions": "obtain the complete released metadata bundle", "license": "MoTrPAC data-use terms"},
+    {"name": "motrpac_feature_to_gene", "uri_or_identifier": "MoTrPAC Rat Training 6-month feature-to-gene table", "release": "Rat Training 6-month release", "access_restrictions": "obtain the complete released metadata bundle", "license": "MoTrPAC data-use terms"},
+    {"name": "motrpac_rat_to_human", "uri_or_identifier": "MoTrPAC Rat Training 6-month rat-to-human mapping table", "release": "Rat Training 6-month release", "access_restrictions": "obtain the complete released metadata bundle", "license": "MoTrPAC data-use terms"},
+    {"name": "motrpac_feature_annot", "uri_or_identifier": "MoTrPAC Rat Training 6-month TRNSCRPT_FEATURE_ANNOT.txt", "release": "Rat Training 6-month release", "access_restrictions": "obtain the complete released annotation bundle", "license": "MoTrPAC data-use terms"},
+    {"name": "motrpac_dea", "uri_or_identifier": "MoTrPAC Rat Training 6-month released differential-expression tables", "release": "Rat Training 6-month release", "access_restrictions": "obtain the complete released DEA directory", "license": "MoTrPAC data-use terms"},
+    {"name": "harmonizome_mapping", "uri_or_identifier": "Harmonizome mappingFile_2017.txt", "release": "2017 mapping release", "access_restrictions": "public download", "license": "Harmonizome data-use terms"}
+  ],
+  "dig": {"repository_url": "https://github.com/flannick/dig-gene-set-extractors", "commit": "TBD", "entrypoints": ["geneset-extractors workflows motrpac_training", "geneset-extractors workflows motrpac_timewise", "geneset-extractors workflows motrpac_timepoint", "geneset-extractors workflows motrpac_released_dea", "geneset-extractors workflows motrpac_raw_aggregated", "geneset-extractors convert signed_term_gene"], "identifiers": ["motrpac_training", "motrpac_timewise", "motrpac_timepoint", "motrpac_released_dea", "motrpac_raw_aggregated", "signed_term_gene"]},
+  "configs": {"model_config": "config/model_list.tsv", "partition_config": "config/partition_list.tsv", "description_config": "config/model_description_templates.tsv", "task_manifest": "config/task_manifest.tsv"},
+  "reproduction": {"entry_point": "reproduction/reproduce.sh", "input_manifest": "reproduction/input_manifest.tsv", "smoke_test_command": "bash reproduction/reproduce.sh --smoke", "output_directory_environment": "SUBMISSION_WORK_DIR"},
+  "expected_outputs": {"manifest": "expected/output_manifest.tsv"},
+  "provenance": {"contracts": [
+    {"scope": "smoke", "output_manifest": "expected/smoke_output_manifest.tsv", "provenance_filename": "geneset.provenance.legacy.json", "required_input_ids": ["motrpac_smoke_feature_annot", "motrpac_smoke_timewise_dea", "motrpac_smoke_training_dea", "motrpac_smoke_mapping"], "artifact_roles": ["gmt"]},
+    {"scope": "full", "output_manifest": "expected/output_manifest.tsv", "provenance_filename": "geneset.provenance.legacy.json", "required_input_ids": ["motrpac_raw_counts", "motrpac_transcript_metadata", "motrpac_phenotype_metadata", "motrpac_feature_to_gene", "motrpac_rat_to_human", "motrpac_feature_annot", "motrpac_dea", "harmonizome_mapping"], "artifact_roles": ["gmt"]}
+  ]},
+  "environment": {"declaration": "environment.modernization.md"},
+  "runtime": {"mode": "apptainer_cluster", "task_manifest": "config/task_manifest.tsv", "local_builder": "run/run_submission_models.sh", "cluster_submitter": "run/submit_submission_models_cluster_apptainer.sh", "apptainer_builder": "run/run_submission_models_apptainer.sh"},
+  "adoption": {"comparison_policy": {"mode": "exact_reproduction"}, "reference_outputs": []},
+  "deviations": {"from_standard_architecture": ["Historical MoTrPAC wrapper runners remain available while model-family output equivalence is established.", "The modernization dispatcher is thin and delegates to existing DIG-backed MoTrPAC runners. Historical wrapper files may still trigger static analysis heuristics during this draft migration."], "allow_wrapper_findings": ["substantive_analysis"], "allow_provenance_findings": []},
+  "paired_pull_requests": {"geneset_extractor_dev": "TBD", "dig_gene_set_extractors": "TBD"}
+}

@@ -1,0 +1,6 @@
+feature_ID	tissue	sex	comparison_group	adj_p_value	logFC
+feature_1	Liver	male	w1	0.001	1.0
+feature_2	Liver	male	w1	0.002	1.0
+feature_3	Liver	male	w1	0.003	1.0
+feature_4	Liver	male	w1	0.004	1.0
+feature_5	Liver	male	w1	0.005	1.0
