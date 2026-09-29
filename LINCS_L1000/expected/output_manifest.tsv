@@ -1,0 +1,3 @@
+output_id	relative_path	role	required	model_id	partition_id
+lincs_hz1_gmt	genesets/all_signatures/models/HZ1/extractor/genesets.gmt	gmt	true	HZ1	all_signatures
+lincs_hz2_gmt	genesets/all_signatures/models/HZ2/extractor/genesets.gmt	gmt	true	HZ2	all_signatures
