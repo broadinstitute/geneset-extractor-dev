@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ $# -gt 1 ]]; then
+  echo "usage: run_submission_models_apptainer.sh [--smoke|--full]" >&2
+  echo "Use submit_submission_models_cluster_apptainer.sh --full --submit to submit a cluster job." >&2
+  exit 2
+fi
 mode="${1:---smoke}"
 case "${mode}" in
   --smoke) reproduce_mode="--smoke" ;;
