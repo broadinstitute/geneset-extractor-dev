@@ -336,14 +336,17 @@ declared contract change.
 """
     return f"""# AI adoption instructions
 
-You are operating inside an isolated adoption workspace: `{workspace}`.
+You are operating from the isolated adoption workspace root: `.`.
 
 You may modify only:
 - `./dig-gene-set-extractors`
 - `./geneset-extractor-dev`
 - generated adoption/report files inside this workspace
 
-The original legacy submission at `{manifest['legacy']['source_path']}` is **READ ONLY**. Do not modify files outside this workspace.
+The transferred legacy reference material is **READ ONLY**. When it is needed
+for implementation review, use `./legacy/`; it must not be modified. Its
+inventory is `./adoption/inventory.json`. Do not modify files outside this
+workspace.
 
 DIG branch: `{manifest['repositories']['dig']['work_branch']}`
 Wrapper branch: `{manifest['repositories']['wrapper']['work_branch']}`
@@ -363,17 +366,17 @@ code/configuration and small fixtures. Do not use `git add -f`; keep `inputs/`,
 `outputs/`, `work/`, and `run_receipt.json` ignored.
 
 Runtime artifacts are deliberately outside both repository checkouts. This
-workspace declares `{RUNTIME_OUTPUT_ENV}={workspace / 'work'}`. Make every
-reproduction launcher honor that environment variable and write each generated
-output or sidecar at `${{{RUNTIME_OUTPUT_ENV}}}/<relative_path from the output
-manifest>`. Do not write generated outputs beneath
+workspace uses `{RUNTIME_OUTPUT_ENV}=./work`. Make every reproduction launcher
+honor that environment variable and write each generated output or sidecar at
+`${{{RUNTIME_OUTPUT_ENV}}}/<relative_path from the output manifest>`. Do not
+write generated outputs beneath
 `geneset-extractor-dev/{manifest['library_id']}`. For an explicit full run,
 use the same environment variable; `./verify-adoption` supplies it
 automatically for smoke validation.
 To validate a preserved alternate run, use the same workspace-local path in
-both places, for example set `SUBMISSION_WORK_DIR=<workspace>/work-rerun` for
-full reproduction and then run `./verify-adoption --work-dir work-rerun` from
-the workspace root.
+both places, for example set `SUBMISSION_WORK_DIR=./work-rerun` for full
+reproduction and then run `./verify-adoption --work-dir work-rerun` from the
+workspace root.
 
 From this workspace root, run `./verify-adoption`; it deliberately imports `submission_tools` from `./geneset-extractor-dev`, not from another checkout or an installed package.
 
