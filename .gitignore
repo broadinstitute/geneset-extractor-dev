@@ -16,6 +16,7 @@
 !GTEx/config/tissue_list.tsv
 !GTEx/config/broad_tissue_list.tsv
 !GTEx/config/model_description_templates.tsv
+!GTEx/config/model_family_descriptions.tsv
 !GTEx/submission.yaml
 !GTEx/environment.modernization.md
 !GTEx/config/partition_list.tsv
@@ -31,6 +32,12 @@
 !GTEx/tests/fixtures/*.gct
 !GTEx/tests/fixtures/*.gtf
 !GTEx/tests/fixtures/*.tsv
+!GTEx/tests/test_hz2_consensus_smoke.py
+!GTEx/src/run_gtex_task.py
+!GTEx/run/build_gtex_genesets.sh
+!GTEx/adoption/
+!GTEx/adoption/*.tsv
+!GTEx/adoption/*.md
 !MoTrPAC/config/model_list.tsv
 !MoTrPAC/config/tissue_list.tsv
 !MoTrPAC/config/model_manifest.tsv

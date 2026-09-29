@@ -1,2 +1,3 @@
 output_id	relative_path	role	required	model_id	partition_id
 gtex_smoke_ab4_adipose_subcutaneous_gmt	genesets/adipose_subcutaneous/models/AB4/extractor/genesets.gmt	gmt	true	AB4	adipose_subcutaneous
+gtex_smoke_hz2_all_detailed_tissues_gmt	genesets/all_detailed_tissues/models/HZ2/extractor/genesets.gmt	gmt	true	HZ2	all_detailed_tissues

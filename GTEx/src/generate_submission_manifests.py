@@ -11,6 +11,7 @@ FULL_FAMILIES = {
     "age_binned": "gtex_age_binned",
     "continuous_age": "gtex_continuous_age",
     "hz_notebook": "gtex_aging_signatures",
+    "hz_consensus": "gtex_hz_consensus",
 }
 
 
@@ -37,12 +38,15 @@ def main() -> int:
         for row in tissues
     ]
     partitions.append({"partition_id": "adipose_subcutaneous", "tissue_id": "adipose_subcutaneous", "tissue_name": "Adipose - Subcutaneous"})
+    partitions.append({"partition_id": "all_detailed_tissues", "tissue_id": "all_detailed_tissues", "tissue_name": "All GTEx V8 detailed tissues"})
     write_rows(ROOT / "config/partition_list.tsv", ["partition_id", "tissue_id", "tissue_name"], partitions)
 
     tasks: list[dict[str, str]] = []
     outputs: list[dict[str, str]] = []
     for tissue in tissues:
         for model in models:
+            if model["model_family"] == "hz_consensus":
+                continue
             model_id = model["model_id"]
             tissue_id = tissue["tissue_id"]
             relative = f"genesets/{tissue_id}/models/{model_id}/extractor/genesets.gmt"
@@ -62,6 +66,12 @@ def main() -> int:
                 "model_id": model_id,
                 "partition_id": tissue_id,
             })
+    for model in models:
+        if model["model_family"] != "hz_consensus":
+            continue
+        relative = f"genesets/all_detailed_tissues/models/{model['model_id']}/extractor/genesets.gmt"
+        tasks.append({"task_id": f"gtex_{model['model_id'].lower()}_all_detailed_tissues", "model_id": model["model_id"], "partition_id": "all_detailed_tissues", "enabled": "true", "dig_identifier": FULL_FAMILIES[model["model_family"]], "output_relative_path": relative})
+        outputs.append({"output_id": f"gtex_{model['model_id'].lower()}_all_detailed_tissues_gmt", "relative_path": relative, "role": "gmt", "required": "true", "model_id": model["model_id"], "partition_id": "all_detailed_tissues"})
     tasks.append({
         "task_id": "gtex_smoke_ab4_adipose_subcutaneous",
         "model_id": "AB4",
@@ -70,6 +80,7 @@ def main() -> int:
         "dig_identifier": "gtex_age_binned",
         "output_relative_path": "genesets/adipose_subcutaneous/models/AB4/extractor/genesets.gmt",
     })
+    tasks.append({"task_id": "gtex_smoke_hz2_all_detailed_tissues", "model_id": "HZ2", "partition_id": "all_detailed_tissues", "enabled": "true", "dig_identifier": "gtex_hz_consensus", "output_relative_path": "genesets/all_detailed_tissues/models/HZ2/extractor/genesets.gmt"})
     write_rows(ROOT / "config/task_manifest.tsv", ["task_id", "model_id", "partition_id", "enabled", "dig_identifier", "output_relative_path"], tasks)
     write_rows(ROOT / "expected/output_manifest.tsv", ["output_id", "relative_path", "role", "required", "model_id", "partition_id"], outputs)
     write_rows(
@@ -82,6 +93,13 @@ def main() -> int:
             "required": "true",
             "model_id": "AB4",
             "partition_id": "adipose_subcutaneous",
+        }, {
+            "output_id": "gtex_smoke_hz2_all_detailed_tissues_gmt",
+            "relative_path": "genesets/all_detailed_tissues/models/HZ2/extractor/genesets.gmt",
+            "role": "gmt",
+            "required": "true",
+            "model_id": "HZ2",
+            "partition_id": "all_detailed_tissues",
         }],
     )
     print(f"Wrote {len(tasks)} tasks, {len(outputs)} full outputs, and {len(partitions)} partitions.")

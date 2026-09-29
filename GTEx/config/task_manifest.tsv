@@ -989,4 +989,6 @@ gtex_ac8_vagina	AC8	vagina	true	gtex_continuous_age	genesets/vagina/models/AC8/e
 gtex_ac9_vagina	AC9	vagina	true	gtex_continuous_age	genesets/vagina/models/AC9/extractor/genesets.gmt
 gtex_ac10_vagina	AC10	vagina	true	gtex_continuous_age	genesets/vagina/models/AC10/extractor/genesets.gmt
 gtex_hz1_vagina	HZ1	vagina	true	gtex_aging_signatures	genesets/vagina/models/HZ1/extractor/genesets.gmt
+gtex_hz2_all_detailed_tissues	HZ2	all_detailed_tissues	true	gtex_hz_consensus	genesets/all_detailed_tissues/models/HZ2/extractor/genesets.gmt
 gtex_smoke_ab4_adipose_subcutaneous	AB4	adipose_subcutaneous	true	gtex_age_binned	genesets/adipose_subcutaneous/models/AB4/extractor/genesets.gmt
+gtex_smoke_hz2_all_detailed_tissues	HZ2	all_detailed_tissues	true	gtex_hz_consensus	genesets/all_detailed_tissues/models/HZ2/extractor/genesets.gmt

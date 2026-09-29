@@ -32,3 +32,4 @@ AC8	continuous_age	true	false
 AC9	continuous_age	true	false
 AC10	continuous_age	true	false
 HZ1	hz_notebook	true	false
+HZ2	hz_consensus	true	false
