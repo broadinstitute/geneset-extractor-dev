@@ -1,0 +1,2 @@
+output_id	relative_path	role	required	model_id	partition_id
+hubmap_smoke_hz1_gmt	smoke/genesets/all_signatures/models/HZ1/extractor/genesets.gmt	gmt	true	HZ1	all_signatures

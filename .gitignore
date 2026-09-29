@@ -41,6 +41,19 @@
 !HuBMAP/config/model_list.tsv
 !HuBMAP/config/model_manifest.tsv
 !HuBMAP/config/model_description_templates.tsv
+!HuBMAP/submission.yaml
+!HuBMAP/environment.modernization.md
+!HuBMAP/config/partition_list.tsv
+!HuBMAP/config/task_manifest.tsv
+!HuBMAP/reproduction/
+!HuBMAP/reproduction/*.sh
+!HuBMAP/reproduction/*.tsv
+!HuBMAP/expected/
+!HuBMAP/expected/*.tsv
+!HuBMAP/tests/
+!HuBMAP/tests/fixtures/
+!HuBMAP/tests/fixtures/**/*.csv
+!HuBMAP/tests/fixtures/**/*.tsv
 
 # Allow traversing these subdirectories
 !LINCS_L1000/
