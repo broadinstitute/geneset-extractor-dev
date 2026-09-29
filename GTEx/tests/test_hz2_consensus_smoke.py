@@ -23,6 +23,13 @@ def test_hz2_smoke_uses_dig_and_writes_deterministic_consensus() -> None:
         gmt = work / "genesets/all_detailed_tissues/models/HZ2/extractor/genesets.gmt"
         assert gmt.is_file()
         assert [line.split("\t")[0] for line in gmt.read_text(encoding="utf-8").splitlines()] == [
-            "Brain - Cortex Female 40-49 Up", "Whole Blood Male 50-59 Up"
+            "GTEx_Tissues_V8_Consensus_Brain_Cortex_Female_40-49_up",
+            "GTEx_Tissues_V8_Consensus_Whole_Blood_Male_50-59_up",
         ]
-        assert (gmt.parent / "geneset.provenance.legacy.json").is_file()
+        for name in (
+            "gene_support.tsv", "geneset.full.tsv", "geneset.meta.json",
+            "geneset.model.json", "geneset.provenance.dapper.yaml",
+            "geneset.provenance.legacy.json", "geneset.tsv", "run_summary.json",
+            "run_summary.txt",
+        ):
+            assert (gmt.parent / name).is_file()
