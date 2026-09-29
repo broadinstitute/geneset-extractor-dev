@@ -1,0 +1,13 @@
+input_id	source_uri_or_access_instructions	version_release	checksum	access_method	smoke_full	workflow_stage	redistribution_status	committed_fixture	fixture_path
+motrpac_raw_counts	Obtain the complete MoTrPAC raw-count matrices and set MOTRPAC_RAW_COUNTS_DIR.	Rat Training 6-month release		public_download	full	workflow_input	not_redistributable	false	N/A
+motrpac_transcript_metadata	Set MOTRPAC_TRANSCRIPT_METADATA_TSV to the released transcript sample metadata.	Rat Training 6-month release		public_download	full	workflow_input	not_redistributable	false	N/A
+motrpac_phenotype_metadata	Set MOTRPAC_PHENOTYPE_METADATA_TSV to the released phenotype sample metadata.	Rat Training 6-month release		public_download	full	workflow_input	not_redistributable	false	N/A
+motrpac_feature_to_gene	Set MOTRPAC_FEATURE_TO_GENE_TSV to the released feature-to-gene table.	Rat Training 6-month release		public_download	full	workflow_input	not_redistributable	false	N/A
+motrpac_rat_to_human	Set MOTRPAC_RAT_TO_HUMAN_TSV to the released rat-to-human mapping table.	Rat Training 6-month release		public_download	full	workflow_input	not_redistributable	false	N/A
+motrpac_feature_annot	Set MOTRPAC_FEATURE_ANNOT to TRNSCRPT_FEATURE_ANNOT.txt.	Rat Training 6-month release		public_download	full	workflow_input	not_redistributable	false	N/A
+motrpac_dea	Set MOTRPAC_DEA_DIR to the released DEA directory.	Rat Training 6-month release		public_download	full	workflow_input	not_redistributable	false	N/A
+harmonizome_mapping	Set MOTRPAC_MAPPING_FILE to mappingFile_2017.txt.	2017		public_download	full	workflow_input	not_redistributable	false	N/A
+motrpac_smoke_feature_annot	Tiny synthetic feature annotation for HZ1 smoke validation.	test-v1		committed_fixture	smoke	workflow_input	redistributable	true	tests/fixtures/motrpac_smoke_feature_annot.tsv
+motrpac_smoke_timewise_dea	Tiny synthetic released timewise DEA table for HZ1 smoke validation.	test-v1		committed_fixture	smoke	workflow_input	redistributable	true	tests/fixtures/dea/motrpac_timewise_smoke.tsv
+motrpac_smoke_training_dea	Tiny synthetic released training DEA table for HZ1 smoke validation.	test-v1		committed_fixture	smoke	workflow_input	redistributable	true	tests/fixtures/dea/motrpac_training_smoke.tsv
+motrpac_smoke_mapping	Tiny synthetic symbol mapping for HZ1 smoke validation.	test-v1		committed_fixture	smoke	workflow_input	redistributable	true	tests/fixtures/motrpac_smoke_mapping.tsv

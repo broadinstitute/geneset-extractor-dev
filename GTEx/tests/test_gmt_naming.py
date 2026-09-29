@@ -14,13 +14,13 @@ from run_continuous_age_model import gtex_aging_signature_name
 
 
 def test_expanded_age_comparison_label_uses_full_age_bins():
-    assert expanded_age_comparison_label("30-39", "20-29") == "30_39_20_29"
+    assert expanded_age_comparison_label("30-39", "20-29") == "20-29_30-39"
 
 
 def test_age_binned_extractor_cmd_uses_gtex_gmt_naming():
     cmd = build_age_binned_extractor_cmd(
         python_bin="python3",
-        workflow_out=Path("/tmp/workflow"),
+        deg_tsv=Path("/tmp/workflow/deg_long.tsv"),
         extractor_out=Path("/tmp/extractor"),
         organism="human",
         genome_build="hg38",
@@ -49,7 +49,7 @@ def test_age_binned_extractor_cmd_uses_gtex_gmt_naming():
     )
 
     assert "--comparison_name_column" in cmd and "gmt_comparison_label" in cmd
-    assert "--signature_name" in cmd and "GTEx_aging_AdiposeSubcutaneous" in cmd
+    assert "--signature_name" in cmd and "GTEx_aging_Adipose_Subcutaneous" in cmd
     assert "--gmt_name_separator" in cmd and "_" in cmd
     assert "--gmt_signed_labels" in cmd and "up_dn" in cmd
 
@@ -86,7 +86,7 @@ def test_continuous_age_extractor_cmd_uses_gtex_tissue_names():
         provenance_mirror_remote_prefix=None,
     )
 
-    assert "--signature_name" in cmd and "GTEx_aging_AdiposeSubcutaneous" in cmd
+    assert "--signature_name" in cmd and "GTEx_aging_Adipose_Subcutaneous" in cmd
     assert "--gmt_name_separator" in cmd and "_" in cmd
     assert "--gmt_signed_labels" in cmd and "up_dn" in cmd
 

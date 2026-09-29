@@ -237,6 +237,7 @@ def parse_gmt(path: Path) -> list[dict[str, str]]:
 def build_extractor_cmd(
     *,
     python_bin: str,
+    model_id: str,
     signed_term_tsv: Path,
     extractor_out: Path,
     settings: dict[str, str],
@@ -257,6 +258,8 @@ def build_extractor_cmd(
         "human",
         "--genome_build",
         "hg38",
+        "--signature_name",
+        f"MoTrPAC_Rat_Endurance_Training_{model_id}",
         "--term_column",
         "term",
         "--gene_id_column",
@@ -457,6 +460,7 @@ def main() -> int:
 
     extractor_cmd = build_extractor_cmd(
         python_bin=str(Path(args.python_bin).resolve()),
+        model_id=args.model_id,
         signed_term_tsv=signed_term_path,
         extractor_out=extractor_out,
         settings=settings,
@@ -467,7 +471,7 @@ def main() -> int:
         python_bin=str(Path(args.python_bin).resolve()),
         metadata_json=extractor_out / "geneset.meta.json",
         upstream_provenance_graph_json=workflow_out / "motrpac_signed_term_gene.provenance_graph.json",
-        provenance_out=extractor_out / "geneset.provenance.json",
+        provenance_out=extractor_out / "geneset.provenance.legacy.json",
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,
     )

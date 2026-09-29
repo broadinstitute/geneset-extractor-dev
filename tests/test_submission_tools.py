@@ -238,11 +238,11 @@ class SubmissionToolsTest(unittest.TestCase):
         self.assertTrue(result.ok)
         self.assertTrue(any(item.code == "legacy_ignored" for item in result.issues))
 
-    def test_existing_gtex_legacy_library_is_ignored(self) -> None:
-        legacy_gtex = Path(__file__).resolve().parents[1] / "GTEx"
-        result = validate_submission(legacy_gtex)
+    def test_existing_hubmap_modern_submission_validates(self) -> None:
+        hubmap = Path(__file__).resolve().parents[1] / "HuBMAP"
+        result = validate_submission(hubmap)
         self.assertTrue(result.ok)
-        self.assertTrue(any(item.code == "legacy_ignored" for item in result.issues))
+        self.assertFalse(any(item.code == "legacy_ignored" for item in result.issues))
 
     def test_discovery_uses_submission_yaml_and_changed_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

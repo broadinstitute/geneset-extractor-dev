@@ -134,6 +134,7 @@ def write_model_sidecar(
         "extractor_name": "signed_term_gene",
         "parameters": {
             "term_prefix": term_prefix,
+            "signature_name": lincs_collection_name(model_id),
             "min_gmt_size": manifest_value(settings, "workflow_min_gmt_size", "5"),
             "z_threshold": manifest_value(settings, "workflow_z_threshold", ""),
             "top_n": manifest_value(settings, "workflow_top_n", ""),
@@ -159,6 +160,14 @@ def model_workflow_info(model_id: str) -> tuple[str, str]:
 
 
 def lincs_term_prefix(model_id: str) -> str:
+    if model_id == "HZ1":
+        return "LINCS_L1000_Chem_Pert"
+    if model_id == "HZ2":
+        return "LINCS_L1000_CRISPR_KO"
+    raise SystemExit(f"Unsupported LINCS L1000 HZ model_id: {model_id}")
+
+
+def lincs_collection_name(model_id: str) -> str:
     if model_id == "HZ1":
         return "LINCS_L1000_Chem_Pert"
     if model_id == "HZ2":
@@ -214,6 +223,7 @@ def build_extractor_cmd(
     python_bin: str,
     signed_term_tsv: Path,
     term_prefix: str,
+    signature_name: str,
     extractor_out: Path,
     provenance_mirror_local_prefix: str | None,
     provenance_mirror_remote_prefix: str | None,
@@ -236,6 +246,8 @@ def build_extractor_cmd(
         "term",
         "--term_prefix",
         term_prefix,
+        "--signature_name",
+        signature_name,
         "--gene_id_column",
         "gene_id",
         "--gene_symbol_column",
@@ -361,6 +373,7 @@ def main() -> int:
     mapping_file = require_existing_file(args.mapping_file, "mapping file")
     _kind, workflow_name = model_workflow_info(args.model_id)
     term_prefix = lincs_term_prefix(args.model_id)
+    signature_name = lincs_collection_name(args.model_id)
 
     run_root = Path(args.run_root).resolve()
     model_out = run_root / args.model_id
@@ -391,6 +404,7 @@ def main() -> int:
         python_bin=str(Path(args.python_bin).resolve()),
         signed_term_tsv=signed_term_tsv,
         term_prefix=term_prefix,
+        signature_name=signature_name,
         extractor_out=extractor_out,
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,
         provenance_mirror_remote_prefix=args.provenance_mirror_remote_prefix,

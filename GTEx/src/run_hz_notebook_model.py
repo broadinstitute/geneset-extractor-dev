@@ -74,7 +74,8 @@ def write_json(path: Path, payload: dict[str, object]) -> None:
 
 
 def compact_name_token(value: str) -> str:
-    return "".join(ch for ch in value.strip().title() if ch.isalnum())
+    parts = [part for part in re.sub(r"[^A-Za-z0-9]+", " ", value.strip()).split() if part]
+    return "_".join(parts) or "tissue"
 
 
 def gtex_aging_signature_name(tissue_label: str) -> str:
@@ -383,7 +384,7 @@ def main() -> int:
         "--comparison_column",
         "comparison_id",
         "--comparison_name_column",
-        "aging_signature",
+        "gmt_comparison_label",
         "--out_dir",
         str(extractor_dir),
         "--organism",
@@ -391,7 +392,7 @@ def main() -> int:
         "--genome_build",
         args.genome_build,
         "--signature_name",
-        "__comparison_only__",
+        gtex_aging_signature_name(args.tissue_label),
         "--postprocess_mode",
         "legacy",
         "--score_mode",

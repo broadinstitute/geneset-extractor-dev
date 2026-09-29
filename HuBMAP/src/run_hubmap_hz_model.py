@@ -154,6 +154,7 @@ def write_model_sidecar(
         "extractor_name": "unsigned_term_gene",
         "parameters": {
             "term_prefix": "HuBMAP",
+            "signature_name": "HuBMAP_ASCTB" if model_id == "HZ1" else "HuBMAP_ASCTB_augmented",
             "gmt_min_genes": 5,
             "augmentation_threshold": manifest_value(settings, "workflow_augmentation_threshold", ""),
             "cap_multiplier": manifest_value(settings, "workflow_cap_multiplier", ""),
@@ -246,11 +247,13 @@ def build_workflow_cmd(
 def build_extractor_cmd(
     *,
     python_bin: str,
+    model_id: str,
     unsigned_term_tsv: Path,
     extractor_out: Path,
     provenance_mirror_local_prefix: str | None,
     provenance_mirror_remote_prefix: str | None,
 ) -> list[str]:
+    signature_name = "HuBMAP_ASCTB" if model_id == "HZ1" else "HuBMAP_ASCTB_augmented"
     cmd = [
         python_bin,
         "-m",
@@ -269,6 +272,8 @@ def build_extractor_cmd(
         "term",
         "--term_prefix",
         "HuBMAP",
+        "--signature_name",
+        signature_name,
         "--gene_id_column",
         "gene_id",
         "--gene_symbol_column",
@@ -416,6 +421,7 @@ def main() -> int:
     unsigned_term_tsv = workflow_out / "hubmap_unsigned_term_gene.tsv"
     extractor_cmd = build_extractor_cmd(
         python_bin=str(Path(args.python_bin).resolve()),
+        model_id=args.model_id,
         unsigned_term_tsv=unsigned_term_tsv,
         extractor_out=extractor_out,
         provenance_mirror_local_prefix=args.provenance_mirror_local_prefix,

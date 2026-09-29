@@ -1,0 +1,6 @@
+input_id	source_uri_or_access_instructions	version_release	checksum	access_method	smoke_full	workflow_stage	redistribution_status	committed_fixture	fixture_path
+hubmap_asctb_v2_2	Obtain the complete released HuBMAP ASCT+B v2.2 table directory and set HUBMAP_RAW_ASCTB_DIR to it.	v2.2		public_download	full	workflow_input	not_redistributable	false	N/A
+ncbi_human_gene_info	https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/All_Data.gene_info.gz	NCBI Gene current release		public_download	full	workflow_input	not_redistributable	false	N/A
+geneshot_associate	https://maayanlab.cloud/geneshot/api/associate	service response at run time		public_service	full	workflow_input	not_redistributable	false	N/A
+hubmap_smoke_asctb	Tiny synthetic ASCT+B-shaped input for HZ1 smoke validation	test-v1	sha256:5050334003d8e1ee1f40dd1d60904f685f5374972e79f6def836804f26801f01	committed_fixture	smoke	workflow_input	redistributable	true	tests/fixtures/asctb/hubmap_smoke_asctb.csv
+hubmap_smoke_human_gene_info	Tiny synthetic NCBI GeneInfo-shaped input for HZ1 smoke validation	test-v1	sha256:db647b31a1ae29011605905abbd0d413a04bdffa47ec5663cc4bad2622e0277a	committed_fixture	smoke	workflow_input	redistributable	true	tests/fixtures/hubmap_smoke_human_gene_info.tsv

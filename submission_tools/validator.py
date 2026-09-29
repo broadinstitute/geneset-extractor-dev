@@ -278,6 +278,8 @@ def _fixture_checks(root: Path, input_rows: list[dict[str, str]], result: Valida
     declared: set[Path] = set()
     for row in input_rows:
         fixture_path = row.get("fixture_path", "").strip()
+        if fixture_path == "N/A":
+            fixture_path = ""
         committed = row.get("committed_fixture", "").strip().lower()
         if fixture_path:
             if not _safe_relative(fixture_path):

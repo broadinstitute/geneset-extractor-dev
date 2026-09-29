@@ -1,0 +1,19 @@
+{
+  "inputs": {
+    "role:expression_gct": {
+      "canonical_uri": "https://gtexportal.org/home/downloads/adult-gtex",
+      "provider": "GTEx Portal",
+      "version": "GTEx Analysis V10"
+    },
+    "role:sample_attributes_tsv": {
+      "canonical_uri": "https://gtexportal.org/home/downloads/adult-gtex",
+      "provider": "GTEx Portal",
+      "version": "GTEx Analysis V10"
+    },
+    "role:subject_phenotypes_tsv": {
+      "canonical_uri": "https://gtexportal.org/home/downloads/adult-gtex",
+      "provider": "GTEx Portal",
+      "version": "GTEx Analysis V10"
+    }
+  }
+}

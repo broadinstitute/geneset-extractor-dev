@@ -1,0 +1,8 @@
+task_id	model_id	partition_id	enabled	dig_identifier	output_relative_path
+motrpac_tr1_tissues	TR1	all_tissues	true	motrpac_training	genesets
+motrpac_tr2_tissues	TR2	all_tissues	true	motrpac_training	genesets
+motrpac_tw1_tissues	TW1	all_tissues	true	motrpac_timewise	genesets
+motrpac_tw2_tissues	TW2	all_tissues	true	motrpac_timepoint	genesets
+motrpac_hz1_all_tissues	HZ1	all_tissues	true	motrpac_released_dea	genesets/all_tissues/models/HZ1/extractor/genesets.gmt
+motrpac_hz2_all_tissues	HZ2	all_tissues	true	motrpac_raw_aggregated	genesets/all_tissues/models/HZ2/extractor/genesets.gmt
+motrpac_hz3_all_tissues	HZ3	all_tissues	true	motrpac_raw_aggregated	genesets/all_tissues/models/HZ3/extractor/genesets.gmt

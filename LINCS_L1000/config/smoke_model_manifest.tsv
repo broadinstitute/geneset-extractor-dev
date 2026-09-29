@@ -1,0 +1,2 @@
+model_id	workflow_gmt_name	workflow_min_gmt_size	workflow_z_threshold	workflow_top_n
+HZ1	gene_set_library_crisp.gmt	1	0.5	NA
