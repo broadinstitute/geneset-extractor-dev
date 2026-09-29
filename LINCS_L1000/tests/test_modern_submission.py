@@ -27,6 +27,13 @@ class LincsModernSubmissionTests(unittest.TestCase):
         self.assertIn("SUBMISSION_WORK_DIR", source)
         self.assertIn("SUBMISSION_ARRAY_MEMORY", source)
         self.assertIn("--model-id", source)
+        self.assertIn("--smoke", source)
+        self.assertIn("--full", source)
+
+    def test_apptainer_adapter_uses_standard_modes_and_keeps_full_alias(self) -> None:
+        source = (ROOT / "run/run_submission_models_apptainer.sh").read_text(encoding="utf-8")
+        self.assertIn("--smoke|--full", source)
+        self.assertIn("--full|full", source)
 
     @unittest.skipUnless((DIG / "src/geneset_extractors").is_dir(), "requires sibling DIG checkout")
     def test_smoke_reproduction_runs_hz1(self) -> None:

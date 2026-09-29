@@ -9,12 +9,12 @@ Run the committed HZ1 smoke fixture with:
 
 ```bash
 SUBMISSION_WORK_DIR=/path/out DIG_REPO=../dig-gene-set-extractors \
-  bash reproduction/reproduce.sh --smoke
+  bash run/run_submission_models_apptainer.sh --smoke
 ```
 
 For a full run set `LINCS_CHEMPERT_EXPRESSION_TSV`,
 `LINCS_CRISPRKO_EXPRESSION_TSV`, and `LINCS_MAPPING_FILE`, then run
-`bash reproduction/reproduce.sh full`.
+`bash run/run_submission_models_apptainer.sh --full`.
 
 For an Apptainer run, use the same standard variables as the other modernized
 libraries. `run/run_submission_models_apptainer.sh` performs the reproduction
@@ -30,7 +30,7 @@ export LINCS_CRISPRKO_EXPRESSION_TSV=/path/to/crispr_ko.tsv
 export LINCS_MAPPING_FILE=/path/to/gene_mapping.tsv
 export SUBMISSION_ARRAY_MEMORY=24G
 export SUBMISSION_ARRAY_WALLTIME=24:00:00
-bash run/run_submission_models_apptainer.sh full
+bash run/run_submission_models_apptainer.sh --full
 bash run/submit_submission_models_cluster_apptainer.sh --model-id HZ1 --submit
 ```
 

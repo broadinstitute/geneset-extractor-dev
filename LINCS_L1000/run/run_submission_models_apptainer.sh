@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+mode="${1:---smoke}"
+case "${mode}" in
+  --smoke) reproduce_mode="--smoke" ;;
+  --full|full) reproduce_mode="full" ;;
+  *) echo "usage: run_submission_models_apptainer.sh [--smoke|--full]" >&2; exit 2 ;;
+esac
+
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 [[ -n "${APPTAINER_IMAGE:-}" && -f "${APPTAINER_IMAGE}" ]] || { echo "Set APPTAINER_IMAGE to an existing image" >&2; exit 1; }
 [[ -n "${DIG_REPO:-}" && -d "${DIG_REPO}" ]] || { echo "Set DIG_REPO to a DIG checkout" >&2; exit 1; }
@@ -14,4 +21,4 @@ exec "${APPTAINER_BIN:-apptainer}" exec --bind "${binds}" "${APPTAINER_IMAGE}" \
   LINCS_CHEMPERT_EXPRESSION_TSV="${LINCS_CHEMPERT_EXPRESSION_TSV:-}" \
   LINCS_CRISPRKO_EXPRESSION_TSV="${LINCS_CRISPRKO_EXPRESSION_TSV:-}" \
   LINCS_MAPPING_FILE="${LINCS_MAPPING_FILE:-}" \
-  bash "${root}/reproduction/reproduce.sh" "$@"
+  bash "${root}/reproduction/reproduce.sh" "${reproduce_mode}"
