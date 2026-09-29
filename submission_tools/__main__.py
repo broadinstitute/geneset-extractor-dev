@@ -55,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     adopt_parser.add_argument("--base-branch", default=DEFAULT_BASE_BRANCH, help="Fallback upstream baseline and pull-request target branch for both repositories (default: main).")
     adopt_parser.add_argument("--dig-base-branch", help="DIG upstream baseline and pull-request target branch; overrides --base-branch.")
     adopt_parser.add_argument("--wrapper-base-branch", help="Wrapper upstream baseline and pull-request target branch; overrides --base-branch.")
+    adopt_parser.add_argument("--work-branch", help="Adoption work branch; defaults to adopt/<library-id>.")
     adopt_parser.add_argument("--allow-upstream-origin", action="store_true", help="Advanced maintainer/test override; allow a canonical repository as origin for this isolated workspace.")
     adopt_parser.add_argument("--extend-existing", action="store_true", help="Explicitly extend an existing new-format wrapper library instead of scaffolding a new one.")
     adopt_parser.add_argument("--model-series", help="Existing model-ID series to extend, for example HZ.")
@@ -132,6 +133,7 @@ def main(argv: list[str] | None = None) -> int:
                     model_series=args.model_series, model_family=args.model_family,
                     new_model_series=args.new_model_series, new_model_family=args.new_model_family,
                     model_family_description=args.model_family_description, family_rationale=args.family_rationale,
+                    work_branch=args.work_branch,
                 )
             except ValueError as exc:
                 parser.error(str(exc))

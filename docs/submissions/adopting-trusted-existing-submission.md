@@ -53,6 +53,7 @@ python3 -m submission_tools adopt \
   --dig-base-branch "$DIG_BRANCH" \
   --wrapper-base-branch "$WRAPPER_BRANCH" \
   --extend-existing \
+  --work-branch "adopt/${LIBRARY_ID}-hz-consensus" \
   --model-series HZ \
   --model-family hz_notebook
 

@@ -93,6 +93,29 @@ def _fork_urls(github_user: str | None, dig_fork: str | None, wrapper_fork: str 
     return dig_fork, wrapper_fork
 
 
+def _remote_branch_exists(url: str, branch: str) -> bool:
+    """Return whether a writable origin already has ``branch``.
+
+    A transport failure is an error rather than a false negative: creating an
+    adoption workspace must not silently reuse an inaccessible remote branch.
+    """
+    completed = _run(["git", "ls-remote", "--exit-code", "--heads", url, branch])
+    if completed.returncode == 0:
+        return True
+    if completed.returncode == 2 and completed.stderr.strip():
+        raise ValueError(f"could not inspect remote branch {branch}: {completed.stderr.strip()}")
+    return False
+
+
+def _adoption_work_branch(library_id: str, requested: str | None) -> str:
+    branch = requested or f"adopt/{library_id}"
+    if not branch.startswith("adopt/") or branch == "adopt/":
+        raise ValueError("adoption work branch must begin with adopt/, for example adopt/GTEx-hz-consensus")
+    if _run(["git", "check-ref-format", "--branch", branch]).returncode:
+        raise ValueError(f"invalid adoption work branch: {branch}")
+    return branch
+
+
 def _clone_fork(url: str, destination: Path, upstream: str, base_branch: str, work_branch: str) -> None:
     completed = _run(["git", "clone", "--origin", "origin", url, str(destination)])
     if completed.returncode:
@@ -205,13 +228,19 @@ def create_workspace(
     new_model_family: str | None = None,
     model_family_description: str | None = None,
     family_rationale: str | None = None,
+    work_branch: str | None = None,
 ) -> Path:
     workspace, legacy = validate_workspace_location(workspace, existing)
     dig_fork, wrapper_fork = _fork_urls(github_user, dig_fork, wrapper_fork, allow_upstream_origin=allow_upstream_origin)
     dig_base_branch = dig_base_branch or base_branch
     wrapper_base_branch = wrapper_base_branch or base_branch
+    work_branch = _adoption_work_branch(library_id, work_branch)
+    if _remote_branch_exists(dig_fork, work_branch) or _remote_branch_exists(wrapper_fork, work_branch):
+        raise ValueError(
+            f"remote branch {work_branch} already exists; use --work-branch with a unique "
+            "adopt/<name> branch or resume the existing workspace"
+        )
     workspace.mkdir(parents=True, exist_ok=True)
-    work_branch = f"adopt/{library_id}"
     try:
         _clone_fork(dig_fork, workspace / "dig-gene-set-extractors", CANONICAL_DIG, dig_base_branch, work_branch)
         _clone_fork(wrapper_fork, workspace / "geneset-extractor-dev", CANONICAL_WRAPPER, wrapper_base_branch, work_branch)

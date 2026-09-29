@@ -45,9 +45,14 @@ python3 -m submission_tools adopt \
   --dig-fork https://github.com/YOU/dig-gene-set-extractors.git \
   --wrapper-fork https://github.com/YOU/geneset-extractor-dev.git \
   --extend-existing \
+  --work-branch adopt/GTEx-hz-consensus \
   --model-series HZ \
   --model-family hz_notebook
 ```
+
+`--work-branch` is optional and defaults to `adopt/<library-id>`. Use a unique
+`adopt/...` name for every independent extension; workspace creation rejects a
+branch that already exists on either writable origin.
 
 To introduce a genuinely new family, use the new-family fields together. They
 are recorded in the isolated workspace manifest and generated adoption prompt,

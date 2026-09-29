@@ -301,6 +301,39 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertIn("Existing-library extension", prompt)
             self.assertIn("do not\nscaffold over it", prompt)
 
+    def test_adoption_work_branch_can_be_unique_and_existing_remote_branch_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            legacy = self.legacy_library(root)
+            dig_upstream, dig_fork = self._remote(root, "dig-upstream"), self._remote(root, "dig-fork")
+            wrapper_upstream = self._remote(root, "wrapper-upstream", with_tools=True)
+            wrapper_fork = self._remote(root, "wrapper-fork", with_tools=True)
+            old_constants = adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER
+            adoption_workspace.CANONICAL_DIG = str(dig_upstream)
+            adoption_workspace.CANONICAL_WRAPPER = str(wrapper_upstream)
+            try:
+                workspace = create_workspace(
+                    existing=legacy, workspace=root / "first", library_id="GTEx", display_name=None,
+                    pattern="generic", github_user=None, dig_fork=str(dig_fork), wrapper_fork=str(wrapper_fork),
+                    work_branch="adopt/GTEx-hz-consensus",
+                )
+                _root, manifest = load_workspace(workspace)
+                self.assertEqual(manifest["repositories"]["dig"]["work_branch"], "adopt/GTEx-hz-consensus")
+                self.assertIn("DIG branch: `adopt/GTEx-hz-consensus`", (workspace / "AI_ADOPTION_PROMPT.md").read_text(encoding="utf-8"))
+                self._git(workspace / "dig-gene-set-extractors", "push", "origin", "adopt/GTEx-hz-consensus")
+                with self.assertRaisesRegex(ValueError, "remote branch adopt/GTEx-hz-consensus already exists"):
+                    create_workspace(
+                        existing=legacy, workspace=root / "second", library_id="GTEx", display_name=None,
+                        pattern="generic", github_user=None, dig_fork=str(dig_fork), wrapper_fork=str(wrapper_fork),
+                        work_branch="adopt/GTEx-hz-consensus",
+                    )
+            finally:
+                adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER = old_constants
+
+    def test_adoption_work_branch_requires_adopt_namespace(self) -> None:
+        with self.assertRaisesRegex(ValueError, "must begin with adopt/"):
+            adoption_workspace._adoption_work_branch("GTEx", "feature/GTEx-hz-consensus")
+
     def test_extension_scope_validates_existing_and_new_model_families(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             library = Path(temp) / "GTEx"
