@@ -83,7 +83,7 @@ submit_hz2() {
   [[ -n "${DIG_REPO:-}" && -d "${DIG_REPO}" ]] || { echo "--submit requires DIG_REPO" >&2; return 1; }
   for variable in GTEX_V8_TPM_GCT GTEX_V8_SAMPLE_ATTRIBUTES_TSV GTEX_V8_SUBJECT_PHENOTYPES_TSV; do [[ -n "${!variable:-}" && -f "${!variable}" ]] || { echo "--submit requires existing ${variable}" >&2; return 1; }; done
   mkdir -p "${SUBMISSION_WORK_DIR}/qsub_logs"
-  export_vars="SUBMISSION_WORK_DIR=${SUBMISSION_WORK_DIR},DIG_REPO=${DIG_REPO},APPTAINER_IMAGE=${APPTAINER_IMAGE},GTEX_V8_TPM_GCT=${GTEX_V8_TPM_GCT},GTEX_V8_SAMPLE_ATTRIBUTES_TSV=${GTEX_V8_SAMPLE_ATTRIBUTES_TSV},GTEX_V8_SUBJECT_PHENOTYPES_TSV=${GTEX_V8_SUBJECT_PHENOTYPES_TSV}"
+  export_vars="GTEX_WRAPPER_ROOT=${root},SUBMISSION_WORK_DIR=${SUBMISSION_WORK_DIR},DIG_REPO=${DIG_REPO},APPTAINER_IMAGE=${APPTAINER_IMAGE},GTEX_V8_TPM_GCT=${GTEX_V8_TPM_GCT},GTEX_V8_SAMPLE_ATTRIBUTES_TSV=${GTEX_V8_SAMPLE_ATTRIBUTES_TSV},GTEX_V8_SUBJECT_PHENOTYPES_TSV=${GTEX_V8_SUBJECT_PHENOTYPES_TSV}"
   "${QSUB_BIN:-qsub}" -N "${array_job_name}_hz2" -o "${SUBMISSION_WORK_DIR}/qsub_logs/gtex_hz2.out" -e "${SUBMISSION_WORK_DIR}/qsub_logs/gtex_hz2.err" -l "h_vmem=${array_memory},h_rt=${array_walltime}" -v "${export_vars}" "${runner}" full
 }
 if [[ "${model_id}" == "HZ2" ]]; then

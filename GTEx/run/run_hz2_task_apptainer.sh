@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+root="${GTEX_WRAPPER_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)}"
+[[ -d "${root}" ]] || { echo "GTEX_WRAPPER_ROOT is not a GTEx wrapper directory: ${root}" >&2; exit 1; }
 mode="${1:-full}"
 [[ "${mode}" == "full" ]] || { echo "usage: run_hz2_task_apptainer.sh full" >&2; exit 2; }
 [[ -n "${SUBMISSION_WORK_DIR:-}" ]] || { echo "Set SUBMISSION_WORK_DIR outside the GTEx checkout" >&2; exit 1; }
