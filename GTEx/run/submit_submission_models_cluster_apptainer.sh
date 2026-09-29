@@ -77,6 +77,20 @@ if [[ -n "${tissue_id}" ]]; then
     || { echo "Unknown GTEx broad tissue ID: ${tissue_id}" >&2; exit 2; }
 fi
 
+submit_hz2() {
+  local runner="${root}/run/run_hz2_task_apptainer.sh"
+  [[ -n "${APPTAINER_IMAGE:-}" && -f "${APPTAINER_IMAGE}" ]] || { echo "--submit requires APPTAINER_IMAGE" >&2; return 1; }
+  [[ -n "${DIG_REPO:-}" && -d "${DIG_REPO}" ]] || { echo "--submit requires DIG_REPO" >&2; return 1; }
+  for variable in GTEX_V8_TPM_GCT GTEX_V8_SAMPLE_ATTRIBUTES_TSV GTEX_V8_SUBJECT_PHENOTYPES_TSV; do [[ -n "${!variable:-}" && -f "${!variable}" ]] || { echo "--submit requires existing ${variable}" >&2; return 1; }; done
+  mkdir -p "${SUBMISSION_WORK_DIR}/qsub_logs"
+  "${QSUB_BIN:-qsub}" -N "${array_job_name}_hz2" -o "${SUBMISSION_WORK_DIR}/qsub_logs/gtex_hz2.out" -e "${SUBMISSION_WORK_DIR}/qsub_logs/gtex_hz2.err" -l "h_vmem=${array_memory},h_rt=${array_walltime}" bash "${runner}" full
+}
+if [[ "${model_id}" == "HZ2" ]]; then
+  [[ -z "${tissue_id}" ]] || { echo "HZ2 has no broad-tissue partition; omit --tissue-id" >&2; exit 2; }
+  if [[ ${submit} -eq 0 ]]; then echo "Would submit one HZ2 consensus task through run_hz2_task_apptainer.sh. Set --submit to call qsub."; exit 0; fi
+  submit_hz2; exit $?
+fi
+
 command=(env "WORK_ROOT=${SUBMISSION_WORK_DIR}" "GTEX_OUT_ROOT=${SUBMISSION_WORK_DIR}" "DIG_DIR=${DIG_REPO:-}" \
   "GTEX_ARRAY_MEMORY=${array_memory}" "GTEX_ARRAY_WALLTIME=${array_walltime}" "GTEX_JOB_NAME=${array_job_name}" \
   "GTEX_V10_COUNTS_GCT=${GTEX_V10_COUNTS_GCT:-}" "GTEX_V10_SAMPLE_ATTRIBUTES_TSV=${GTEX_V10_SAMPLE_ATTRIBUTES_TSV:-}" "GTEX_V10_SUBJECT_PHENOTYPES_TSV=${GTEX_V10_SUBJECT_PHENOTYPES_TSV:-}" \
@@ -88,6 +102,7 @@ if [[ ${submit} -eq 0 ]]; then
   printf 'Would submit GTEx array: '
   printf '%q ' "${command[@]}"
   printf '\nSet --submit to call qsub.\n'
+  if [[ -z "${model_id}" ]]; then echo "Would also submit one HZ2 consensus task through run_hz2_task_apptainer.sh."; fi
   exit 0
 fi
 
@@ -96,5 +111,6 @@ fi
 for variable in GTEX_V10_COUNTS_GCT GTEX_V10_SAMPLE_ATTRIBUTES_TSV GTEX_V10_SUBJECT_PHENOTYPES_TSV GTEX_V8_COUNTS_GCT GTEX_V8_SAMPLE_ATTRIBUTES_TSV GTEX_V8_SUBJECT_PHENOTYPES_TSV GTEX_V8_HUMAN_GENE_INFO GTEX_GTF; do
   [[ -n "${!variable:-}" && -f "${!variable}" ]] || { echo "--submit requires existing ${variable}" >&2; exit 1; }
 done
+if [[ -z "${model_id}" ]]; then submit_hz2; fi
 mkdir -p "${SUBMISSION_WORK_DIR}/qsub_logs"
 exec "${command[@]}"
