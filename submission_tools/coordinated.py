@@ -53,9 +53,18 @@ def coordinated_validate(
     dig_python: str = sys.executable,
     smoke: bool = False,
     development_dig_checkout: bool = False,
+    validate_wrapper: bool = True,
 ) -> ValidationResult:
-    result = validate_submission(submission)
-    if not result.ok:
+    """Validate the wrapper/DIG contract.
+
+    ``validate_wrapper=False`` is deliberately limited to the pre-PR
+    ``publish-adoption`` path.  It still verifies the pinned DIG checkout,
+    package import, and declared DIG identifiers, but does not claim that the
+    wrapper submission is ready for final review.  Final verification and
+    submission always retain full wrapper validation.
+    """
+    result = validate_submission(submission) if validate_wrapper else ValidationResult()
+    if validate_wrapper and not result.ok:
         return result
     path = submission / "submission.yaml" if submission.is_dir() else submission
     payload = load(path)

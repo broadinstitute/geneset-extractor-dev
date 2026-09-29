@@ -1083,7 +1083,16 @@ def publish_workspace(workspace: Path, *, yes: bool = False, allow_upstream_orig
     ) if wrapper_dirty_after_pin else None
     wrapper_pending = wrapper_pending or wrapper_sha is not None
     if dig_pending:
-        result = coordinated_validate(library, dig, development_dig_checkout=False)
+        # Publishing is an intermediate synchronization step for remote full
+        # reproduction.  Check the exact DIG pin and interface now, but leave
+        # readiness-only wrapper requirements (for example, complete source
+        # version provenance) to verify-adoption/final submit-adoption.
+        result = coordinated_validate(
+            library,
+            dig,
+            development_dig_checkout=False,
+            validate_wrapper=False,
+        )
         if not result.ok:
             return False, ["ERROR: coordinated validation failed after DIG pinning", *[issue.message for issue in result.issues]]
     for repo, declared, pending in ((dig, repositories["dig"], dig_pending), (wrapper, repositories["wrapper"], wrapper_pending)):
