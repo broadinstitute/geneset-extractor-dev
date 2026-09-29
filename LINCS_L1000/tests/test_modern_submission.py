@@ -21,6 +21,13 @@ class LincsModernSubmissionTests(unittest.TestCase):
         self.assertEqual({row["model_id"] for row in rows(ROOT / "config/task_manifest.tsv")}, {"HZ1", "HZ2"})
         self.assertEqual({row["model_id"] for row in rows(ROOT / "expected/output_manifest.tsv")}, {"HZ1", "HZ2"})
 
+    def test_cluster_adapter_uses_standard_submission_interface(self) -> None:
+        source = (ROOT / "run/submit_submission_models_cluster_apptainer.sh").read_text(encoding="utf-8")
+        self.assertIn("DIG_REPO", source)
+        self.assertIn("SUBMISSION_WORK_DIR", source)
+        self.assertIn("SUBMISSION_ARRAY_MEMORY", source)
+        self.assertIn("--model-id", source)
+
     @unittest.skipUnless((DIG / "src/geneset_extractors").is_dir(), "requires sibling DIG checkout")
     def test_smoke_reproduction_runs_hz1(self) -> None:
         with TemporaryDirectory() as temp_dir:
