@@ -83,7 +83,7 @@ submit_hz2() {
   [[ -n "${DIG_REPO:-}" && -d "${DIG_REPO}" ]] || { echo "--submit requires DIG_REPO" >&2; return 1; }
   for variable in GTEX_V8_TPM_GCT GTEX_V8_SAMPLE_ATTRIBUTES_TSV GTEX_V8_SUBJECT_PHENOTYPES_TSV; do [[ -n "${!variable:-}" && -f "${!variable}" ]] || { echo "--submit requires existing ${variable}" >&2; return 1; }; done
   mkdir -p "${SUBMISSION_WORK_DIR}/qsub_logs"
-  "${QSUB_BIN:-qsub}" -N "${array_job_name}_hz2" -o "${SUBMISSION_WORK_DIR}/qsub_logs/gtex_hz2.out" -e "${SUBMISSION_WORK_DIR}/qsub_logs/gtex_hz2.err" -l "h_vmem=${array_memory},h_rt=${array_walltime}" bash "${runner}" full
+  "${QSUB_BIN:-qsub}" -N "${array_job_name}_hz2" -o "${SUBMISSION_WORK_DIR}/qsub_logs/gtex_hz2.out" -e "${SUBMISSION_WORK_DIR}/qsub_logs/gtex_hz2.err" -l "h_vmem=${array_memory},h_rt=${array_walltime}" "${runner}" full
 }
 if [[ "${model_id}" == "HZ2" ]]; then
   [[ -z "${tissue_id}" ]] || { echo "HZ2 has no broad-tissue partition; omit --tissue-id" >&2; exit 2; }
