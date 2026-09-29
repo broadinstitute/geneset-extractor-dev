@@ -25,13 +25,20 @@ class HuBMAPModernSubmissionTests(unittest.TestCase):
         self.assertEqual({row["model_id"] for row in tasks}, {"HZ1", "HZ2"})
         self.assertEqual({row["model_id"] for row in outputs}, {"HZ1", "HZ2"})
 
+    def test_wrapper_declares_stable_hubmap_collection_names(self) -> None:
+        source = (ROOT / "src/run_hubmap_hz_model.py").read_text(encoding="utf-8")
+        self.assertIn('"HuBMAP_ASCTB" if model_id == "HZ1" else "HuBMAP_ASCTB_augmented"', source)
+        self.assertIn('"--signature_name"', source)
+
     @unittest.skipUnless((DIG / "src/geneset_extractors").is_dir(), "requires sibling DIG checkout")
     def test_smoke_reproduction_runs_hz1_without_network(self) -> None:
         from tempfile import TemporaryDirectory
         with TemporaryDirectory() as temp_dir:
             result = subprocess.run(["bash", str(ROOT / "reproduction/reproduce.sh"), "--smoke"], cwd=ROOT, env={**os.environ, "SUBMISSION_WORK_DIR": temp_dir, "DIG_REPO": str(DIG), "PYTHON_BIN": sys.executable}, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-            self.assertTrue(Path(temp_dir, "smoke/genesets/all_signatures/models/HZ1/extractor/genesets.gmt").is_file())
+            extractor = Path(temp_dir, "smoke/genesets/all_signatures/models/HZ1/extractor")
+            self.assertTrue((extractor / "genesets.gmt").is_file())
+            self.assertIn("name: HuBMAP_ASCTB", (extractor / "geneset.provenance.dapper.yaml").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
