@@ -362,6 +362,37 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertEqual(pushed.returncode, 0, pushed.stderr)
             self.assertTrue((workspace / "reports/push_receipt.json").is_file())
 
+    def test_push_only_defers_scientific_input_readiness_until_final_validation(self) -> None:
+        """Publishing work branches must not require remote-only input metadata.
+
+        The final workflow still enforces these fields through normal wrapper
+        validation.  This regression test covers the intended local-authoring
+        to remote-reproduction handoff.
+        """
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workspace, dig, wrapper, dig_fork = self._submittable_workspace(root, dig_change="dirty")
+            library = wrapper / "Adopted"
+            payload = json.loads((library / "submission.yaml").read_text(encoding="utf-8"))
+            payload["adoption"]["comparison_policy"] = {"mode": "scientific_reimplementation"}
+            # Deliberately omit source_version_confidence and
+            # legacy_input_relationship: these are final-readiness fields.
+            (library / "submission.yaml").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            self.assertFalse(validate_submission(library).ok)
+            with patch.object(
+                adoption_workspace,
+                "_active_tooling",
+                return_value=(True, wrapper / "submission_tools", wrapper / "submission_tools", "test"),
+            ):
+                ok, messages = publish_workspace(workspace, yes=True)
+            self.assertTrue(ok, messages)
+            pushed = subprocess.run(
+                ["git", "--git-dir", str(dig_fork), "rev-parse", "refs/heads/adopt/Adopted"],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(pushed.returncode, 0, pushed.stderr)
+
     def test_handoff_initializes_relocatable_remote_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
