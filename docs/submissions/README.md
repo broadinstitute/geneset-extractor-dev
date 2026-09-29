@@ -38,7 +38,9 @@ the proposal issue and paired-PR sequence.
 
 If gene sets already exist outside this framework, follow
 [adopting-existing-library.md](adopting-existing-library.md) to inventory and
-migrate them into the same contract. Maintainers adopting a trusted existing
+migrate them into the same contract. For local Codex authoring with remote full
+reproduction, follow [remote-adoption-execution.md](remote-adoption-execution.md).
+Maintainers adopting a trusted existing
 submission should use the complete
 [trusted-adoption tutorial](adopting-trusted-existing-submission.md).
 

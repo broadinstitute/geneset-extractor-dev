@@ -439,4 +439,6 @@ submission with unexplained validation failures.
 
 Read [adopting-existing-library.md](adopting-existing-library.md) for the
 architecture, provenance, ignore-policy, and low-level command contract.
+For local authoring with remote full reproduction, use
+[remote-adoption-execution.md](remote-adoption-execution.md).
 Read [review-policy.md](review-policy.md) before approving a submission.

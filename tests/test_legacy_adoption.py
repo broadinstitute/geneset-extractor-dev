@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -13,7 +14,7 @@ from pathlib import Path
 
 from submission_tools.adoption import adopt, adoption_status, gitignore_allowlist, inventory_legacy
 from submission_tools import adoption_workspace
-from submission_tools.adoption_workspace import DEFAULT_BASE_BRANCH, _compare_references, _is_fork_origin, _open_draft_pr, _workspace_digest, _write_json, create_workspace, load_workspace, safe_stage, submit_workspace, validate_workspace_location, verify_workspace
+from submission_tools.adoption_workspace import DEFAULT_BASE_BRANCH, _compare_references, _is_fork_origin, _open_draft_pr, _workspace_digest, _write_json, create_workspace, export_handoff, init_remote_workspace, load_workspace, publish_workspace, safe_stage, submit_workspace, sync_remote_workspace, validate_workspace_location, verify_workspace
 from submission_tools.legacy_compare import compare_gmt
 from submission_tools.scaffold import scaffold
 from submission_tools.validator import validate_submission
@@ -333,6 +334,79 @@ class LegacyAdoptionTest(unittest.TestCase):
     def test_adoption_work_branch_requires_adopt_namespace(self) -> None:
         with self.assertRaisesRegex(ValueError, "must begin with adopt/"):
             adoption_workspace._adoption_work_branch("GTEx", "feature/GTEx-hz-consensus")
+
+    def test_push_only_publishes_without_verification_or_draft_pr(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            legacy = self.legacy_library(root)
+            dig_upstream, dig_fork = self._remote(root, "dig-upstream"), self._remote(root, "dig-fork")
+            wrapper_upstream = self._remote(root, "wrapper-upstream", with_tools=True)
+            wrapper_fork = self._remote(root, "wrapper-fork", with_tools=True)
+            old_constants = adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER
+            adoption_workspace.CANONICAL_DIG = str(dig_upstream)
+            adoption_workspace.CANONICAL_WRAPPER = str(wrapper_upstream)
+            try:
+                workspace = create_workspace(
+                    existing=legacy, workspace=root / "authoring", library_id="Adopted", display_name=None,
+                    pattern="generic", github_user=None, dig_fork=str(dig_fork), wrapper_fork=str(wrapper_fork),
+                )
+                wrapper = workspace / "geneset-extractor-dev"
+                self._configure_test_git_identity(wrapper)
+                (wrapper / "Adopted/README.md").write_text("# Updated\n", encoding="utf-8")
+                with patch.object(adoption_workspace, "_active_tooling", return_value=(True, wrapper / "submission_tools", wrapper / "submission_tools", "test")), patch.object(adoption_workspace, "_open_draft_pr", side_effect=AssertionError("must not create a PR")):
+                    ok, messages = publish_workspace(workspace, yes=True)
+            finally:
+                adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER = old_constants
+            self.assertTrue(ok, messages)
+            pushed = subprocess.run(["git", "--git-dir", str(wrapper_fork), "rev-parse", "refs/heads/adopt/Adopted"], capture_output=True, text=True)
+            self.assertEqual(pushed.returncode, 0, pushed.stderr)
+            self.assertTrue((workspace / "reports/push_receipt.json").is_file())
+
+    def test_handoff_initializes_relocatable_remote_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            legacy = self.legacy_library(root)
+            remote_legacy = root / "remote-legacy"
+            shutil.copytree(legacy, remote_legacy)
+            dig_upstream, dig_fork = self._remote(root, "dig-upstream"), self._remote(root, "dig-fork")
+            wrapper_upstream = self._remote(root, "wrapper-upstream", with_tools=True)
+            wrapper_fork = self._remote(root, "wrapper-fork", with_tools=True)
+            old_constants = adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER
+            adoption_workspace.CANONICAL_DIG = str(dig_upstream)
+            adoption_workspace.CANONICAL_WRAPPER = str(wrapper_upstream)
+            try:
+                authoring = create_workspace(
+                    existing=legacy, workspace=root / "authoring", library_id="Adopted", display_name=None,
+                    pattern="generic", github_user=None, dig_fork=str(dig_fork), wrapper_fork=str(wrapper_fork),
+                )
+                wrapper = authoring / "geneset-extractor-dev"
+                self._configure_test_git_identity(wrapper)
+                self._git(wrapper, "add", "Adopted")
+                self._git(wrapper, "commit", "-m", "add adopted library")
+                self._git(authoring / "dig-gene-set-extractors", "push", "origin", "adopt/Adopted")
+                self._git(wrapper, "push", "origin", "adopt/Adopted")
+                handoff = export_handoff(authoring, root / "handoff.tar.gz")
+                with tarfile.open(handoff, "r:gz") as archive:
+                    names = archive.getnames()
+                self.assertIn("handoff.json", names)
+                self.assertFalse(any(name.startswith(("work/", "inputs/", "outputs/", "dig-gene-set-extractors/", "geneset-extractor-dev/")) for name in names))
+                remote = init_remote_workspace(handoff=handoff, workspace=root / "remote", legacy=remote_legacy)
+            finally:
+                adoption_workspace.CANONICAL_DIG, adoption_workspace.CANONICAL_WRAPPER = old_constants
+            _root, manifest = load_workspace(remote)
+            self.assertEqual(manifest["workspace"]["root"], str(remote.resolve()))
+            self.assertEqual(manifest["legacy"]["source_path"], str(remote_legacy.resolve()))
+            self.assertTrue((remote / "sync-adoption-workspace").is_file())
+            self.assertTrue((remote / "adoption/inventory.json").is_file())
+            (wrapper / "README.md").write_text("updated fixture\n", encoding="utf-8")
+            self._git(wrapper, "add", "README.md")
+            self._git(wrapper, "commit", "-m", "remote sync fixture")
+            self._git(wrapper, "push", "origin", "adopt/Adopted")
+            remote_wrapper = remote / "geneset-extractor-dev"
+            with patch.object(adoption_workspace, "_active_tooling", return_value=(True, remote_wrapper / "submission_tools", remote_wrapper / "submission_tools", "test")):
+                ok, messages = sync_remote_workspace(remote)
+            self.assertTrue(ok, messages)
+            self.assertEqual((remote_wrapper / "README.md").read_text(encoding="utf-8"), "updated fixture\n")
 
     def test_extension_scope_validates_existing_and_new_model_families(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

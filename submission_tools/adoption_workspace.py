@@ -7,6 +7,7 @@ it does not introduce another submission format.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import re
@@ -14,6 +15,9 @@ import shutil
 import subprocess
 import sys
 import csv
+import tarfile
+import tempfile
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -33,6 +37,7 @@ CANONICAL_WRAPPER = "https://github.com/broadinstitute/geneset-extractor-dev.git
 DEFAULT_BASE_BRANCH = "main"
 WORKSPACE_MANIFEST = ".adoption-workspace.yaml"
 RUNTIME_OUTPUT_ENV = "SUBMISSION_WORK_DIR"
+HANDOFF_SCHEMA_VERSION = "1.0.0"
 
 
 def _run(args: list[str], cwd: Path | None = None, *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -151,6 +156,10 @@ def _write_workspace_helper(path: Path, command: str) -> None:
         encoding="utf-8",
     )
     path.chmod(path.stat().st_mode | 0o111)
+
+
+def _write_sync_helper(path: Path) -> None:
+    _write_workspace_helper(path, "sync-adoption-workspace")
 
 
 def _write_cluster_adapters(wrapper: Path, library_id: str) -> list[Path]:
@@ -320,6 +329,8 @@ def create_workspace(
         _write_json(workspace / WORKSPACE_MANIFEST, manifest)
         _write_workspace_helper(workspace / "verify-adoption", "verify-adoption")
         _write_workspace_helper(workspace / "submit-adoption", "submit-adoption")
+        _write_workspace_helper(workspace / "publish-adoption", "submit-adoption --push-only")
+        _write_sync_helper(workspace / "sync-adoption-workspace")
         (workspace / "AI_ADOPTION_PROMPT.md").write_text(_workspace_prompt(workspace, manifest, inventory), encoding="utf-8")
         (workspace / "reports").mkdir(); (workspace / "work").mkdir(); (workspace / "legacy").mkdir()
         return workspace
@@ -424,6 +435,113 @@ def load_workspace(workspace: Path) -> tuple[Path, dict[str, Any]]:
     return root, manifest
 
 
+def export_handoff(workspace: Path, output: Path) -> Path:
+    """Create a small, relocatable handoff archive for remote execution."""
+    root, manifest = load_workspace(workspace)
+    output = output.expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    handoff = {
+        "schema_version": HANDOFF_SCHEMA_VERSION,
+        "library_id": manifest["library_id"],
+        "repositories": manifest["repositories"],
+        "submission": manifest["submission"],
+        "runtime": manifest["runtime"],
+        "workspace": {"upstream_origin_mode": manifest["workspace"].get("upstream_origin_mode", False)},
+        "legacy": {"read_only": True, "inventory": "adoption/inventory.json", "reference": "adoption/legacy_reference.json"},
+        "source_legacy_root": str(manifest["legacy"].get("source_path", "")),
+    }
+    with tarfile.open(output, "w:gz") as archive:
+        info = tarfile.TarInfo("handoff.json")
+        encoded = (json.dumps(handoff, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        info.size = len(encoded)
+        archive.addfile(info, io.BytesIO(encoded))
+        for relative in ("adoption", "AI_ADOPTION_PROMPT.md"):
+            source = root / relative
+            if source.exists():
+                archive.add(source, arcname=relative, recursive=True)
+    return output
+
+
+def _safe_extract_handoff(archive: tarfile.TarFile, destination: Path) -> None:
+    for member in archive.getmembers():
+        target = (destination / member.name).resolve()
+        if (not (member.isfile() or member.isdir()) or member.issym() or member.islnk()
+                or member.name.startswith("/")
+                or (destination.resolve() not in target.parents and target != destination.resolve())):
+            raise ValueError(f"unsafe handoff archive member: {member.name}")
+    # Python 3.14 warns unless an extraction filter is supplied, while Python
+    # 3.11 remains supported by this repository.  Members were constrained to
+    # non-link, destination-contained paths above, so this compatibility call
+    # is safe for the small handoff format.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        archive.extractall(destination)
+
+
+def _clone_remote_branch(url: str, destination: Path, upstream: str, base_branch: str, work_branch: str) -> None:
+    _clone_fork(url, destination, upstream, base_branch, work_branch)
+    completed = _run(["git", "fetch", "origin", work_branch], destination)
+    if completed.returncode:
+        raise ValueError(f"could not fetch remote adoption branch {work_branch}: {completed.stderr.strip()}")
+    _git(destination, "checkout", "-B", work_branch, f"origin/{work_branch}")
+
+
+def init_remote_workspace(*, handoff: Path, workspace: Path, legacy: Path) -> Path:
+    """Initialize a relocatable execution workspace from a handoff archive."""
+    workspace, legacy = validate_workspace_location(workspace, legacy)
+    handoff = handoff.expanduser().resolve()
+    if not handoff.is_file():
+        raise ValueError(f"handoff archive does not exist: {handoff}")
+    with tempfile.TemporaryDirectory() as temp:
+        staging = Path(temp)
+        with tarfile.open(handoff, "r:gz") as archive:
+            _safe_extract_handoff(archive, staging)
+        payload = json.loads((staging / "handoff.json").read_text(encoding="utf-8"))
+        if payload.get("schema_version") != HANDOFF_SCHEMA_VERSION:
+            raise ValueError("unsupported adoption handoff schema")
+        repositories = payload.get("repositories")
+        if not isinstance(repositories, dict):
+            raise ValueError("handoff is missing repository declarations")
+        workspace.mkdir(parents=True, exist_ok=True)
+        for role, directory in (("dig", "dig-gene-set-extractors"), ("wrapper", "geneset-extractor-dev")):
+            declared = repositories.get(role)
+            if not isinstance(declared, dict):
+                raise ValueError(f"handoff is missing {role} repository declaration")
+            _clone_remote_branch(
+                str(declared["origin"]), workspace / directory, str(declared["upstream"]),
+                str(declared["base_branch"]), str(declared["work_branch"]),
+            )
+        shutil.copytree(staging / "adoption", workspace / "adoption")
+        prompt = staging / "AI_ADOPTION_PROMPT.md"
+        if prompt.is_file():
+            shutil.copy2(prompt, workspace / prompt.name)
+        inventory = json.loads((workspace / "adoption/inventory.json").read_text(encoding="utf-8"))
+        changed = _legacy_changed(workspace, {"legacy": {"inventory": "adoption/inventory.json"}}, legacy)
+        if changed:
+            raise ValueError("remote legacy reference does not match the handoff inventory: " + ", ".join(changed[:5]))
+        _write_json(workspace / "adoption/legacy_reference.json", _legacy_reference(legacy, inventory))
+        library = workspace / str(payload["submission"]["wrapper_library_path"])
+        submission = library / "submission.yaml"
+        if not submission.is_file():
+            raise ValueError("remote wrapper branch is missing its submission.yaml")
+        manifest = {
+            "schema_version": "1.0.0", "library_id": payload["library_id"],
+            "workspace": {"root": str(workspace), "upstream_origin_mode": bool(payload["workspace"].get("upstream_origin_mode", False))},
+            "legacy": {"source_path": str(legacy), "authoring_source_path": str(payload.get("source_legacy_root", "")), "read_only": True, "inventory": "adoption/inventory.json", "reference": "adoption/legacy_reference.json"},
+            "repositories": repositories,
+            "tooling": {"wrapper_commit": _git(workspace / "geneset-extractor-dev", "rev-parse", "HEAD"), "submission_tools_path": "geneset-extractor-dev/submission_tools"},
+            "submission": payload["submission"], "runtime": payload["runtime"],
+            "verification": {"last_result": None, "last_receipt": None, "workspace_digest": None},
+        }
+        _write_json(workspace / WORKSPACE_MANIFEST, manifest)
+        _write_workspace_helper(workspace / "verify-adoption", "verify-adoption")
+        _write_workspace_helper(workspace / "submit-adoption", "submit-adoption")
+        _write_workspace_helper(workspace / "publish-adoption", "submit-adoption --push-only")
+        _write_sync_helper(workspace / "sync-adoption-workspace")
+        (workspace / "reports").mkdir(); (workspace / "work").mkdir(); (workspace / "legacy").mkdir()
+    return workspace
+
+
 def _workspace_paths(root: Path, manifest: dict[str, Any]) -> tuple[Path, Path, Path, Path]:
     repos = manifest.get("repositories", {})
     dig = root / str(repos.get("dig", {}).get("path", ""))
@@ -431,6 +549,35 @@ def _workspace_paths(root: Path, manifest: dict[str, Any]) -> tuple[Path, Path, 
     library = root / str(manifest.get("submission", {}).get("wrapper_library_path", ""))
     legacy = Path(str(manifest.get("legacy", {}).get("source_path", "")))
     return dig, wrapper, library, legacy
+
+
+def sync_remote_workspace(workspace: Path) -> tuple[bool, list[str]]:
+    """Fast-forward a remote execution workspace from its declared origins."""
+    root, manifest = load_workspace(workspace)
+    tooling_ok, expected, active, _commit = _active_tooling(root, manifest)
+    if not tooling_ok:
+        return False, _tooling_failure(expected, active, "sync-adoption-workspace")
+    dig, wrapper, library, _legacy = _workspace_paths(root, manifest)
+    messages: list[str] = []
+    for role, repo, declared in (("DIG", dig, manifest["repositories"]["dig"]), ("wrapper", wrapper, manifest["repositories"]["wrapper"])):
+        if _changed_paths(repo):
+            return False, [f"ERROR: {role} has local source changes; commit and push them from the authoring workspace before syncing"]
+        branch = str(declared["work_branch"])
+        fetched = _run(["git", "fetch", "origin", branch], repo)
+        if fetched.returncode:
+            return False, [f"ERROR: could not fetch {role} branch {branch}: {fetched.stderr.strip()}"]
+        merged = _run(["git", "merge", "--ff-only", f"origin/{branch}"], repo)
+        if merged.returncode:
+            return False, [f"ERROR: could not fast-forward {role} branch {branch}: {merged.stderr.strip()}"]
+        messages.append(f"INFO: {role} synchronized at {_git(repo, 'rev-parse', 'HEAD')}")
+    if library.is_dir() and (library / "submission.yaml").is_file():
+        declared_commit = str(load(library / "submission.yaml").get("dig", {}).get("commit", ""))
+        actual_commit = _git(dig, "rev-parse", "HEAD")
+        if re.fullmatch(r"[0-9a-f]{40}", declared_commit) and declared_commit != "0" * 40 and declared_commit != actual_commit:
+            return False, [*messages, "ERROR: synchronized DIG checkout does not match the wrapper's declared dig.commit"]
+    manifest["tooling"]["wrapper_commit"] = _git(wrapper, "rev-parse", "HEAD")
+    _write_json(root / WORKSPACE_MANIFEST, manifest)
+    return True, messages
 
 
 def _active_tooling(root: Path, manifest: dict[str, Any]) -> tuple[bool, Path, Path, str]:
@@ -532,6 +679,10 @@ def _reference_mappings(root: Path, library: Path, manifest: dict[str, Any], pay
         if not isinstance(item, dict):
             continue
         legacy = str(item.get("legacy") or item.get("path") or "")
+        authoring_legacy = str(manifest.get("legacy", {}).get("authoring_source_path", ""))
+        remote_legacy = str(manifest.get("legacy", {}).get("source_path", ""))
+        if authoring_legacy and remote_legacy and (legacy == authoring_legacy or legacy.startswith(authoring_legacy.rstrip("/") + "/")):
+            legacy = str(Path(remote_legacy) / Path(legacy).relative_to(authoring_legacy))
         regenerated = str(item.get("regenerated") or "")
         scope = str(item.get("scope") or "full")
         if legacy:
@@ -872,6 +1023,81 @@ def _ahead_of_base(repo: Path, base_branch: str) -> bool:
 
 def _is_fork_origin(url: str, upstream: str) -> bool:
     return _normalize_remote(url) != _normalize_remote(upstream)
+
+
+def publish_workspace(workspace: Path, *, yes: bool = False, allow_upstream_origin: bool = False) -> tuple[bool, list[str]]:
+    """Commit and push an adoption branch without opening a pull request.
+
+    This is deliberately a pre-PR synchronization operation.  It retains the
+    staging, origin, and coordinated-contract safeguards, but does not require
+    expensive full reproduction or claim the adoption is ready.
+    """
+    root, manifest = load_workspace(workspace)
+    tooling_ok, expected, active, _commit = _active_tooling(root, manifest)
+    if not tooling_ok:
+        return False, _tooling_failure(expected, active, "publish-adoption")
+    dig, wrapper, library, _legacy = _workspace_paths(root, manifest)
+    repositories = manifest["repositories"]
+    maintainer_mode = bool(manifest.get("workspace", {}).get("upstream_origin_mode", False))
+    messages: list[str] = []
+    for role, repo, declared in (("DIG", dig, repositories["dig"]), ("wrapper", wrapper, repositories["wrapper"])):
+        messages.extend("ERROR: " + item for item in _repo_safety(repo, declared, role))
+        if _normalize_remote(str(declared["origin"])) == _normalize_remote(str(declared["upstream"])) and not maintainer_mode:
+            messages.append(f"ERROR: {role} uses canonical upstream as origin without the recorded --allow-upstream-origin override")
+    if any(message.startswith("ERROR:") for message in messages):
+        return False, messages
+    dig_dirty = bool(_changed_paths(dig))
+    wrapper_dirty = bool(_changed_paths(wrapper))
+    dig_pending = dig_dirty or _ahead_of_base(dig, str(repositories["dig"]["base_branch"]))
+    wrapper_pending = wrapper_dirty or _ahead_of_base(wrapper, str(repositories["wrapper"]["base_branch"]))
+    if not dig_pending and not wrapper_pending:
+        return False, ["ERROR: no changes are available to publish"]
+    if not yes:
+        return False, [
+            "Changes to publish without opening a pull request:",
+            f"  dig-gene-set-extractors: {'pending' if dig_pending else 'unchanged'}",
+            f"  geneset-extractor-dev: {'pending' if wrapper_pending else 'unchanged'}",
+            "Re-run with --yes --push-only to commit and push only to origin.",
+        ]
+    for repo, declared in ((dig, repositories["dig"]), (wrapper, repositories["wrapper"])):
+        origin = _git(repo, "remote", "get-url", "origin")
+        if not allow_upstream_origin and not _is_fork_origin(origin, str(declared["upstream"])):
+            return False, [f"ERROR: refusing to push {repo.name}; origin is canonical upstream"]
+    ignored_submission = _ignored_submission_files(wrapper, library)
+    if ignored_submission:
+        return False, _ignored_submission_message(root, ignored_submission)
+    dig_sha = _commit_if_changed(dig, f"Add extractor support for {manifest['library_id']}", ("src", "tests", "docs", "pyproject.toml", "README.md", ".gitignore")) if dig_dirty else None
+    submission = library / "submission.yaml"
+    payload = load(submission)
+    if dig_pending:
+        payload["dig"]["commit"] = dig_sha or _git(dig, "rev-parse", "HEAD")
+        paired = payload.get("paired_pull_requests")
+        if isinstance(paired, dict):
+            paired["dig_gene_set_extractors"] = "TBD"
+        _write_json(submission, payload)
+    wrapper_dirty_after_pin = bool(_changed_paths(wrapper))
+    wrapper_sha = _commit_if_changed(
+        wrapper, f"Add {manifest['library_id']} gene-set library",
+        (manifest["library_id"], "docs", "submission_tools", "tests", "config", "run", ".gitignore"),
+        submission_library_root=manifest["library_id"],
+    ) if wrapper_dirty_after_pin else None
+    wrapper_pending = wrapper_pending or wrapper_sha is not None
+    if dig_pending:
+        result = coordinated_validate(library, dig, development_dig_checkout=False)
+        if not result.ok:
+            return False, ["ERROR: coordinated validation failed after DIG pinning", *[issue.message for issue in result.issues]]
+    for repo, declared, pending in ((dig, repositories["dig"], dig_pending), (wrapper, repositories["wrapper"], wrapper_pending)):
+        if pending:
+            completed = _run(["git", "push", "-u", "origin", str(declared["work_branch"])], repo)
+            if completed.returncode:
+                return False, [f"ERROR: push to origin failed for {repo.name}: {completed.stderr.strip()}"]
+    receipt = root / "reports" / "push_receipt.json"
+    _write_json(receipt, {
+        "schema_version": "1.0.0", "mode": "push_only", "library_id": manifest["library_id"],
+        "dig_commit": _git(dig, "rev-parse", "HEAD"), "wrapper_commit": _git(wrapper, "rev-parse", "HEAD"),
+        "dig_branch": repositories["dig"]["work_branch"], "wrapper_branch": repositories["wrapper"]["work_branch"],
+    })
+    return True, ["INFO: adoption branches pushed without opening pull requests.", f"INFO: push receipt: {receipt.relative_to(root)}"]
 
 
 def _github_slug(url: str) -> str | None:
