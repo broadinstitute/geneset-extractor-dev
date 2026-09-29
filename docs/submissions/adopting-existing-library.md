@@ -33,6 +33,39 @@ python3 -m submission_tools adopt \
   --extend-existing
 ```
 
+Optionally declare the intended model-family scope when the workspace is
+created. For example, a GTEx addition to the existing HZ family is explicit
+about both its human-facing ID series and its canonical configuration family:
+
+```bash
+python3 -m submission_tools adopt \
+  --existing /path/to/new_model_material \
+  --library-id GTEx \
+  --workspace ~/gene-set-adoptions/GTEx-hz-extension \
+  --dig-fork https://github.com/YOU/dig-gene-set-extractors.git \
+  --wrapper-fork https://github.com/YOU/geneset-extractor-dev.git \
+  --extend-existing \
+  --model-series HZ \
+  --model-family hz_notebook
+```
+
+To introduce a genuinely new family, use the new-family fields together. They
+are recorded in the isolated workspace manifest and generated adoption prompt,
+so the coding agent has a durable scope constraint:
+
+```bash
+  --new-model-series HX \
+  --new-model-family exercise_response \
+  --model-family-description "Exercise-response signatures" \
+  --family-rationale "Distinct source assay and model semantics."
+```
+
+`--model-series` and `--model-family` must already exist in
+`config/model_list.tsv`. A new family requires all four `--new-model-*`,
+description, and rationale fields; it cannot be mixed with an existing-family
+request. These options constrain the adoption work only—they never change the
+baseline library during workspace creation.
+
 The command still creates fresh isolated clones and an
 `adopt/EXISTING_LIBRARY` branch. It does not modify `main`, the legacy source,
 or the existing library while creating the workspace. It also does not merge

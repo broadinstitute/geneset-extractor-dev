@@ -52,11 +52,28 @@ python3 -m submission_tools adopt \
   --allow-upstream-origin \
   --dig-base-branch "$DIG_BRANCH" \
   --wrapper-base-branch "$WRAPPER_BRANCH" \
-  --extend-existing
+  --extend-existing \
+  --model-series HZ \
+  --model-family hz_notebook
 
 cd "$WORKSPACE"
 codex
 ```
+
+The last two arguments are an example of extending GTEx's existing HZ family.
+Use the actual existing `model_id` series and canonical `model_family` for the
+target library. To create a new model family instead, replace them with all of:
+
+```bash
+  --new-model-series HX \
+  --new-model-family exercise_response \
+  --model-family-description "Exercise-response signatures" \
+  --family-rationale "Distinct source assay and model semantics."
+```
+
+The selected scope is recorded in `.adoption-workspace.yaml` and in
+`AI_ADOPTION_PROMPT.md`; it does not alter the baseline library at workspace
+creation time.
 
 Tell Codex:
 

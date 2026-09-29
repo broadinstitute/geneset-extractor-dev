@@ -297,6 +297,44 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertIn("Existing-library extension", prompt)
             self.assertIn("do not\nscaffold over it", prompt)
 
+    def test_extension_scope_validates_existing_and_new_model_families(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            library = Path(temp) / "GTEx"
+            (library / "config").mkdir(parents=True)
+            (library / "config/model_list.tsv").write_text(
+                "model_id\tmodel_family\nAB1\tage_binned\nHZ1\thz_notebook\n",
+                encoding="utf-8",
+            )
+            existing = adoption_workspace._extension_request(
+                library, model_series="HZ", model_family="hz_notebook",
+                new_model_series=None, new_model_family=None,
+                model_family_description=None, family_rationale=None,
+            )
+            self.assertEqual(
+                existing,
+                {"kind": "existing_family", "model_series": "HZ", "model_family": "hz_notebook"},
+            )
+            new = adoption_workspace._extension_request(
+                library, model_series=None, model_family=None,
+                new_model_series="HX", new_model_family="exercise_response",
+                model_family_description="Exercise-response signatures",
+                family_rationale="Distinct source assay and model semantics.",
+            )
+            self.assertEqual(new["kind"], "new_family")
+            self.assertEqual(new["model_series"], "HX")
+            with self.assertRaisesRegex(ValueError, "unknown existing model series"):
+                adoption_workspace._extension_request(
+                    library, model_series="ZZ", model_family="hz_notebook",
+                    new_model_series=None, new_model_family=None,
+                    model_family_description=None, family_rationale=None,
+                )
+            with self.assertRaisesRegex(ValueError, "new model family requires"):
+                adoption_workspace._extension_request(
+                    library, model_series=None, model_family=None,
+                    new_model_series="HX", new_model_family="exercise_response",
+                    model_family_description=None, family_rationale=None,
+                )
+
     def test_workspace_prompt_uses_selected_pattern_and_workspace_helper(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

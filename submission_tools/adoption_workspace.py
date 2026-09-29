@@ -153,6 +153,37 @@ def _write_cluster_adapters(wrapper: Path, library_id: str) -> list[Path]:
     return adapters
 
 
+def _extension_request(
+    library: Path, *, model_series: str | None, model_family: str | None,
+    new_model_series: str | None, new_model_family: str | None,
+    model_family_description: str | None, family_rationale: str | None,
+) -> dict[str, str] | None:
+    """Validate and record optional, explicit existing-library extension scope."""
+    requested = (model_series, model_family, new_model_series, new_model_family, model_family_description, family_rationale)
+    if not any(requested):
+        return None
+    if new_model_series or new_model_family:
+        if model_series or model_family:
+            raise ValueError("use either --model-series/--model-family or --new-model-series/--new-model-family")
+        if not new_model_series or not new_model_family or not model_family_description or not family_rationale:
+            raise ValueError("a new model family requires --new-model-series, --new-model-family, --model-family-description, and --family-rationale")
+        return {"kind": "new_family", "model_series": new_model_series, "model_family": new_model_family, "description": model_family_description, "rationale": family_rationale}
+    if not model_series and not model_family:
+        raise ValueError("an existing-family extension requires --model-series or --model-family")
+    model_list = library / "config/model_list.tsv"
+    if not model_list.is_file():
+        raise ValueError(f"cannot validate extension family: missing {model_list}")
+    with model_list.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle, delimiter="\t"))
+    if not rows or "model_id" not in rows[0] or "model_family" not in rows[0]:
+        raise ValueError("cannot validate extension family: config/model_list.tsv requires model_id and model_family columns")
+    if model_series and not any(str(row.get("model_id", "")).startswith(model_series) for row in rows):
+        raise ValueError(f"unknown existing model series: {model_series}")
+    if model_family and model_family not in {str(row.get("model_family", "")) for row in rows}:
+        raise ValueError(f"unknown existing model family: {model_family}")
+    return {"kind": "existing_family", **({"model_series": model_series} if model_series else {}), **({"model_family": model_family} if model_family else {})}
+
+
 def create_workspace(
     *,
     existing: Path,
@@ -168,6 +199,12 @@ def create_workspace(
     wrapper_base_branch: str | None = None,
     allow_upstream_origin: bool = False,
     extend_existing: bool = False,
+    model_series: str | None = None,
+    model_family: str | None = None,
+    new_model_series: str | None = None,
+    new_model_family: str | None = None,
+    model_family_description: str | None = None,
+    family_rationale: str | None = None,
 ) -> Path:
     workspace, legacy = validate_workspace_location(workspace, existing)
     dig_fork, wrapper_fork = _fork_urls(github_user, dig_fork, wrapper_fork, allow_upstream_origin=allow_upstream_origin)
@@ -217,7 +254,14 @@ def create_workspace(
                     f"cannot extend wrapper library {library_id}: its existing submission.yaml is invalid"
                     + (f": {detail}" if detail else "")
                 )
+            extension_request = _extension_request(
+                library, model_series=model_series, model_family=model_family,
+                new_model_series=new_model_series, new_model_family=new_model_family,
+                model_family_description=model_family_description, family_rationale=family_rationale,
+            )
         else:
+            if any((model_series, model_family, new_model_series, new_model_family, model_family_description, family_rationale)):
+                raise ValueError("model-family options require --extend-existing")
             scaffold(library, library_id, display_name or library_id, pattern)
             _write_cluster_adapters(workspace / "geneset-extractor-dev", library_id)
             payload = load(submission)
@@ -225,6 +269,7 @@ def create_workspace(
             payload["adoption"] = {"comparison_policy": {"mode": "exact_reproduction"}, "reference_outputs": reference["reference_outputs"]}
             payload["reproduction"]["output_directory_environment"] = RUNTIME_OUTPUT_ENV
             _write_json(submission, payload)
+            extension_request = None
         manifest = {
             "schema_version": "1.0.0", "library_id": library_id,
             "workspace": {"root": str(workspace), "upstream_origin_mode": allow_upstream_origin},
@@ -238,6 +283,7 @@ def create_workspace(
                 "wrapper_library_path": f"geneset-extractor-dev/{library_id}",
                 "pattern": pattern,
                 "mode": "extend_existing" if extend_existing else "adopt_new_library",
+                "extension_request": extension_request,
             },
             "runtime": {"work_directory": "work", "output_directory_environment": RUNTIME_OUTPUT_ENV},
             "verification": {"last_result": None, "last_receipt": None, "workspace_digest": None},
@@ -256,6 +302,25 @@ def create_workspace(
 def _workspace_prompt(workspace: Path, manifest: dict[str, Any], inventory: dict[str, Any]) -> str:
     pattern = str(manifest.get("submission", {}).get("pattern", "generic"))
     extension = str(manifest.get("submission", {}).get("mode", "")) == "extend_existing"
+    request = manifest.get("submission", {}).get("extension_request")
+    request_text = ""
+    if isinstance(request, dict):
+        request_text = (
+            "\nRequested extension scope:\n```yaml\n"
+            + "\n".join(f"{key}: {value}" for key, value in request.items())
+            + "\n```\nTreat this as a required scope constraint.\n"
+        )
+        if request.get("kind") == "existing_family":
+            request_text += (
+                "Add only model rows in the declared series/family; preserve all "
+                "existing family definitions and model rows.\n"
+            )
+        elif request.get("kind") == "new_family":
+            request_text += (
+                "Add the declared canonical `model_family` to the library configuration, "
+                "document its description and rationale, and use only the declared new "
+                "model-ID series for its new rows. Do not recategorize existing models.\n"
+            )
     extension_guidance = "" if not extension else f"""
 ## Existing-library extension
 
@@ -287,6 +352,8 @@ Wrapper baseline branch: `{manifest['repositories']['wrapper']['base_branch']}`
 Maintainer upstream-origin mode: `{manifest['workspace']['upstream_origin_mode']}`
 
 {extension_guidance}
+
+{request_text}
 
 {architecture_guidance(pattern, inventory)}
 
