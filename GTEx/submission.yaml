@@ -1,9 +1,9 @@
 {
   "schema_version": "1.0.0",
-  "submission_status": "draft",
+  "submission_status": "ready",
   "library": {"id": "GTEx", "display_name": "GTEx age-associated bulk RNA-seq gene sets", "organism": "human", "genome_build": "hg38", "assay_types": ["bulk_rna_seq"], "closest_reference_pattern": "gtex", "wrapper_directory": "run"},
   "sources": [{"name": "gtex_v10", "uri_or_identifier": "https://gtexportal.org/home/downloads/adult-gtex", "release": "GTEx Analysis V10", "access_restrictions": "public download; comply with GTEx Portal terms of use", "license": "GTEx Portal data-use terms"}, {"name": "gtex_v8", "uri_or_identifier": "https://gtexportal.org/home/downloads/adult-gtex", "release": "GTEx Analysis V8", "access_restrictions": "public download; comply with GTEx Portal terms of use", "license": "GTEx Portal data-use terms"}, {"name": "gencode_v39", "uri_or_identifier": "https://www.gencodegenes.org/human/release_39.html", "release": "GENCODE Release 39", "access_restrictions": "public download", "license": "GENCODE data-use terms"}],
-  "dig": {"repository_url": "https://github.com/flannick/dig-gene-set-extractors", "commit": "TBD", "entrypoints": ["geneset-extractors workflows gtex_age_binned", "geneset-extractors workflows gtex_continuous_age", "geneset-extractors workflows gtex_aging_signatures", "geneset-extractors convert rna_deg_multi"], "identifiers": ["gtex_age_binned", "gtex_continuous_age", "gtex_aging_signatures", "rna_deg_multi"]},
+  "dig": {"repository_url": "https://github.com/flannick/dig-gene-set-extractors", "commit": "174cd422b327ee8e53420930073b14f68f1b5f7d", "entrypoints": ["geneset-extractors workflows gtex_age_binned", "geneset-extractors workflows gtex_continuous_age", "geneset-extractors workflows gtex_aging_signatures", "geneset-extractors convert rna_deg_multi"], "identifiers": ["gtex_age_binned", "gtex_continuous_age", "gtex_aging_signatures", "rna_deg_multi"]},
   "configs": {"model_config": "config/model_list.tsv", "partition_config": "config/partition_list.tsv", "description_config": "config/model_description_templates.tsv", "task_manifest": "config/task_manifest.tsv"},
   "reproduction": {"entry_point": "reproduction/reproduce.sh", "input_manifest": "reproduction/input_manifest.tsv", "smoke_test_command": "bash reproduction/reproduce.sh --smoke", "output_directory_environment": "SUBMISSION_WORK_DIR"},
   "expected_outputs": {"manifest": "expected/output_manifest.tsv"},
@@ -15,5 +15,5 @@
   "runtime": {"mode": "apptainer_cluster", "task_manifest": "config/task_manifest.tsv", "local_builder": "run/run_submission_models.sh", "cluster_submitter": "run/submit_submission_models_cluster_apptainer.sh", "apptainer_builder": "run/run_submission_models_apptainer.sh"},
   "adoption": {"comparison_policy": {"mode": "exact_reproduction"}, "reference_outputs": []},
   "deviations": {"from_standard_architecture": ["Legacy GTEx launchers remain available unchanged while model-family output equivalence is established.", "The submitted dispatcher is thin; it invokes existing DIG-backed GTEx execution paths.", "The historical run/archive tree is retained pending migration of every GTEx model family; its legacy substantive-analysis finding is allowlisted for this draft only."], "allow_wrapper_findings": ["substantive_analysis"], "allow_provenance_findings": []},
-  "paired_pull_requests": {"geneset_extractor_dev": "TBD", "dig_gene_set_extractors": "TBD"}
+  "paired_pull_requests": {"geneset_extractor_dev": "https://github.com/broadinstitute/geneset-extractor-dev/pull/43", "dig_gene_set_extractors": "https://github.com/flannick/dig-gene-set-extractors/pull/19"}
 }

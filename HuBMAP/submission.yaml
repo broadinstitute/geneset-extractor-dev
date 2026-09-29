@@ -1,13 +1,13 @@
 {
   "schema_version": "1.0.0",
-  "submission_status": "draft",
+  "submission_status": "ready",
   "library": {"id": "HuBMAP", "display_name": "HuBMAP ASCT+B marker gene sets", "organism": "human", "genome_build": "hg38", "assay_types": ["anatomical_reference"], "closest_reference_pattern": "hubmap", "wrapper_directory": "run"},
   "sources": [
     {"name": "hubmap_asctb_v2_2", "uri_or_identifier": "HuBMAP ASCT+B tables, release v2.2", "release": "v2.2", "access_restrictions": "public released tables; obtain the complete release before full reproduction", "license": "source release terms"},
     {"name": "ncbi_human_gene_info", "uri_or_identifier": "https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/All_Data.gene_info.gz", "release": "NCBI Gene current release", "access_restrictions": "public download", "license": "NCBI data-use policy"},
     {"name": "geneshot_associate", "uri_or_identifier": "https://maayanlab.cloud/geneshot/api/associate", "release": "service response at run time", "access_restrictions": "public service; availability and returned associations may change", "license": "GeneShot service terms"}
   ],
-  "dig": {"repository_url": "https://github.com/flannick/dig-gene-set-extractors", "commit": "TBD", "entrypoints": ["geneset-extractors workflows hubmap_asctb", "geneset-extractors workflows hubmap_asctb_augmented", "geneset-extractors convert unsigned_term_gene"], "identifiers": ["hubmap_asctb", "hubmap_asctb_augmented", "unsigned_term_gene"]},
+  "dig": {"repository_url": "https://github.com/flannick/dig-gene-set-extractors", "commit": "174cd422b327ee8e53420930073b14f68f1b5f7d", "entrypoints": ["geneset-extractors workflows hubmap_asctb", "geneset-extractors workflows hubmap_asctb_augmented", "geneset-extractors convert unsigned_term_gene"], "identifiers": ["hubmap_asctb", "hubmap_asctb_augmented", "unsigned_term_gene"]},
   "configs": {"model_config": "config/model_list.tsv", "partition_config": "config/partition_list.tsv", "description_config": "config/model_description_templates.tsv", "task_manifest": "config/task_manifest.tsv"},
   "reproduction": {"entry_point": "reproduction/reproduce.sh", "input_manifest": "reproduction/input_manifest.tsv", "smoke_test_command": "bash reproduction/reproduce.sh --smoke", "output_directory_environment": "SUBMISSION_WORK_DIR"},
   "expected_outputs": {"manifest": "expected/output_manifest.tsv"},
@@ -19,5 +19,5 @@
   "runtime": {"mode": "apptainer_cluster", "task_manifest": "config/task_manifest.tsv", "local_builder": "run/build_hubmap_genesets.sh", "cluster_submitter": "run/submit_submission_models_cluster_apptainer.sh", "apptainer_builder": "run/run_submission_models_apptainer.sh"},
   "adoption": {"comparison_policy": {"mode": "exact_reproduction"}, "reference_outputs": []},
   "deviations": {"from_standard_architecture": ["HZ2 uses the existing GeneShot augmentation service and is therefore a full-only, network-dependent model.", "Historical HuBMAP launchers remain available unchanged while output equivalence is established.", "The static boundary scanner's substantive_analysis heuristic matches the existing build_hubmap_genesets filename; the script is a thin exec wrapper to src/build_hubmap_genesets.py and contains no analysis implementation."], "allow_wrapper_findings": ["substantive_analysis"], "allow_provenance_findings": []},
-  "paired_pull_requests": {"geneset_extractor_dev": "TBD", "dig_gene_set_extractors": "TBD"}
+  "paired_pull_requests": {"geneset_extractor_dev": "https://github.com/broadinstitute/geneset-extractor-dev/pull/43", "dig_gene_set_extractors": "https://github.com/flannick/dig-gene-set-extractors/pull/19"}
 }

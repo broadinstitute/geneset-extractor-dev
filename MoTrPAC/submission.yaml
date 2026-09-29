@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "submission_status": "draft",
+  "submission_status": "ready",
   "library": {"id": "MoTrPAC", "display_name": "MoTrPAC rat endurance-training gene sets", "organism": "human", "genome_build": "hg38", "assay_types": ["bulk_rna_seq"], "closest_reference_pattern": "motrpac", "wrapper_directory": "run"},
   "sources": [
     {"name": "motrpac_raw_counts", "uri_or_identifier": "MoTrPAC Rat Training 6-month transcriptomics raw counts", "release": "Rat Training 6-month release", "access_restrictions": "obtain the complete released raw-count bundle", "license": "MoTrPAC data-use terms"},
@@ -12,7 +12,7 @@
     {"name": "motrpac_dea", "uri_or_identifier": "MoTrPAC Rat Training 6-month released differential-expression tables", "release": "Rat Training 6-month release", "access_restrictions": "obtain the complete released DEA directory", "license": "MoTrPAC data-use terms"},
     {"name": "harmonizome_mapping", "uri_or_identifier": "Harmonizome mappingFile_2017.txt", "release": "2017 mapping release", "access_restrictions": "public download", "license": "Harmonizome data-use terms"}
   ],
-  "dig": {"repository_url": "https://github.com/flannick/dig-gene-set-extractors", "commit": "TBD", "entrypoints": ["geneset-extractors workflows motrpac_training", "geneset-extractors workflows motrpac_timewise", "geneset-extractors workflows motrpac_timepoint", "geneset-extractors workflows motrpac_released_dea", "geneset-extractors workflows motrpac_raw_aggregated", "geneset-extractors convert signed_term_gene"], "identifiers": ["motrpac_training", "motrpac_timewise", "motrpac_timepoint", "motrpac_released_dea", "motrpac_raw_aggregated", "signed_term_gene"]},
+  "dig": {"repository_url": "https://github.com/flannick/dig-gene-set-extractors", "commit": "174cd422b327ee8e53420930073b14f68f1b5f7d", "entrypoints": ["geneset-extractors workflows motrpac_training", "geneset-extractors workflows motrpac_timewise", "geneset-extractors workflows motrpac_timepoint", "geneset-extractors workflows motrpac_released_dea", "geneset-extractors workflows motrpac_raw_aggregated", "geneset-extractors convert signed_term_gene"], "identifiers": ["motrpac_training", "motrpac_timewise", "motrpac_timepoint", "motrpac_released_dea", "motrpac_raw_aggregated", "signed_term_gene"]},
   "configs": {"model_config": "config/model_list.tsv", "partition_config": "config/partition_list.tsv", "description_config": "config/model_description_templates.tsv", "task_manifest": "config/task_manifest.tsv"},
   "reproduction": {"entry_point": "reproduction/reproduce.sh", "input_manifest": "reproduction/input_manifest.tsv", "smoke_test_command": "bash reproduction/reproduce.sh --smoke", "output_directory_environment": "SUBMISSION_WORK_DIR"},
   "expected_outputs": {"manifest": "expected/output_manifest.tsv"},
@@ -24,5 +24,5 @@
   "runtime": {"mode": "apptainer_cluster", "task_manifest": "config/task_manifest.tsv", "local_builder": "run/run_submission_models.sh", "cluster_submitter": "run/submit_submission_models_cluster_apptainer.sh", "apptainer_builder": "run/run_submission_models_apptainer.sh"},
   "adoption": {"comparison_policy": {"mode": "exact_reproduction"}, "reference_outputs": []},
   "deviations": {"from_standard_architecture": ["Historical MoTrPAC wrapper runners remain available while model-family output equivalence is established.", "The modernization dispatcher is thin and delegates to existing DIG-backed MoTrPAC runners. Historical wrapper files may still trigger static analysis heuristics during this draft migration."], "allow_wrapper_findings": ["substantive_analysis"], "allow_provenance_findings": []},
-  "paired_pull_requests": {"geneset_extractor_dev": "TBD", "dig_gene_set_extractors": "TBD"}
+  "paired_pull_requests": {"geneset_extractor_dev": "https://github.com/broadinstitute/geneset-extractor-dev/pull/43", "dig_gene_set_extractors": "https://github.com/flannick/dig-gene-set-extractors/pull/19"}
 }
