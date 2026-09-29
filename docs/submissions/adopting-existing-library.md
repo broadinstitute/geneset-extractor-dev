@@ -195,7 +195,16 @@ home directory, the adoption workspace, or outputs to a provider URL with
 `--provenance_mirror_local_prefix`; those locations contain local execution
 paths, not remotely hosted source data.
 
-5. Review the result, then commit/push to your forks and open draft PRs:
+5. To test the exact branches on a remote system before opening PRs, use the
+   [local-authoring and remote-execution guide](remote-adoption-execution.md).
+   Its pre-PR publish command is:
+
+```bash
+./submit-adoption --yes --push-only
+```
+
+6. After full verification passes, commit/push to your forks and open draft
+   PRs:
 
 ```bash
 ./submit-adoption --yes

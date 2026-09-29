@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .discovery import discover_submissions
 from .adoption import adopt, adoption_status
-from .adoption_workspace import DEFAULT_BASE_BRANCH, _active_tooling, load_workspace, create_workspace, submit_workspace, verify_workspace
+from .adoption_workspace import DEFAULT_BASE_BRANCH, _active_tooling, export_handoff, init_remote_workspace, load_workspace, create_workspace, publish_workspace, submit_workspace, sync_remote_workspace, verify_workspace
 from .library_workspace import create_library_workspace, load_library_workspace, submit_library_workspace, verify_library_workspace
 from .coordinated import coordinated_validate
 from .legacy_compare import compare_gmt
@@ -89,7 +89,17 @@ def main(argv: list[str] | None = None) -> int:
     submit = commands.add_parser("submit-adoption", help="Commit and push a verified isolated adoption workspace.")
     submit.add_argument("--workspace", required=True)
     submit.add_argument("--yes", action="store_true", help="Confirm the one local commit/push operation.")
+    submit.add_argument("--push-only", action="store_true", help="Commit and push isolated branches without opening pull requests; does not require full verification.")
     submit.add_argument("--allow-upstream-origin", action="store_true", help="Advanced maintainer override; never enabled implicitly.")
+    export_handoff_parser = commands.add_parser("export-adoption-handoff", help="Create a small relocatable handoff archive for remote adoption execution.")
+    export_handoff_parser.add_argument("--workspace", required=True)
+    export_handoff_parser.add_argument("--output", required=True)
+    init_remote_parser = commands.add_parser("init-remote-adoption", help="Initialize a remote execution workspace from an adoption handoff archive.")
+    init_remote_parser.add_argument("--handoff", required=True)
+    init_remote_parser.add_argument("--workspace", required=True)
+    init_remote_parser.add_argument("--legacy", required=True, help="Read-only legacy reference directory on the remote system.")
+    sync_remote_parser = commands.add_parser("sync-adoption-workspace", help="Fast-forward a remote adoption execution workspace from origin.")
+    sync_remote_parser.add_argument("--workspace", required=True)
     verify_library = commands.add_parser("verify-library", help="Verify an isolated new-library workspace.")
     verify_library.add_argument("--workspace", required=True)
     submit_library = commands.add_parser("submit-library", help="Commit and push a verified isolated new-library workspace.")
@@ -153,6 +163,28 @@ def main(argv: list[str] | None = None) -> int:
         created = adopt(Path(args.existing), output, args.library_id, args.display_name, args.pattern, Path(args.dig_repo) if args.dig_repo else None)
         print(f"created adopted submission {created}")
         return 0
+    if args.command == "export-adoption-handoff":
+        try:
+            output = export_handoff(Path(args.workspace), Path(args.output))
+        except ValueError as exc:
+            parser.error(str(exc))
+        print(f"created adoption handoff {output}")
+        return 0
+    if args.command == "init-remote-adoption":
+        try:
+            created = init_remote_workspace(handoff=Path(args.handoff), workspace=Path(args.workspace), legacy=Path(args.legacy))
+        except (OSError, ValueError) as exc:
+            parser.error(str(exc))
+        print(f"initialized remote adoption workspace {created}")
+        return 0
+    if args.command == "sync-adoption-workspace":
+        try:
+            ok, messages = sync_remote_workspace(Path(args.workspace))
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print("\n".join(messages))
+        return 0 if ok else 1
     if args.command == "create-library":
         try:
             created = create_library_workspace(
@@ -235,7 +267,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if ok else 1
     if args.command == "submit-adoption":
         try:
-            ok, messages = submit_workspace(Path(args.workspace), yes=args.yes, allow_upstream_origin=args.allow_upstream_origin)
+            if args.push_only:
+                ok, messages = publish_workspace(Path(args.workspace), yes=args.yes, allow_upstream_origin=args.allow_upstream_origin)
+            else:
+                ok, messages = submit_workspace(Path(args.workspace), yes=args.yes, allow_upstream_origin=args.allow_upstream_origin)
         except (OSError, ValueError) as exc:
             print(f"ERROR: {exc}")
             return 2
