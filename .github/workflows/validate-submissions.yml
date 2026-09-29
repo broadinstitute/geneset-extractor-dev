@@ -76,6 +76,8 @@ jobs:
             dig_dir="$(mktemp -d /tmp/dig-submission-XXXXXX)"
             git clone --quiet --no-checkout https://github.com/flannick/dig-gene-set-extractors "${dig_dir}"
             git -C "${dig_dir}" checkout --quiet "${commit}"
-            python3 -m pip install -e "${dig_dir}[dev]"
+            # hubmap_asctb_augmented imports requests; the pinned DIG commit
+            # predates declaring it in its development extra.
+            python3 -m pip install -e "${dig_dir}[dev]" "requests>=2.31"
             PYTHONPATH=. python3 -m submission_tools validate --submission "${submission}" --dig-repo "${dig_dir}" --smoke
           done
