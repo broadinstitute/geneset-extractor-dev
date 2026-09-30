@@ -17,6 +17,7 @@
 !GTEx/config/broad_tissue_list.tsv
 !GTEx/config/model_description_templates.tsv
 !GTEx/config/model_family_descriptions.tsv
+!GTEx/config/hz_consensus_model_manifest.tsv
 !GTEx/submission.yaml
 !GTEx/environment.modernization.md
 !GTEx/config/partition_list.tsv

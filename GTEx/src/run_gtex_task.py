@@ -24,6 +24,14 @@ def _input(name: str) -> str:
     return value
 
 
+def _hz2_settings(root: Path) -> dict[str, str]:
+    with (root / "config/hz_consensus_model_manifest.tsv").open(encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            if row.get("model_id") == "HZ2":
+                return row
+    raise SystemExit("HZ2 settings are missing from config/hz_consensus_model_manifest.tsv")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("--smoke", "full"))
@@ -34,6 +42,7 @@ def main() -> int:
     task = _task(root, args.task_id)
     if task["model_id"] != "HZ2" or task["dig_identifier"] != "gtex_hz_consensus":
         raise SystemExit("run_gtex_task.py only dispatches the HZ2 consensus extension")
+    settings = _hz2_settings(root)
     if args.mode == "--smoke":
         inputs = {
             "expression_gct": root / "tests/fixtures/gtex_hz_consensus_expression.gct",
@@ -61,6 +70,10 @@ def main() -> int:
         "--sample_attributes_tsv", str(inputs["sample_attributes_tsv"]),
         "--subject_phenotypes_tsv", str(inputs["subject_phenotypes_tsv"]),
         "--out_dir", str(out_dir),
+        "--support_fraction", settings["support_fraction"],
+        "--top_n", settings["top_n"],
+        "--up_cutoff", settings["up_cutoff"],
+        "--min_samples_per_group", settings["min_samples_per_group"],
         "--provenance_overlay_json", str(root / "config/provenance_overlay.json"),
     ]
     if args.mode == "full":

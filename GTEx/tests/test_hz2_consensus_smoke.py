@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import subprocess
 import sys
 import tempfile
@@ -33,3 +34,5 @@ def test_hz2_smoke_uses_dig_and_writes_deterministic_consensus() -> None:
             "run_summary.txt",
         ):
             assert (gmt.parent / name).is_file()
+        summary = json.loads((gmt.parent / "run_summary.json").read_text(encoding="utf-8"))
+        assert summary["support_fraction"] == 0.25
