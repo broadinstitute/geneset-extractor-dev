@@ -46,7 +46,7 @@
     ]
   },
   "dig": {
-    "commit": "8f85a535623be23105a11f26f33a155b5ac4cf3c",
+    "commit": "d55502d4e5ab7f79cc295de43be8cf1c10d6404f",
     "entrypoints": [
       "geneset-extractors workflows gtex_age_binned",
       "geneset-extractors workflows gtex_continuous_age",
