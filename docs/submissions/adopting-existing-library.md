@@ -10,6 +10,79 @@ For the complete maintainer procedure—including `exact_reproduction` versus
 `scientific_reimplementation`, preserving an earlier adoption branch, and
 workspace-local runtime artifacts—read
 [adopting-trusted-existing-submission.md](adopting-trusted-existing-submission.md).
+That tutorial also includes a complete short command sequence for extending an
+existing new-format library.
+
+## Extend an existing new-format library
+
+`--library-id` normally names a **new** wrapper library directory. If that
+directory already exists on the selected wrapper baseline, `adopt` stops rather
+than scaffolding into it. This prevents an accidental replacement of an
+existing library's configuration or models.
+
+To deliberately add models or partitions to an existing library that already
+uses the submission contract, pass `--extend-existing`:
+
+```bash
+python3 -m submission_tools adopt \
+  --existing /path/to/legacy_material \
+  --library-id EXISTING_LIBRARY \
+  --workspace ~/gene-set-adoptions/EXISTING_LIBRARY-extension \
+  --dig-fork https://github.com/YOU/dig-gene-set-extractors.git \
+  --wrapper-fork https://github.com/YOU/geneset-extractor-dev.git \
+  --extend-existing
+```
+
+Optionally declare the intended model-family scope when the workspace is
+created. For example, a GTEx addition to the existing HZ family is explicit
+about both its human-facing ID series and its canonical configuration family:
+
+```bash
+python3 -m submission_tools adopt \
+  --existing /path/to/new_model_material \
+  --library-id GTEx \
+  --workspace ~/gene-set-adoptions/GTEx-hz-extension \
+  --dig-fork https://github.com/YOU/dig-gene-set-extractors.git \
+  --wrapper-fork https://github.com/YOU/geneset-extractor-dev.git \
+  --extend-existing \
+  --work-branch adopt/GTEx-hz-consensus \
+  --model-series HZ \
+  --model-family hz_notebook
+```
+
+`--work-branch` is optional and defaults to `adopt/<library-id>`. Use a unique
+`adopt/...` name for every independent extension; workspace creation rejects a
+branch that already exists on either writable origin.
+
+To introduce a genuinely new family, use the new-family fields together. They
+are recorded in the isolated workspace manifest and generated adoption prompt,
+so the coding agent has a durable scope constraint:
+
+```bash
+  --new-model-series HX \
+  --new-model-family exercise_response \
+  --model-family-description "Exercise-response signatures" \
+  --family-rationale "Distinct source assay and model semantics."
+```
+
+`--model-series` and `--model-family` must already exist in
+`config/model_list.tsv`. A new family requires all four `--new-model-*`,
+description, and rationale fields; it cannot be mixed with an existing-family
+request. These options constrain the adoption work only—they never change the
+baseline library during workspace creation.
+
+The command still creates fresh isolated clones and an
+`adopt/EXISTING_LIBRARY` branch. It does not modify `main`, the legacy source,
+or the existing library while creating the workspace. It also does not merge
+models automatically: inspect and preserve the library's established config,
+launchers, output layout, and tests, then add only the intended model-specific
+changes.
+
+Extension mode requires the baseline library to contain a valid
+`submission.yaml`, so the normal validator, reproduction contract, exact DIG
+commit pin, receipt, and submit safeguards remain available. A legacy library
+without `submission.yaml` must first be migrated as its own adoption; it is not
+safe to treat it as an implicit extension target.
 
 ```bash
 python3 -m submission_tools adopt \
@@ -122,7 +195,16 @@ home directory, the adoption workspace, or outputs to a provider URL with
 `--provenance_mirror_local_prefix`; those locations contain local execution
 paths, not remotely hosted source data.
 
-5. Review the result, then commit/push to your forks and open draft PRs:
+5. To test the exact branches on a remote system before opening PRs, use the
+   [local-authoring and remote-execution guide](remote-adoption-execution.md).
+   Its pre-PR publish command is:
+
+```bash
+./submit-adoption --yes --push-only
+```
+
+6. After full verification passes, commit/push to your forks and open draft
+   PRs:
 
 ```bash
 ./submit-adoption --yes

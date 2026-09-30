@@ -989,3 +989,4 @@ gtex_ac8_vagina_gmt	genesets/vagina/models/AC8/extractor/genesets.gmt	gmt	true	A
 gtex_ac9_vagina_gmt	genesets/vagina/models/AC9/extractor/genesets.gmt	gmt	true	AC9	vagina
 gtex_ac10_vagina_gmt	genesets/vagina/models/AC10/extractor/genesets.gmt	gmt	true	AC10	vagina
 gtex_hz1_vagina_gmt	genesets/vagina/models/HZ1/extractor/genesets.gmt	gmt	true	HZ1	vagina
+gtex_hz2_all_detailed_tissues_gmt	genesets/all_detailed_tissues/models/HZ2/extractor/genesets.gmt	gmt	true	HZ2	all_detailed_tissues

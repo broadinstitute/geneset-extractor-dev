@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .discovery import discover_submissions
 from .adoption import adopt, adoption_status
-from .adoption_workspace import DEFAULT_BASE_BRANCH, _active_tooling, load_workspace, create_workspace, submit_workspace, verify_workspace
+from .adoption_workspace import DEFAULT_BASE_BRANCH, _active_tooling, export_handoff, init_remote_workspace, load_workspace, create_workspace, publish_workspace, submit_workspace, sync_remote_workspace, verify_workspace
 from .library_workspace import create_library_workspace, load_library_workspace, submit_library_workspace, verify_library_workspace
 from .coordinated import coordinated_validate
 from .legacy_compare import compare_gmt
@@ -55,7 +55,15 @@ def main(argv: list[str] | None = None) -> int:
     adopt_parser.add_argument("--base-branch", default=DEFAULT_BASE_BRANCH, help="Fallback upstream baseline and pull-request target branch for both repositories (default: main).")
     adopt_parser.add_argument("--dig-base-branch", help="DIG upstream baseline and pull-request target branch; overrides --base-branch.")
     adopt_parser.add_argument("--wrapper-base-branch", help="Wrapper upstream baseline and pull-request target branch; overrides --base-branch.")
+    adopt_parser.add_argument("--work-branch", help="Adoption work branch; defaults to adopt/<library-id>.")
     adopt_parser.add_argument("--allow-upstream-origin", action="store_true", help="Advanced maintainer/test override; allow a canonical repository as origin for this isolated workspace.")
+    adopt_parser.add_argument("--extend-existing", action="store_true", help="Explicitly extend an existing new-format wrapper library instead of scaffolding a new one.")
+    adopt_parser.add_argument("--model-series", help="Existing model-ID series to extend, for example HZ.")
+    adopt_parser.add_argument("--model-family", help="Existing canonical model_family value to extend, for example hz_notebook.")
+    adopt_parser.add_argument("--new-model-series", help="New model-ID series for a new model family.")
+    adopt_parser.add_argument("--new-model-family", help="New canonical model_family value.")
+    adopt_parser.add_argument("--model-family-description", help="Required description for a new model family.")
+    adopt_parser.add_argument("--family-rationale", help="Required rationale for a new model family.")
     new_library = commands.add_parser("create-library", help="Create an isolated workspace for a brand-new gene-set library.")
     new_library.add_argument("--inputs", required=True, help="Read-only source input file or directory.")
     new_library.add_argument("--library-id", required=True)
@@ -81,7 +89,17 @@ def main(argv: list[str] | None = None) -> int:
     submit = commands.add_parser("submit-adoption", help="Commit and push a verified isolated adoption workspace.")
     submit.add_argument("--workspace", required=True)
     submit.add_argument("--yes", action="store_true", help="Confirm the one local commit/push operation.")
+    submit.add_argument("--push-only", action="store_true", help="Commit and push isolated branches without opening pull requests; does not require full verification.")
     submit.add_argument("--allow-upstream-origin", action="store_true", help="Advanced maintainer override; never enabled implicitly.")
+    export_handoff_parser = commands.add_parser("export-adoption-handoff", help="Create a small relocatable handoff archive for remote adoption execution.")
+    export_handoff_parser.add_argument("--workspace", required=True)
+    export_handoff_parser.add_argument("--output", required=True)
+    init_remote_parser = commands.add_parser("init-remote-adoption", help="Initialize a remote execution workspace from an adoption handoff archive.")
+    init_remote_parser.add_argument("--handoff", required=True)
+    init_remote_parser.add_argument("--workspace", required=True)
+    init_remote_parser.add_argument("--legacy", required=True, help="Read-only legacy reference directory on the remote system.")
+    sync_remote_parser = commands.add_parser("sync-adoption-workspace", help="Fast-forward a remote adoption execution workspace from origin.")
+    sync_remote_parser.add_argument("--workspace", required=True)
     verify_library = commands.add_parser("verify-library", help="Verify an isolated new-library workspace.")
     verify_library.add_argument("--workspace", required=True)
     submit_library = commands.add_parser("submit-library", help="Commit and push a verified isolated new-library workspace.")
@@ -121,7 +139,11 @@ def main(argv: list[str] | None = None) -> int:
                     display_name=args.display_name, pattern=args.pattern, github_user=args.github_user,
                     dig_fork=args.dig_fork, wrapper_fork=args.wrapper_fork, base_branch=args.base_branch,
                     dig_base_branch=args.dig_base_branch, wrapper_base_branch=args.wrapper_base_branch,
-                    allow_upstream_origin=args.allow_upstream_origin,
+                    allow_upstream_origin=args.allow_upstream_origin, extend_existing=args.extend_existing,
+                    model_series=args.model_series, model_family=args.model_family,
+                    new_model_series=args.new_model_series, new_model_family=args.new_model_family,
+                    model_family_description=args.model_family_description, family_rationale=args.family_rationale,
+                    work_branch=args.work_branch,
                 )
             except ValueError as exc:
                 parser.error(str(exc))
@@ -141,6 +163,28 @@ def main(argv: list[str] | None = None) -> int:
         created = adopt(Path(args.existing), output, args.library_id, args.display_name, args.pattern, Path(args.dig_repo) if args.dig_repo else None)
         print(f"created adopted submission {created}")
         return 0
+    if args.command == "export-adoption-handoff":
+        try:
+            output = export_handoff(Path(args.workspace), Path(args.output))
+        except ValueError as exc:
+            parser.error(str(exc))
+        print(f"created adoption handoff {output}")
+        return 0
+    if args.command == "init-remote-adoption":
+        try:
+            created = init_remote_workspace(handoff=Path(args.handoff), workspace=Path(args.workspace), legacy=Path(args.legacy))
+        except (OSError, ValueError) as exc:
+            parser.error(str(exc))
+        print(f"initialized remote adoption workspace {created}")
+        return 0
+    if args.command == "sync-adoption-workspace":
+        try:
+            ok, messages = sync_remote_workspace(Path(args.workspace))
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print("\n".join(messages))
+        return 0 if ok else 1
     if args.command == "create-library":
         try:
             created = create_library_workspace(
@@ -223,7 +267,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if ok else 1
     if args.command == "submit-adoption":
         try:
-            ok, messages = submit_workspace(Path(args.workspace), yes=args.yes, allow_upstream_origin=args.allow_upstream_origin)
+            if args.push_only:
+                ok, messages = publish_workspace(Path(args.workspace), yes=args.yes, allow_upstream_origin=args.allow_upstream_origin)
+            else:
+                ok, messages = submit_workspace(Path(args.workspace), yes=args.yes, allow_upstream_origin=args.allow_upstream_origin)
         except (OSError, ValueError) as exc:
             print(f"ERROR: {exc}")
             return 2

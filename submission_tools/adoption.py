@@ -196,16 +196,17 @@ def adoption_prompt(existing: Path, output: Path, inventory: dict[str, Any], dig
     output_paths = ", ".join(item["path"] for item in inventory["gene_set_outputs"]) or "none detected"
     return f"""# AI migration prompt
 
-Migrate the read-only legacy implementation at `{existing}` into `{output}`.
-The inventory is `{output / 'adoption/inventory.json'}`, the dependency map is
-`{output / 'adoption/dependency_map.json'}`, and the adoption report is
-`{output / 'adoption/adoption_report.md'}`. DIG is
-`{dig_repo or '../dig-gene-set-extractors'}`. Legacy gene-set outputs:
+Operate from the adopted library root: `.`. Migrate the read-only legacy
+implementation described by `./adoption/inventory.json` into this library.
+The dependency map is `./adoption/dependency_map.json`, and the adoption report
+is `./adoption/adoption_report.md`. Resolve DIG from the local sibling checkout
+at `../dig-gene-set-extractors` (or the workspace's declared DIG checkout).
+Legacy gene-set outputs:
 {output_paths}.
 
 {architecture_guidance(pattern, inventory)}
 
-Do not modify `{existing}`. Finish with coordinated validation.
+Do not modify the legacy reference material. Finish with coordinated validation.
 """
 
 
