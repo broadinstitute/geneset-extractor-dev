@@ -9,9 +9,11 @@ model_id=""
 
 usage() {
   cat <<'EOF'
-Usage: submit_submission_models_cluster_apptainer.sh [--model-id ID[,ID...]] [--submit]
+Usage: submit_submission_models_cluster_apptainer.sh [--full] [--model-id ID[,ID...]] [--submit]
 
-Writes the HZ1/HZ2 worklist unless --submit is supplied. Set
+HuBMAP currently supports full execution only; --full is accepted explicitly
+for consistency with the other library launchers. Writes the HZ1/HZ2 worklist
+unless --submit is supplied. Set
 SUBMISSION_WORK_DIR outside the HuBMAP checkout, APPTAINER_IMAGE, DIG_REPO,
 HUBMAP_RAW_ASCTB_DIR, and HUBMAP_HUMAN_GENE_INFO. HZ2 retains its declared
 GeneShot network dependency.
@@ -20,6 +22,8 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --full) ;;
+    --smoke) echo "HuBMAP has no cluster smoke mode; use reproduction/reproduce.sh --smoke" >&2; exit 2 ;;
     --submit) submit=1 ;;
     --model-id) [[ $# -ge 2 ]] || { echo "Missing value for --model-id" >&2; exit 2; }; model_id="$2"; shift ;;
     -h|--help) usage; exit 0 ;;

@@ -33,7 +33,7 @@ FILTER_MODEL_IDS=""
 usage() {
   cat <<'EOF'
 Usage:
-  ./geneset-extractor-dev/run/submit_hubmap_models_cluster.sh --submit [--write_model_only|--refresh_metadata_and_provenance] [--model_group HZ] [--model_id MODEL[,MODEL...]]
+  ./geneset-extractor-dev/run/submit_hubmap_models_cluster.sh --full --submit [--write-model-only|--refresh-metadata-and-provenance] [--model-group HZ] [--model-id MODEL[,MODEL...]]
   ./geneset-extractor-dev/run/submit_hubmap_models_cluster.sh --help
 
 Required environment variables:
@@ -52,6 +52,7 @@ Optional environment variables:
   LOCAL_INPUT_SOURCE_MAP_TSV
 
 Notes:
+  - Hyphenated options are preferred; legacy underscore spellings remain accepted.
   - Add --write_model_only to write only geneset.model.json sidecars.
   - Add --refresh_metadata_and_provenance to patch metadata descriptions and
     rebuild provenance for each selected model output.
@@ -146,15 +147,22 @@ parse_cli() {
         SUBMIT_MODE=1
         shift
         ;;
-      --write_model_only)
+      --full)
+        shift
+        ;;
+      --smoke)
+        echo "Smoke mode is available through HuBMAP/reproduction/reproduce.sh --smoke" >&2
+        exit 2
+        ;;
+      --write_model_only|--write-model-only)
         WRITE_MODEL_ONLY=1
         shift
         ;;
-      --refresh_metadata_and_provenance)
+      --refresh_metadata_and_provenance|--refresh-metadata-and-provenance)
         REFRESH_METADATA_AND_PROVENANCE=1
         shift
         ;;
-      --model_group)
+      --model_group|--model-group)
         [[ $# -ge 2 ]] || { echo "Missing value for --model_group" >&2; exit 1; }
         FILTER_MODEL_GROUP="$(canonicalize_model_group "$2")" || {
           echo "Unsupported HuBMAP model group: $2" >&2
@@ -162,7 +170,7 @@ parse_cli() {
         }
         shift 2
         ;;
-      --model_id)
+      --model_id|--model-id)
         [[ $# -ge 2 ]] || { echo "Missing value for --model_id" >&2; exit 1; }
         FILTER_MODEL_IDS="$2"
         shift 2
