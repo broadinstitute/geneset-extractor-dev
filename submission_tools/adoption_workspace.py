@@ -741,7 +741,8 @@ def _compare_references(root: Path, library: Path, manifest: dict[str, Any], pay
             messages.append(f"ERROR: adoption reference mapping {index} has an unsafe regenerated path: {mapping['regenerated']}")
             continue
         regenerated = _runtime_output_root(root, library, payload, work_dir=work_dir) / regenerated_value
-        legacy = Path(mapping["legacy"])
+        legacy_value = Path(mapping["legacy"])
+        legacy = legacy_value if legacy_value.is_absolute() else root / legacy_value
         if not legacy.is_file():
             messages.append(f"ERROR: declared legacy reference does not exist: {legacy}")
             continue
@@ -838,14 +839,17 @@ def verify_workspace(workspace: Path, *, work_dir: Path | None = None) -> tuple[
     # executed by this explicit local command, never by CI automation.
     payload = load(library / "submission.yaml")
     artifact_root = _runtime_output_root(root, library, payload, work_dir=work_dir)
-    runtime_environment = _runtime_environment(root, library, payload, work_dir=work_dir)
+    # Smoke reproduction must not replace a completed full artifact that the
+    # following comparison stage is about to evaluate.
+    smoke_artifact_root = artifact_root / "smoke"
+    runtime_environment = _runtime_environment(root, library, payload, work_dir=smoke_artifact_root)
     smoke = str(payload["reproduction"]["smoke_test_command"]).split()
     reproduced = _run(smoke, library, env=runtime_environment)
     if reproduced.returncode:
         messages.append("ERROR: smoke reproduction failed: " + (reproduced.stderr.strip() or reproduced.stdout.strip()))
-    messages.extend(_check_declared_smoke_outputs(library, payload, artifact_root=artifact_root))
+    messages.extend(_check_declared_smoke_outputs(library, payload, artifact_root=smoke_artifact_root))
     provenance_stages: dict[str, object] = {}
-    provenance_messages, provenance_stages["smoke"] = _provenance_stage(library, payload, "smoke", artifact_root=artifact_root)
+    provenance_messages, provenance_stages["smoke"] = _provenance_stage(library, payload, "smoke", artifact_root=smoke_artifact_root)
     messages.extend(provenance_messages)
     messages.append("INFO: smoke verification completed; full legacy equivalence is evaluated only for explicitly declared full mappings.")
     comparison_messages, full_compared = _compare_references(root, library, manifest, payload, work_dir=work_dir)

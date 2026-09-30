@@ -677,6 +677,27 @@ class LegacyAdoptionTest(unittest.TestCase):
             self.assertTrue(any("no full regenerated comparison output" in message for message in messages))
             self.assertFalse((root / "adoption/comparison_report.tsv").exists())
 
+    def test_full_reference_mapping_resolves_legacy_path_from_workspace_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            library = root / "Library"; library.mkdir()
+            legacy = root / "legacy"; legacy.mkdir()
+            (legacy / "old.gmt").write_text("set_a\tna\tA\n", encoding="utf-8")
+            output = root / "work" / "outputs"; output.mkdir(parents=True)
+            (output / "full.gmt").write_text("set_a\tna\tA\n", encoding="utf-8")
+            payload = {
+                "adoption": {"reference_outputs": [{
+                    "legacy": "legacy/old.gmt", "regenerated": "outputs/full.gmt",
+                    "comparison": "set_equivalent", "scope": "full",
+                }]},
+                "reproduction": {"output_directory_environment": "SUBMISSION_WORK_DIR"},
+            }
+            messages, full_compared = _compare_references(
+                root, library, {"legacy": {"reference": "unused"}}, payload, work_dir=root / "work",
+            )
+            self.assertTrue(full_compared)
+            self.assertTrue(any("full legacy comparison passed" in message for message in messages))
+
     def test_workspace_safety_and_legacy_change_detection(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
