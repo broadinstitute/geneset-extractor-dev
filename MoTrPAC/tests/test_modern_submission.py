@@ -38,8 +38,13 @@ class MoTrPACModernSubmissionTests(unittest.TestCase):
             self.assertTrue(output.with_name("geneset.provenance.legacy.json").is_file())
             self.assertTrue(output.with_name("geneset.provenance.dapper.yaml").is_file())
             self.assertFalse(output.with_name("geneset.provenance.json").exists())
+            dapper_gmt = output.with_name("genesets.dapper-ids.gmt")
+            self.assertTrue(dapper_gmt.is_file())
+            self.assertTrue(
+                all(line.startswith("dapper:GeneSet.") for line in dapper_gmt.read_text(encoding="utf-8").splitlines())
+            )
             dapper = output.with_name("geneset.provenance.dapper.yaml").read_text(encoding="utf-8")
-            self.assertIn("name: MoTrPAC_Rat_Endurance_Training_HZ1", dapper)
+            self.assertIn("name: MoTrPAC Rat Endurance Training HZ1", dapper)
 
 
 if __name__ == "__main__":

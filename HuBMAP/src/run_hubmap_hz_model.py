@@ -154,7 +154,11 @@ def write_model_sidecar(
         "extractor_name": "unsigned_term_gene",
         "parameters": {
             "term_prefix": "HuBMAP",
-            "signature_name": "HuBMAP_ASCTB" if model_id == "HZ1" else "HuBMAP_ASCTB_augmented",
+            "signature_name": (
+                "HuBMAP ASCT+B gene-set library (HZ1)"
+                if model_id == "HZ1"
+                else "HuBMAP ASCT+B augmented gene-set library (HZ2)"
+            ),
             "gmt_min_genes": 5,
             "augmentation_threshold": manifest_value(settings, "workflow_augmentation_threshold", ""),
             "cap_multiplier": manifest_value(settings, "workflow_cap_multiplier", ""),
@@ -253,7 +257,11 @@ def build_extractor_cmd(
     provenance_mirror_local_prefix: str | None,
     provenance_mirror_remote_prefix: str | None,
 ) -> list[str]:
-    signature_name = "HuBMAP_ASCTB" if model_id == "HZ1" else "HuBMAP_ASCTB_augmented"
+    signature_name = (
+        "HuBMAP ASCT+B gene-set library (HZ1)"
+        if model_id == "HZ1"
+        else "HuBMAP ASCT+B augmented gene-set library (HZ2)"
+    )
     cmd = [
         python_bin,
         "-m",
@@ -286,6 +294,12 @@ def build_extractor_cmd(
         "true",
         "--emit_small_gene_sets",
         "false",
+        "--dapper_gene_member_prefix",
+        "HGNC.SYMBOL",
+        "--dapper_gene_member_prefix_uri",
+        "https://identifiers.org/hgnc.symbol:",
+        "--dapper_row_display_separator",
+        "_",
     ]
     if provenance_mirror_local_prefix:
         cmd.extend(["--provenance_mirror_local_prefix", provenance_mirror_local_prefix])

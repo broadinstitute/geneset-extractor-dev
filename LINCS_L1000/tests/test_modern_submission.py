@@ -53,4 +53,6 @@ class LincsModernSubmissionTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             extractor = Path(temp_dir, "smoke/genesets/all_signatures/models/HZ1/extractor")
             self.assertTrue((extractor / "genesets.gmt").is_file())
-            self.assertIn("name: LINCS_L1000_Chem_Pert", (extractor / "geneset.provenance.dapper.yaml").read_text(encoding="utf-8"))
+            # DAPPER keeps the legacy machine identifier as an alternate ID
+            # and emits the collection's readable name separately.
+            self.assertIn("name: LINCS L1000 Chem Pert", (extractor / "geneset.provenance.dapper.yaml").read_text(encoding="utf-8"))
