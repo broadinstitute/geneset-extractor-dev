@@ -14,6 +14,21 @@
       "canonical_uri": "https://gtexportal.org/home/downloads/adult-gtex",
       "provider": "GTEx Portal",
       "version": "GTEx Analysis V10"
+    },
+    "role:gtex_v8_tpm": {
+      "canonical_uri": "https://gtexportal.org/home/downloads/adult-gtex",
+      "provider": "GTEx Portal",
+      "version": "GTEx Analysis V8"
+    },
+    "role:sample_attributes_tsv_v8": {
+      "canonical_uri": "https://gtexportal.org/home/downloads/adult-gtex",
+      "provider": "GTEx Portal",
+      "version": "GTEx Analysis V8"
+    },
+    "role:subject_phenotypes_tsv_v8": {
+      "canonical_uri": "https://gtexportal.org/home/downloads/adult-gtex",
+      "provider": "GTEx Portal",
+      "version": "GTEx Analysis V8"
     }
   }
 }

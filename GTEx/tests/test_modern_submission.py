@@ -85,12 +85,13 @@ class GTExModernSubmissionTest(unittest.TestCase):
             tasks = list(csv.DictReader(handle, delimiter="\t"))
         with (root / "expected/output_manifest.tsv").open(encoding="utf-8", newline="") as handle:
             outputs = list(csv.DictReader(handle, delimiter="\t"))
-        self.assertEqual(len(tasks), 991)
-        self.assertEqual(len(outputs), 990)
+        self.assertEqual(len(tasks), 993)
+        self.assertEqual(len(outputs), 991)
         self.assertEqual({row["dig_identifier"] for row in tasks}, {
-            "gtex_age_binned", "gtex_continuous_age", "gtex_aging_signatures",
+            "gtex_age_binned", "gtex_continuous_age", "gtex_aging_signatures", "gtex_hz_consensus",
         })
         self.assertTrue(any(row["model_id"] == "HZ1" for row in tasks))
+        self.assertTrue(any(row["model_id"] == "HZ2" for row in tasks))
 
 
 if __name__ == "__main__":

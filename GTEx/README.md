@@ -13,6 +13,13 @@ It dispatches the existing DIG-backed AB4 age-binned path with a small,
 synthetic smoke fixture. Historical scripts remain compatibility material, not
 new wrapper implementation.
 
+`HZ2` is the added `hz_consensus` family: a GTEx V8 TPM reconstruction of the
+Harmonizome/DRC tissue × sex × age signature intent. DIG performs sample
+signature normalization, grouping, recurrence ranking, and GMT construction;
+[`run/build_gtex_genesets.sh`](run/build_gtex_genesets.sh) only selects HZ2.
+The unavailable DRC aggregation implementation means HZ2 is scientifically
+comparable, not set-equivalent, to the archived 2023 GMT.
+
 ## Full execution
 
 The declared reproduction contract can run natively with

@@ -1,0 +1,2 @@
+model_id	support_fraction	top_n	up_cutoff	min_samples_per_group
+HZ2	0.25	100	0.95	3
