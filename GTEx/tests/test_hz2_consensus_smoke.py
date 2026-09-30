@@ -36,3 +36,5 @@ def test_hz2_smoke_uses_dig_and_writes_deterministic_consensus() -> None:
             assert (gmt.parent / name).is_file()
         summary = json.loads((gmt.parent / "run_summary.json").read_text(encoding="utf-8"))
         assert summary["support_fraction"] == 0.25
+        assert {"median", "min", "max"} == set(summary["sample_up_genes"])
+        assert summary["n_unique_genes_ever_up"] > 0
