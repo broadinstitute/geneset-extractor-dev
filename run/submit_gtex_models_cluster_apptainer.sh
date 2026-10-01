@@ -553,16 +553,9 @@ run_task() {
   fi
 
   IFS=$'\t' read -r _ tissue_id model_group model_id counts_gct sample_tsv subject_tsv human_gene_info gtf <<< "${row}"
-  local tissue_label
-  tissue_label="$(resolve_tissue_label "${tissue_id}")"
-  if [[ -z "${tissue_label}" ]]; then
-    echo "Missing tissue_name for GTEx tissue_id ${tissue_id}" >&2
-    exit 1
-  fi
-
   echo "GTEx task ${task_id}: tissue=${tissue_id} group=${model_group} model=${model_id}"
 
-  local cmd models_root runner
+  local cmd models_root runner tissue_label
   models_root="${GTEX_OUT_ROOT}/genesets/${tissue_id}/models"
   build_model_only_cmd() {
     case "${model_group}" in
@@ -655,6 +648,12 @@ run_task() {
     echo "+ ${refresh_cmd[*]}"
     "${refresh_cmd[@]}"
     return
+  fi
+
+  tissue_label="$(resolve_tissue_label "${tissue_id}")"
+  if [[ -z "${tissue_label}" ]]; then
+    echo "Missing tissue_name for GTEx tissue_id ${tissue_id}" >&2
+    exit 1
   fi
 
   local cmd=(

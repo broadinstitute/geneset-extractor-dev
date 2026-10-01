@@ -136,6 +136,21 @@ class GTExModernSubmissionTest(unittest.TestCase):
             self.assertEqual(len(hz2_rows), 1)
             self.assertIn("\tall_detailed_tissues\tHZ2\tHZ2\t", hz2_rows[0])
 
+    def test_legacy_cluster_refresh_handles_hz2_before_broad_tissue_lookup(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        for name in (
+            "submit_gtex_models_cluster.sh",
+            "submit_gtex_models_cluster_apptainer.sh",
+        ):
+            source = (root.parent / "run" / name).read_text(encoding="utf-8")
+            refresh_index = source.index("if [[ ${REFRESH_METADATA_AND_PROVENANCE} -eq 1 ]]; then")
+            label_lookup_index = source.index('tissue_label="$(resolve_tissue_label "${tissue_id}")"')
+            self.assertLess(
+                refresh_index,
+                label_lookup_index,
+                f"{name} must refresh HZ2 before looking up its non-broad all_detailed_tissues partition",
+            )
+
     def test_full_contract_covers_all_enabled_model_tissue_pairs(self) -> None:
         root = Path(__file__).resolve().parents[1]
         with (root / "config/task_manifest.tsv").open(encoding="utf-8", newline="") as handle:
