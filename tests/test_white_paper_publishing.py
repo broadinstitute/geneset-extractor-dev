@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -23,7 +24,13 @@ class WhitePaperPublishingTests(unittest.TestCase):
             model = root / "model_one"
             model.mkdir(parents=True)
             provenance = model / "geneset.provenance.legacy.json"
-            provenance.write_text("{}\n", encoding="utf-8")
+            provenance.write_text(json.dumps({
+                "graph": {"nodes": [
+                    {"type": "File", "c2m2_properties": {"local_id": "model_one/geneset.whitepaper.md"}},
+                    {"type": "File", "c2m2_properties": {"local_id": "model_one/geneset.whitepaper.pdf"}},
+                    {"type": "File", "c2m2_properties": {"local_id": "model_one/secondary.whitepaper.md"}},
+                ]},
+            }) + "\n", encoding="utf-8")
             markdown = model / "geneset.whitepaper.md"
             pdf = model / "geneset.whitepaper.pdf"
             second_markdown = model / "secondary.whitepaper.md"

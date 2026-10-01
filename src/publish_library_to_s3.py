@@ -12,6 +12,11 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
+try:
+    import yaml
+except ImportError:  # Reported only when DAPPER YAML provenance is present.
+    yaml = None  # type: ignore[assignment]
+
 
 TRANSIENT_BASENAMES = {
     ".DS_Store",
@@ -81,8 +86,15 @@ def parse_args():  # type: () -> argparse.Namespace
         "--provenance_only_outputs",
         action="store_true",
         help=(
-            "Upload only selected geneset.provenance.json files plus files under "
-            "--local_output_root that are explicitly referenced by those provenance files."
+            "Deprecated compatibility option. Provenance-declared output selection is now the default."
+        ),
+    )
+    parser.add_argument(
+        "--all_output_files",
+        action="store_true",
+        help=(
+            "Explicitly upload every non-transient file below --local_output_root. "
+            "By default, only provenance sidecars and the local artifacts they declare are uploaded."
         ),
     )
     parser.add_argument("--overwrite", action="store_true", help="Overwrite objects that already exist in S3.")
@@ -286,33 +298,39 @@ def extract_local_output_paths_from_provenance(
     provenance_path,  # type: Path
     local_output_root,  # type: Path
 ):  # type: (...) -> List[Path]
-    white_paper_paths = set()  # type: Set[Path]
-    for candidate in provenance_path.parent.glob("*.whitepaper.*"):
-        if candidate.suffix not in {".md", ".pdf"}:
-            continue
-        if candidate.is_file() and not should_skip_path(candidate) and is_within_directory(candidate, local_output_root):
-            white_paper_paths.add(candidate.resolve())
     if provenance_path.suffix in {".yaml", ".yml"}:
-        # A DAPPER sidecar is deliberately YAML but this publisher does not
-        # otherwise need a YAML dependency.  DIG's additive row-level export
-        # has a fixed sibling-artifact name, so include only that declared
-        # contract rather than heuristically parsing arbitrary YAML.
+        if yaml is None:
+            raise SystemExit(
+                "PyYAML is required to publish artifacts declared by DAPPER YAML provenance. "
+                "Install the wrapper's documented Python dependencies or use --all_output_files explicitly."
+            )
+        try:
+            payload = yaml.safe_load(provenance_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            raise SystemExit(f"Unable to parse DAPPER provenance YAML {provenance_path}: {exc}") from exc
+        if not isinstance(payload, dict):
+            raise SystemExit(f"Expected DAPPER provenance YAML object: {provenance_path}")
         paths = set()  # type: Set[Path]
-        for candidate in provenance_path.parent.glob("*.dapper-ids.gmt"):
-            resolved = candidate.resolve()
-            if (
-                resolved.is_file()
-                and not should_skip_path(resolved)
-                and is_within_directory(resolved, local_output_root)
-            ):
-                paths.add(resolved)
+        for node in payload.get("files", []):
+            if not isinstance(node, dict):
+                continue
+            for candidate in (node.get("location"), node.get("filename")):
+                if not isinstance(candidate, str):
+                    continue
+                resolved = _resolve_provenance_file_candidate(
+                    candidate,
+                    local_output_root,
+                    provenance_dir=provenance_path.parent,
+                )
+                if resolved is not None and is_within_directory(resolved, local_output_root):
+                    paths.add(resolved)
         return sorted(paths)
     try:
         payload = json.loads(provenance_path.read_text(encoding="utf-8"))
     except Exception as exc:
         raise SystemExit(f"Unable to parse provenance JSON {provenance_path}: {exc}") from exc
 
-    paths = set(white_paper_paths)  # type: Set[Path]
+    paths = set()  # type: Set[Path]
     for graph in payload.values():
         for node in graph.get("nodes", []):
             if node.get("type") != "File":
@@ -691,7 +709,12 @@ def main():  # type: () -> int
         model_ids=model_ids,
     )
     provenance_paths = iter_provenance_paths(local_output_root, model_ids=model_ids)
-    if args.provenance_only_outputs:
+    if not args.all_output_files:
+        if not provenance_paths:
+            raise SystemExit(
+                "No provenance sidecars were found. Refusing to publish an unbounded output tree; "
+                "generate provenance first or pass --all_output_files explicitly."
+            )
         output_candidates = filter_output_candidates_to_provenance_paths(
             local_output_root=local_output_root,
             output_candidates=output_candidates,
