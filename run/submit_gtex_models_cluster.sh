@@ -45,7 +45,7 @@ FILTER_MODEL_IDS=""
 usage() {
   cat <<'EOF'
 Usage:
-  ./geneset-extractor-dev/run/submit_gtex_models_cluster.sh --full --submit [--write-model-only|--refresh-metadata-and-provenance] [--model-group AB|AC|HZ] [--tissue-id TISSUE] [--model-id MODEL[,MODEL...]]
+  ./geneset-extractor-dev/run/submit_gtex_models_cluster.sh --full --submit [--write-model-only|--refresh-metadata-and-provenance] [--model-group AB|AC|HZ|HZ2] [--tissue-id TISSUE] [--model-id MODEL[,MODEL...]]
   ./geneset-extractor-dev/run/submit_gtex_models_cluster.sh --help
 
 Required environment variables:
@@ -132,6 +132,7 @@ canonicalize_model_group() {
     AB|age_binned) printf '%s\n' "AB" ;;
     AC|continuous_age) printf '%s\n' "AC" ;;
     HZ|hz_notebook) printf '%s\n' "HZ" ;;
+    HZ2|hz_consensus) printf '%s\n' "HZ2" ;;
     *) return 1 ;;
   esac
 }
@@ -150,6 +151,7 @@ resolve_model_group_for_id() {
       if ($family_col == "age_binned") print "AB"
       else if ($family_col == "continuous_age") print "AC"
       else if ($family_col == "hz_notebook") print "HZ"
+      else if ($family_col == "hz_consensus") print "HZ2"
       exit
     }
   ' "${GTEX_MODEL_LIST}"
@@ -299,6 +301,7 @@ write_worklist() {
     if ($2 == "age_binned") group = "AB"
     else if ($2 == "continuous_age") group = "AC"
     else if ($2 == "hz_notebook") group = "HZ"
+    else if ($2 == "hz_consensus") group = "HZ2"
     if (group != "") print $1 "\t" group
   }' "${GTEX_MODEL_LIST}" > "${model_tsv}"
   awk -F $'\t' 'NR > 1 { print $1 }' "${GTEX_BROAD_TISSUE_LIST}" > "${tissue_tsv}"
@@ -487,6 +490,10 @@ run_task() {
           --tissue_value "${tissue_label}"
           --write_model_only
         )
+        ;;
+      HZ2)
+        echo "HZ2 consensus uses GTEx/run/submit_submission_models_cluster_apptainer.sh for full execution; this launcher supports HZ2 only for refresh." >&2
+        exit 2
         ;;
       *)
         echo "Unsupported GTEx model group in model-only mode: ${model_group}" >&2

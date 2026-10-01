@@ -97,6 +97,17 @@ class GTExModernSubmissionTest(unittest.TestCase):
         self.assertIn("--model_id HZ1", completed.stdout)
         self.assertNotIn("--model_id HZ1,HZ2", completed.stdout)
 
+    def test_legacy_cluster_launchers_accept_hz2_for_refresh(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        for name in (
+            "submit_gtex_models_cluster.sh",
+            "submit_gtex_models_cluster_apptainer.sh",
+        ):
+            source = (root.parent / "run" / name).read_text(encoding="utf-8")
+            self.assertIn('else if ($family_col == "hz_consensus") print "HZ2"', source)
+            self.assertIn('else if ($2 == "hz_consensus") group = "HZ2"', source)
+            self.assertIn("HZ2 consensus uses GTEx/run/submit_submission_models_cluster_apptainer.sh", source)
+
     def test_full_contract_covers_all_enabled_model_tissue_pairs(self) -> None:
         root = Path(__file__).resolve().parents[1]
         with (root / "config/task_manifest.tsv").open(encoding="utf-8", newline="") as handle:
