@@ -314,6 +314,7 @@ write_worklist() {
       -v filter_group="${FILTER_MODEL_GROUP}" \
       -v filter_tissue="${FILTER_TISSUE_ID}" \
       -v filter_models="${FILTER_MODEL_IDS}" \
+      -v refresh_metadata_and_provenance="${REFRESH_METADATA_AND_PROVENANCE}" \
       -v v10_counts="${GTEX_V10_COUNTS_GCT}" \
       -v v10_sample="${GTEX_V10_SAMPLE_ATTRIBUTES_TSV}" \
       -v v10_subject="${GTEX_V10_SUBJECT_PHENOTYPES_TSV}" \
@@ -349,6 +350,10 @@ write_worklist() {
           for (mi = 1; mi <= n_models; mi++) {
             model_id = model_ids[mi]
             model_group = model_groups[mi]
+            # HZ2 has one all-detailed-tissues output, not one output for
+            # every broad tissue.  Its full run uses the dedicated modern
+            # launcher, but this shared launcher refreshes that existing tree.
+            if (model_group == "HZ2") continue
             if (filter_group != "" && model_group != filter_group) continue
             if (filter_models != "" && !(model_id in requested_model_lookup)) continue
             task_id += 1
@@ -357,6 +362,19 @@ write_worklist() {
             } else {
               printf "%d\t%s\t%s\t%s\t%s\t%s\t%s\t\t%s\n", task_id, tissue_id, model_group, model_id, v10_counts, v10_sample, v10_subject, gtf
             }
+          }
+        }
+        if (refresh_metadata_and_provenance == "1") {
+          for (mi = 1; mi <= n_models; mi++) {
+            model_id = model_ids[mi]
+            model_group = model_groups[mi]
+            if (model_group != "HZ2") continue
+            if (filter_group != "" && model_group != filter_group) continue
+            if (filter_models != "" && !(model_id in requested_model_lookup)) continue
+            tissue_id = "all_detailed_tissues"
+            if (filter_tissue != "" && tissue_id != filter_tissue) continue
+            task_id += 1
+            printf "%d\t%s\t%s\t%s\t\t\t\t\t\n", task_id, tissue_id, model_group, model_id
           }
         }
       }'
