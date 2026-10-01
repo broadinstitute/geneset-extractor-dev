@@ -262,11 +262,24 @@ def _resolve_provenance_file_candidate(
     candidate,
     local_output_root,
     provenance_dir=None,
+    s3_output_root=None,
 ):  # type: (str, Path, Optional[Path]) -> Optional[Path]
     if not candidate:
         return None
     parsed = urlparse(candidate)
-    if parsed.scheme or candidate.startswith("//"):
+    if parsed.scheme:
+        normalized_s3_root = (s3_output_root or "").rstrip("/")
+        if normalized_s3_root and candidate.startswith(normalized_s3_root + "/"):
+            relative = candidate[len(normalized_s3_root) + 1 :]
+            candidate_path = local_output_root / relative
+            if (
+                candidate_path.exists()
+                and candidate_path.is_file()
+                and not should_skip_path(candidate_path)
+            ):
+                return candidate_path.resolve()
+        return None
+    if candidate.startswith("//"):
         return None
 
     path = Path(candidate)
@@ -297,6 +310,7 @@ def _resolve_provenance_file_candidate(
 def extract_local_output_paths_from_provenance(
     provenance_path,  # type: Path
     local_output_root,  # type: Path
+    s3_output_root=None,  # type: Optional[str]
 ):  # type: (...) -> List[Path]
     if provenance_path.suffix in {".yaml", ".yml"}:
         if yaml is None:
@@ -321,6 +335,7 @@ def extract_local_output_paths_from_provenance(
                     candidate,
                     local_output_root,
                     provenance_dir=provenance_path.parent,
+                    s3_output_root=s3_output_root,
                 )
                 if resolved is not None and is_within_directory(resolved, local_output_root):
                     paths.add(resolved)
@@ -336,7 +351,12 @@ def extract_local_output_paths_from_provenance(
             if node.get("type") != "File":
                 continue
             for candidate in _candidate_strings_from_file_node(node):
-                resolved = _resolve_provenance_file_candidate(candidate, local_output_root)
+                resolved = _resolve_provenance_file_candidate(
+                    candidate,
+                    local_output_root,
+                    provenance_dir=provenance_path.parent,
+                    s3_output_root=s3_output_root,
+                )
                 if resolved is None:
                     continue
                 if is_within_directory(resolved, local_output_root):
@@ -494,6 +514,7 @@ def filter_output_candidates_to_provenance_paths(
     local_output_root,  # type: Path
     output_candidates,  # type: List[CandidateFile]
     provenance_paths,  # type: List[Path]
+    s3_output_root=None,  # type: Optional[str]
 ):  # type: (**Any) -> List[CandidateFile]
     if not provenance_paths:
         return []
@@ -512,7 +533,13 @@ def filter_output_candidates_to_provenance_paths(
                 ),
                 flush=True,
             )
-        keep_paths.update(extract_local_output_paths_from_provenance(provenance_path, local_output_root))
+        keep_paths.update(
+            extract_local_output_paths_from_provenance(
+                provenance_path,
+                local_output_root,
+                s3_output_root=s3_output_root,
+            )
+        )
 
     filtered = []  # type: List[CandidateFile]
     for path in sorted(keep_paths):
@@ -719,6 +746,7 @@ def main():  # type: () -> int
             local_output_root=local_output_root,
             output_candidates=output_candidates,
             provenance_paths=provenance_paths,
+            s3_output_root=args.s3_output_root,
         )
     log_line(log_path, f"discovered_output_files={len(output_candidates)}")
     log_line(log_path, f"scanned_provenance_files={len(provenance_paths)}")

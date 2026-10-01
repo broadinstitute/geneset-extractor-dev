@@ -70,3 +70,28 @@ class PublishLibraryToS3Tests(unittest.TestCase):
             paths = publisher.extract_local_output_paths_from_provenance(provenance, output_root)
             self.assertEqual(paths, [companion.resolve()])
             self.assertNotIn(unreferenced.resolve(), paths)
+
+    def test_dapper_public_uri_maps_back_to_its_local_output_path(self):
+        publisher = _publisher_module()
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output_root = Path(temporary_directory) / "outputs"
+            workflow = output_root / "genesets/adipose_tissue/models/HZ1/workflow"
+            workflow.mkdir(parents=True)
+            declared = workflow / "deg_long.tsv"
+            declared.write_text("gene\tscore\nGENE1\t1\n", encoding="utf-8")
+            provenance = workflow / "geneset.provenance.dapper.yaml"
+            provenance.write_text(
+                "files:\n"
+                "- id: dapper:File.deg\n"
+                "  location: s3://example-bucket/GTEx/genesets/adipose_tissue/models/HZ1/workflow/deg_long.tsv\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                publisher.extract_local_output_paths_from_provenance(
+                    provenance,
+                    output_root,
+                    s3_output_root="s3://example-bucket/GTEx",
+                ),
+                [declared.resolve()],
+            )
