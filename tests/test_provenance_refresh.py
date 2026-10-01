@@ -22,6 +22,19 @@ REFRESH = load_refresh_module()
 
 
 class ProvenanceRefreshTest(unittest.TestCase):
+    def test_gtex_hz2_sidecar_uses_aggregate_partition_not_broad_tissue(self) -> None:
+        self.assertEqual(REFRESH.gtex_model_group("HZ2"), "HZ2")
+        payload = REFRESH.gtex_hz2_model_sidecar_payload(
+            model_id="HZ2",
+            tissue_id="all_detailed_tissues",
+        )
+        self.assertEqual(payload["model_family"], "hz_consensus")
+        self.assertEqual(payload["workflow"], {"identifier": "gtex_hz_consensus"})
+        self.assertEqual(payload["inputs"], {
+            "tissue_id": "all_detailed_tissues",
+            "tissue_label": "All GTEx V8 detailed tissues",
+        })
+
     def test_current_paired_sidecars_are_preferred_and_snapshotted(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)
