@@ -4,3 +4,4 @@ lincs_crisprko_matrix	Provide the released xpr_mean_coeff_mat.tsv.gz file and se
 harmonizome_mapping	Provide Harmonizome mappingFile_2017.txt and set LINCS_MAPPING_FILE.	2017 mapping release		public_download	full	workflow_input	not_redistributable	false	N/A
 lincs_smoke_chempert_matrix	Tiny synthetic chemical-perturbation matrix for HZ1 smoke validation	test-v1		committed_fixture	smoke	workflow_input	redistributable	true	tests/fixtures/lincs_smoke_chempert.tsv
 lincs_smoke_mapping	Tiny synthetic mapping file for HZ1 smoke validation	test-v1		committed_fixture	smoke	workflow_input	redistributable	true	tests/fixtures/lincs_smoke_mapping.tsv
+lincs_cp_signature_manifest	Provide a SigCom-exported manifest with persistent_id plus optional source_url/source_path; set LINCS_CP_SIGNATURE_MANIFEST_TSV.	SigCom LINCS library 54198d6e-fe17-5ef8-91ac-02b425761653		public_download	full	workflow_input	not_redistributable	false	N/A

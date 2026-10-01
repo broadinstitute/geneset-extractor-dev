@@ -1,3 +1,4 @@
 task_id	model_id	partition_id	enabled	dig_identifier	output_relative_path
 lincs_hz1_all_signatures	HZ1	all_signatures	true	lincs_l1000_chempert	genesets/all_signatures/models/HZ1/extractor/genesets.gmt
 lincs_hz2_all_signatures	HZ2	all_signatures	true	lincs_l1000_crisprko	genesets/all_signatures/models/HZ2/extractor/genesets.gmt
+lincs_cp1_all_signatures	CP1	all_signatures	true	lincs_l1000_cp	genesets/all_signatures/models/CP1/extractor/genesets.gmt

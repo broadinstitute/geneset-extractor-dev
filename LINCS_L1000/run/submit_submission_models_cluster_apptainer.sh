@@ -57,6 +57,8 @@ command=(env "WORK_ROOT=${SUBMISSION_WORK_DIR}" "LINCS_OUT_ROOT=${SUBMISSION_WOR
   "LINCS_ARRAY_MEMORY=${array_memory}" "LINCS_ARRAY_WALLTIME=${array_walltime}" \
   "LINCS_CHEMPERT_EXPRESSION_TSV=${LINCS_CHEMPERT_EXPRESSION_TSV:-}" \
   "LINCS_CRISPRKO_EXPRESSION_TSV=${LINCS_CRISPRKO_EXPRESSION_TSV:-}" \
+  "LINCS_CP_SIGNATURE_MANIFEST_TSV=${LINCS_CP_SIGNATURE_MANIFEST_TSV:-}" \
+  "LINCS_CP_CACHE_DIR=${LINCS_CP_CACHE_DIR:-}" \
   "LINCS_MAPPING_FILE=${LINCS_MAPPING_FILE:-}" "${legacy_launcher}" --submit)
 [[ -n "${model_id}" ]] && command+=(--model_id "${model_id}")
 if [[ ${submit} -eq 0 ]]; then

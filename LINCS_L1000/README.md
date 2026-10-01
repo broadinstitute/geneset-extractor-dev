@@ -5,6 +5,16 @@ HZ2 CRISPR-knockout libraries. All matrix processing, ranking, mapping, and
 GMT creation belong to `dig-gene-set-extractors`; this directory only supplies
 declared inputs and dispatches DIG commands.
 
+`CP1` (`cd_signature_export`, `l1000_cp`) is distinct from the released-matrix
+models. It exports each Level-5 chemical-perturbation Characteristic Direction
+signature independently: the top 250 `CD-coefficient` symbols are `up`, and
+the bottom 250 are `down`. Provide a SigCom-derived TSV manifest through
+`LINCS_CP_SIGNATURE_MANIFEST_TSV`; it must contain `persistent_id` and may
+contain `source_url` or `source_path`. Bare persistent IDs resolve under
+`https://lincs-dcic.s3.amazonaws.com/LINCS-sigs-2021/cd/cp/`. Downloaded TSVs
+are cached under `LINCS_CP_CACHE_DIR` when set. The SigCom library identifier
+is `54198d6e-fe17-5ef8-91ac-02b425761653`.
+
 Run the committed HZ1 smoke fixture with:
 
 ```bash
@@ -13,7 +23,8 @@ SUBMISSION_WORK_DIR=/path/out DIG_REPO=../dig-gene-set-extractors \
 ```
 
 For a full run set `LINCS_CHEMPERT_EXPRESSION_TSV`,
-`LINCS_CRISPRKO_EXPRESSION_TSV`, and `LINCS_MAPPING_FILE`, then run
+`LINCS_CRISPRKO_EXPRESSION_TSV`, `LINCS_MAPPING_FILE`, and
+`LINCS_CP_SIGNATURE_MANIFEST_TSV`, then run
 `bash run/run_submission_models_apptainer.sh --full`.
 
 For an Apptainer run, use the same standard variables as the other modernized

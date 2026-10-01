@@ -17,9 +17,9 @@ class LincsModernSubmissionTests(unittest.TestCase):
         def rows(path: Path):
             with path.open(encoding="utf-8", newline="") as handle:
                 return list(csv.DictReader(handle, delimiter="\t"))
-        self.assertEqual({row["model_id"] for row in rows(ROOT / "config/model_list.tsv") if row["enabled"] == "true"}, {"HZ1", "HZ2"})
-        self.assertEqual({row["model_id"] for row in rows(ROOT / "config/task_manifest.tsv")}, {"HZ1", "HZ2"})
-        self.assertEqual({row["model_id"] for row in rows(ROOT / "expected/output_manifest.tsv")}, {"HZ1", "HZ2"})
+        self.assertEqual({row["model_id"] for row in rows(ROOT / "config/model_list.tsv") if row["enabled"] == "true"}, {"HZ1", "HZ2", "CP1"})
+        self.assertEqual({row["model_id"] for row in rows(ROOT / "config/task_manifest.tsv")}, {"HZ1", "HZ2", "CP1"})
+        self.assertEqual({row["model_id"] for row in rows(ROOT / "expected/output_manifest.tsv")}, {"HZ1", "HZ2", "CP1"})
 
     def test_cluster_adapter_uses_standard_submission_interface(self) -> None:
         source = (ROOT / "run/submit_submission_models_cluster_apptainer.sh").read_text(encoding="utf-8")
@@ -56,3 +56,28 @@ class LincsModernSubmissionTests(unittest.TestCase):
             # DAPPER keeps the legacy machine identifier as an alternate ID
             # and emits the collection's readable name separately.
             self.assertIn("name: LINCS L1000 Chem Pert", (extractor / "geneset.provenance.dapper.yaml").read_text(encoding="utf-8"))
+
+    @unittest.skipUnless((DIG / "src/geneset_extractors").is_dir(), "requires sibling DIG checkout")
+    def test_cp1_wrapper_exports_legacy_style_gmt(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source = temp / "signature.tsv"
+            source.write_text(
+                "symbol\tCD-coefficient\n" + "\n".join(f"GENE{i:03d}\t{500 - i}" for i in range(500)) + "\n",
+                encoding="utf-8",
+            )
+            manifest = temp / "manifest.tsv"
+            manifest.write_text(f"persistent_id\tsource_path\nL1000_LINCS_DCIC_fixture.tsv\t{source}\n", encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "src/build_lincs_l1000_genesets.py"), "--models", "CP1", "--cp_signature_manifest_tsv", str(manifest), "--dig_dir", str(DIG), "--out_root", str(temp / "out"), "--overwrite"],
+                cwd=ROOT,
+                env={**os.environ, "PYTHONPATH": str(DIG / "src") + (":" + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else "")},
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            gmt = temp / "out/genesets/all_signatures/models/CP1/extractor/genesets.gmt"
+            lines = gmt.read_text(encoding="utf-8").splitlines()
+            self.assertEqual([line.split("\t", 1)[0] for line in lines], ["fixture down", "fixture up"])
+            self.assertTrue(all(line.split("\t")[1] == "" for line in lines))
+            self.assertTrue(all(len(line.split("\t")) == 252 for line in lines))

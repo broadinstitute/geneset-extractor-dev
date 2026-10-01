@@ -26,7 +26,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--python_bin", default=sys.executable or "python3")
     parser.add_argument("--chempert_expression_tsv")
     parser.add_argument("--crisprko_expression_tsv")
-    parser.add_argument("--mapping_file", required=True)
+    parser.add_argument("--cp_signature_manifest_tsv")
+    parser.add_argument("--cp_cache_dir")
+    parser.add_argument("--mapping_file")
     parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--provenance_mirror_local_prefix")
     parser.add_argument("--provenance_mirror_remote_prefix")
@@ -84,7 +86,7 @@ def main() -> int:
     src_root = Path(__file__).resolve().parent
 
     model_manifest = require_existing_file(args.model_manifest, "model manifest")
-    mapping_file = require_existing_file(args.mapping_file, "mapping file")
+    mapping_file = require_existing_file(args.mapping_file, "mapping file") if any(model in {"HZ1", "HZ2"} for model in selected_models) else None
     dig_dir = Path(args.dig_dir).expanduser().resolve()
     if not dig_dir.exists() or not dig_dir.is_dir():
         raise SystemExit(f"Missing dig-gene-set-extractors directory: {dig_dir}")
@@ -92,6 +94,7 @@ def main() -> int:
     input_by_model = {
         "HZ1": require_existing_file(args.chempert_expression_tsv, "chempert expression TSV") if "HZ1" in selected_models else None,
         "HZ2": require_existing_file(args.crisprko_expression_tsv, "crisprko expression TSV") if "HZ2" in selected_models else None,
+        "CP1": require_existing_file(args.cp_signature_manifest_tsv, "CP signature manifest TSV") if "CP1" in selected_models else None,
     }
 
     conflicts: list[str] = []
@@ -108,6 +111,18 @@ def main() -> int:
 
     for model_id in selected_models:
         model_family = str(model_by_id[model_id].get("model_family", "")).strip()
+        if model_family == "cd_signature_export":
+            run_command(
+                [
+                    str(Path(args.python_bin).resolve()),
+                    str(src_root / "run_lincs_l1000_cp_model.py"),
+                    "--run_root", str(outputs_root / "all_signatures" / "models"),
+                    "--python_bin", str(Path(args.python_bin).resolve()),
+                    "--dig_dir", str(dig_dir),
+                    "--signature_manifest_tsv", str(input_by_model[model_id]),
+                ] + (["--cache_dir", str(Path(args.cp_cache_dir).resolve())] if args.cp_cache_dir else [])
+            )
+            continue
         if model_family != "hz_released_matrix":
             raise SystemExit(f"Unsupported LINCS_L1000 model family for {model_id}")
         expression_tsv = input_by_model.get(model_id)
