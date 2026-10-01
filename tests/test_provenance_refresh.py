@@ -31,6 +31,14 @@ class ProvenanceRefreshTest(unittest.TestCase):
             legacy.write_text('{"path": "/local/input.tsv"}\n', encoding="utf-8")
             dapper.write_text("gene_sets: []\n", encoding="utf-8")
             transitional.write_text('{"old": true}\n', encoding="utf-8")
+            model_sidecar = directory / "geneset.model.json"
+            dapper_gmt = directory / "genesets.dapper-ids.gmt"
+            white_paper = directory / "geneset.whitepaper.md"
+            white_paper_pdf = directory / "geneset.whitepaper.pdf"
+            model_sidecar.write_text('{"model_id": "old"}\n', encoding="utf-8")
+            dapper_gmt.write_text("old-dapper-row\tdescription\tGENE1\n", encoding="utf-8")
+            white_paper.write_text("# Original report\n", encoding="utf-8")
+            white_paper_pdf.write_bytes(b"%PDF-original\n")
 
             REFRESH.snapshot_originals([metadata])
 
@@ -39,11 +47,25 @@ class ProvenanceRefreshTest(unittest.TestCase):
             self.assertTrue(Path(f"{legacy}.orig").exists())
             self.assertTrue(Path(f"{dapper}.orig").exists())
             self.assertTrue(Path(f"{transitional}.orig").exists())
+            self.assertTrue(Path(f"{model_sidecar}.orig").exists())
+            self.assertTrue(Path(f"{dapper_gmt}.orig").exists())
+            self.assertTrue(Path(f"{white_paper}.orig").exists())
+            self.assertTrue(Path(f"{white_paper_pdf}.orig").exists())
             REFRESH.rewrite_metadata_and_provenance(
                 metadata_paths=[metadata], rewrite_passes=[{"/local": "https://example.org"}]
             )
             self.assertIn("https://example.org", legacy.read_text(encoding="utf-8"))
             self.assertIn("/local/input.tsv", Path(f"{legacy}.orig").read_text(encoding="utf-8"))
+
+            model_sidecar.write_text('{"model_id": "new"}\n', encoding="utf-8")
+            dapper_gmt.write_text("new-dapper-row\tdescription\tGENE1\n", encoding="utf-8")
+            white_paper.write_text("# New report\n", encoding="utf-8")
+            white_paper_pdf.write_bytes(b"%PDF-new\n")
+            REFRESH.restore_from_originals([metadata])
+            self.assertIn('"old"', model_sidecar.read_text(encoding="utf-8"))
+            self.assertTrue(dapper_gmt.read_text(encoding="utf-8").startswith("old-dapper-row"))
+            self.assertEqual(white_paper.read_text(encoding="utf-8"), "# Original report\n")
+            self.assertEqual(white_paper_pdf.read_bytes(), b"%PDF-original\n")
 
     def test_dapper_regeneration_uses_final_legacy_sidecar(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

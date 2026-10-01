@@ -451,16 +451,36 @@ def provenance_sidecar_paths(metadata_path: Path) -> tuple[Path, Path, Path]:
     )
 
 
+def derived_refresh_sidecar_paths(metadata_path: Path) -> list[Path]:
+    """Return existing derived artifacts that refresh can replace.
+
+    These artifacts are not source inputs, but a refresh rewrites them just
+    like metadata and provenance.  Preserve their first pre-refresh version
+    so repeated refreshes remain reversible and deterministic.
+    """
+    directory = metadata_path.parent
+    paths = [directory / "geneset.model.json"]
+    for pattern in ("*.dapper-ids.gmt", "*.whitepaper.md", "*.whitepaper.pdf"):
+        paths.extend(sorted(directory.glob(pattern)))
+    return list(dict.fromkeys(paths))
+
+
 def snapshot_originals(metadata_paths: list[Path]) -> None:
     for metadata_path in metadata_paths:
         write_orig_once(metadata_path)
         for path in provenance_sidecar_paths(metadata_path):
             write_orig_once(path)
+        for path in derived_refresh_sidecar_paths(metadata_path):
+            write_orig_once(path)
 
 
 def restore_from_originals(metadata_paths: list[Path]) -> None:
     for metadata_path in metadata_paths:
-        for path in (metadata_path, *provenance_sidecar_paths(metadata_path)):
+        for path in (
+            metadata_path,
+            *provenance_sidecar_paths(metadata_path),
+            *derived_refresh_sidecar_paths(metadata_path),
+        ):
             orig_path = Path(f"{path}.orig")
             if orig_path.exists():
                 shutil.copy2(orig_path, path)
