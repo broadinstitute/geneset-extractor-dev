@@ -45,7 +45,7 @@ FILTER_MODEL_IDS=""
 usage() {
   cat <<'EOF'
 Usage:
-  ./geneset-extractor-dev/run/submit_gtex_models_cluster.sh --full --submit [--write-model-only|--refresh-metadata-and-provenance] [--model-group AB|AC|HZ] [--tissue-id TISSUE] [--model-id MODEL[,MODEL...]]
+  ./geneset-extractor-dev/run/submit_gtex_models_cluster.sh --full --submit [--write-model-only|--refresh-metadata-and-provenance] [--model-group AB|AC|HZ|HZ2] [--tissue-id TISSUE] [--model-id MODEL[,MODEL...]]
   ./geneset-extractor-dev/run/submit_gtex_models_cluster.sh --help
 
 Required environment variables:
@@ -132,6 +132,7 @@ canonicalize_model_group() {
     AB|age_binned) printf '%s\n' "AB" ;;
     AC|continuous_age) printf '%s\n' "AC" ;;
     HZ|hz_notebook) printf '%s\n' "HZ" ;;
+    HZ2|hz_consensus) printf '%s\n' "HZ2" ;;
     *) return 1 ;;
   esac
 }
@@ -150,6 +151,7 @@ resolve_model_group_for_id() {
       if ($family_col == "age_binned") print "AB"
       else if ($family_col == "continuous_age") print "AC"
       else if ($family_col == "hz_notebook") print "HZ"
+      else if ($family_col == "hz_consensus") print "HZ2"
       exit
     }
   ' "${GTEX_MODEL_LIST}"
@@ -299,6 +301,7 @@ write_worklist() {
     if ($2 == "age_binned") group = "AB"
     else if ($2 == "continuous_age") group = "AC"
     else if ($2 == "hz_notebook") group = "HZ"
+    else if ($2 == "hz_consensus") group = "HZ2"
     if (group != "") print $1 "\t" group
   }' "${GTEX_MODEL_LIST}" > "${model_tsv}"
   awk -F $'\t' 'NR > 1 { print $1 }' "${GTEX_BROAD_TISSUE_LIST}" > "${tissue_tsv}"
@@ -311,6 +314,7 @@ write_worklist() {
       -v filter_group="${FILTER_MODEL_GROUP}" \
       -v filter_tissue="${FILTER_TISSUE_ID}" \
       -v filter_models="${FILTER_MODEL_IDS}" \
+      -v refresh_metadata_and_provenance="${REFRESH_METADATA_AND_PROVENANCE}" \
       -v v10_counts="${GTEX_V10_COUNTS_GCT}" \
       -v v10_sample="${GTEX_V10_SAMPLE_ATTRIBUTES_TSV}" \
       -v v10_subject="${GTEX_V10_SUBJECT_PHENOTYPES_TSV}" \
@@ -346,6 +350,10 @@ write_worklist() {
           for (mi = 1; mi <= n_models; mi++) {
             model_id = model_ids[mi]
             model_group = model_groups[mi]
+            # HZ2 has one all-detailed-tissues output, not one output for
+            # every broad tissue.  Its full run uses the dedicated modern
+            # launcher, but this shared launcher refreshes that existing tree.
+            if (model_group == "HZ2") continue
             if (filter_group != "" && model_group != filter_group) continue
             if (filter_models != "" && !(model_id in requested_model_lookup)) continue
             task_id += 1
@@ -354,6 +362,19 @@ write_worklist() {
             } else {
               printf "%d\t%s\t%s\t%s\t%s\t%s\t%s\t\t%s\n", task_id, tissue_id, model_group, model_id, v10_counts, v10_sample, v10_subject, gtf
             }
+          }
+        }
+        if (refresh_metadata_and_provenance == "1") {
+          for (mi = 1; mi <= n_models; mi++) {
+            model_id = model_ids[mi]
+            model_group = model_groups[mi]
+            if (model_group != "HZ2") continue
+            if (filter_group != "" && model_group != filter_group) continue
+            if (filter_models != "" && !(model_id in requested_model_lookup)) continue
+            tissue_id = "all_detailed_tissues"
+            if (filter_tissue != "" && tissue_id != filter_tissue) continue
+            task_id += 1
+            printf "%d\t%s\t%s\t%s\t\t\t\t\t\n", task_id, tissue_id, model_group, model_id
           }
         }
       }'
@@ -426,16 +447,9 @@ run_task() {
   fi
 
   IFS=$'\t' read -r _ tissue_id model_group model_id counts_gct sample_tsv subject_tsv human_gene_info gtf <<< "${row}"
-  local tissue_label
-  tissue_label="$(resolve_tissue_label "${tissue_id}")"
-  if [[ -z "${tissue_label}" ]]; then
-    echo "Missing tissue_name for GTEx tissue_id ${tissue_id}" >&2
-    exit 1
-  fi
-
   echo "GTEx task ${task_id}: tissue=${tissue_id} group=${model_group} model=${model_id}"
 
-  local cmd models_root runner
+  local cmd models_root runner tissue_label
   models_root="${GTEX_OUT_ROOT}/genesets/${tissue_id}/models"
   build_model_only_cmd() {
     case "${model_group}" in
@@ -488,6 +502,10 @@ run_task() {
           --write_model_only
         )
         ;;
+      HZ2)
+        echo "HZ2 consensus uses GTEx/run/submit_submission_models_cluster_apptainer.sh for full execution; this launcher supports HZ2 only for refresh." >&2
+        exit 2
+        ;;
       *)
         echo "Unsupported GTEx model group in model-only mode: ${model_group}" >&2
         exit 1
@@ -524,6 +542,12 @@ run_task() {
     echo "+ ${refresh_cmd[*]}"
     "${refresh_cmd[@]}"
     return
+  fi
+
+  tissue_label="$(resolve_tissue_label "${tissue_id}")"
+  if [[ -z "${tissue_label}" ]]; then
+    echo "Missing tissue_name for GTEx tissue_id ${tissue_id}" >&2
+    exit 1
   fi
 
   local cmd=(

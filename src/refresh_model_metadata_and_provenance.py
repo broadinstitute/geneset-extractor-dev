@@ -451,16 +451,36 @@ def provenance_sidecar_paths(metadata_path: Path) -> tuple[Path, Path, Path]:
     )
 
 
+def derived_refresh_sidecar_paths(metadata_path: Path) -> list[Path]:
+    """Return existing derived artifacts that refresh can replace.
+
+    These artifacts are not source inputs, but a refresh rewrites them just
+    like metadata and provenance.  Preserve their first pre-refresh version
+    so repeated refreshes remain reversible and deterministic.
+    """
+    directory = metadata_path.parent
+    paths = [directory / "geneset.model.json"]
+    for pattern in ("*.dapper-ids.gmt", "*.whitepaper.md", "*.whitepaper.pdf"):
+        paths.extend(sorted(directory.glob(pattern)))
+    return list(dict.fromkeys(paths))
+
+
 def snapshot_originals(metadata_paths: list[Path]) -> None:
     for metadata_path in metadata_paths:
         write_orig_once(metadata_path)
         for path in provenance_sidecar_paths(metadata_path):
             write_orig_once(path)
+        for path in derived_refresh_sidecar_paths(metadata_path):
+            write_orig_once(path)
 
 
 def restore_from_originals(metadata_paths: list[Path]) -> None:
     for metadata_path in metadata_paths:
-        for path in (metadata_path, *provenance_sidecar_paths(metadata_path)):
+        for path in (
+            metadata_path,
+            *provenance_sidecar_paths(metadata_path),
+            *derived_refresh_sidecar_paths(metadata_path),
+        ):
             orig_path = Path(f"{path}.orig")
             if orig_path.exists():
                 shutil.copy2(orig_path, path)
@@ -544,14 +564,54 @@ def gtex_model_group(model_id: str) -> str:
         return "AB"
     if str(model_id).startswith("AC"):
         return "AC"
+    if str(model_id) == "HZ2":
+        return "HZ2"
     if str(model_id).startswith("HZ"):
         return "HZ"
     raise SystemExit(f"Unsupported GTEx model_id for standalone refresh: {model_id}")
 
 
+def gtex_hz2_model_sidecar_payload(*, model_id: str, tissue_id: str) -> dict[str, object]:
+    """Build the HZ2 sidecar without treating its aggregate partition as broad tissue."""
+    manifest = DEV_REPO_ROOT / "GTEx" / "config" / "hz_consensus_model_manifest.tsv"
+    settings = next(
+        (row for row in read_tsv_rows(manifest) if str(row.get("model_id", "")).strip() == model_id),
+        None,
+    )
+    if settings is None:
+        raise SystemExit(f"Missing GTEx HZ2 consensus settings for model_id={model_id}")
+    partition_list_tsv = DEV_REPO_ROOT / "GTEx" / "config" / "partition_list.tsv"
+    tissue_label = resolve_tsv_value(
+        partition_list_tsv,
+        key_field="tissue_id",
+        key_value=tissue_id,
+        value_field="tissue_name",
+    )
+    if not tissue_label:
+        raise SystemExit(f"Unable to resolve GTEx partition label for tissue_id={tissue_id}")
+    return {
+        "model_id": model_id,
+        "model_family": "hz_consensus",
+        "workflow": {"identifier": "gtex_hz_consensus"},
+        "inputs": {"tissue_id": tissue_id, "tissue_label": tissue_label},
+        "parameters": {
+            "support_fraction": float(settings["support_fraction"]),
+            "top_n": int(settings["top_n"]),
+            "up_cutoff": float(settings["up_cutoff"]),
+            "min_samples_per_group": int(settings["min_samples_per_group"]),
+        },
+    }
+
+
 def regenerate_gtex_model_sidecars(args: argparse.Namespace, model_dir: Path, env: dict[str, str]) -> None:
     tissue_id = model_dir.parent.parent.name
     models_root = model_dir.parent
+    group = gtex_model_group(args.model_id)
+    if group == "HZ2":
+        payload = gtex_hz2_model_sidecar_payload(model_id=args.model_id, tissue_id=tissue_id)
+        for metadata_path in discover_metadata_paths(model_dir):
+            write_json(metadata_path.with_name("geneset.model.json"), payload)
+        return
     tissue_list_tsv = DEV_REPO_ROOT / "GTEx" / "config" / "broad_tissue_list.tsv"
     tissue_label = (
         resolve_tsv_value(tissue_list_tsv, key_field="tissue_id", key_value=tissue_id, value_field="tissue_name")
@@ -559,7 +619,6 @@ def regenerate_gtex_model_sidecars(args: argparse.Namespace, model_dir: Path, en
     )
     if not tissue_label:
         raise SystemExit(f"Unable to resolve GTEx tissue label for tissue_id={tissue_id}")
-    group = gtex_model_group(args.model_id)
     if group == "AB":
         cmd = [
             str(Path(args.python_bin).resolve()),
@@ -669,6 +728,12 @@ def rewrite_gtex_sidecars_for_metadata_paths(
     metadata_paths: list[Path],
 ) -> None:
     tissue_id = model_dir.parent.parent.name
+    group = gtex_model_group(args.model_id)
+    if group == "HZ2":
+        payload = gtex_hz2_model_sidecar_payload(model_id=args.model_id, tissue_id=tissue_id)
+        for metadata_path in metadata_paths:
+            write_json(metadata_path.with_name("geneset.model.json"), payload)
+        return
     tissue_list_tsv = DEV_REPO_ROOT / "GTEx" / "config" / "broad_tissue_list.tsv"
     tissue_label = (
         resolve_tsv_value(tissue_list_tsv, key_field="tissue_id", key_value=tissue_id, value_field="tissue_name")
@@ -676,7 +741,6 @@ def rewrite_gtex_sidecars_for_metadata_paths(
     )
     if not tissue_label:
         raise SystemExit(f"Unable to resolve GTEx tissue label for tissue_id={tissue_id}")
-    group = gtex_model_group(args.model_id)
     if group == "AB":
         with prepend_sys_path(DEV_REPO_ROOT / "GTEx" / "src"):
             module = importlib.import_module("run_age_binned_model")
