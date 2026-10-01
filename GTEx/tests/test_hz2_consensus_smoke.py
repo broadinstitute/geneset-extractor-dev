@@ -34,6 +34,12 @@ def test_hz2_smoke_uses_dig_and_writes_deterministic_consensus() -> None:
             "run_summary.txt",
         ):
             assert (gmt.parent / name).is_file()
+        dapper_gmt = gmt.with_name("genesets.dapper-ids.gmt")
+        assert dapper_gmt.is_file()
+        assert all(
+            line.startswith("dapper:GeneSet.")
+            for line in dapper_gmt.read_text(encoding="utf-8").splitlines()
+        )
         summary = json.loads((gmt.parent / "run_summary.json").read_text(encoding="utf-8"))
         assert summary["support_fraction"] == 0.25
         assert {"median", "min", "max"} == set(summary["sample_up_genes"])

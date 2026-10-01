@@ -25,7 +25,9 @@ enabled model and broad-tissue partition (currently 990 tasks). Without
 --submit, it prints the delegated command and never calls qsub. --smoke runs
 the small declared smoke reproduction as one Apptainer job only with --submit.
 Use --model-id to select one or more enabled GTEx model IDs and --tissue-id to
-select one configured broad-tissue partition.
+select one configured broad-tissue partition. HZ2 can be combined with other
+model IDs; it is submitted as its dedicated consensus task while the remaining
+IDs are submitted through the standard model-by-tissue array.
 
 Required environment: APPTAINER_IMAGE, DIG_REPO, SUBMISSION_WORK_DIR.
 Full mode additionally requires GTEX_V10_COUNTS_GCT,
@@ -77,6 +79,34 @@ if [[ -n "${tissue_id}" ]]; then
     || { echo "Unknown GTEx broad tissue ID: ${tissue_id}" >&2; exit 2; }
 fi
 
+# HZ2 has a distinct input contract and no broad-tissue partition.  Keep it as
+# a dedicated job, but allow callers to select it alongside standard models in
+# one command.  The standard array receives only the remaining model IDs.
+hz2_requested=0
+standard_model_ids=()
+if [[ -z "${model_id}" ]]; then
+  hz2_requested=1
+else
+  IFS=',' read -r -a requested_model_ids <<< "${model_id}"
+  for requested_model in "${requested_model_ids[@]}"; do
+    requested_model="${requested_model//[[:space:]]/}"
+    [[ -n "${requested_model}" ]] || continue
+    if [[ "${requested_model}" == "HZ2" ]]; then
+      hz2_requested=1
+    else
+      standard_model_ids+=("${requested_model}")
+    fi
+  done
+fi
+if [[ ${hz2_requested} -eq 1 && -n "${tissue_id}" ]]; then
+  echo "HZ2 has no broad-tissue partition; omit --tissue-id when selecting HZ2" >&2
+  exit 2
+fi
+standard_model_id=""
+if [[ ${#standard_model_ids[@]} -gt 0 ]]; then
+  standard_model_id="$(IFS=,; echo "${standard_model_ids[*]}")"
+fi
+
 submit_hz2() {
   local runner="${root}/run/run_hz2_task_apptainer.sh"
   [[ -n "${APPTAINER_IMAGE:-}" && -f "${APPTAINER_IMAGE}" ]] || { echo "--submit requires APPTAINER_IMAGE" >&2; return 1; }
@@ -86,8 +116,7 @@ submit_hz2() {
   export_vars="GTEX_WRAPPER_ROOT=${root},SUBMISSION_WORK_DIR=${SUBMISSION_WORK_DIR},DIG_REPO=${DIG_REPO},APPTAINER_IMAGE=${APPTAINER_IMAGE},GTEX_V8_TPM_GCT=${GTEX_V8_TPM_GCT},GTEX_V8_SAMPLE_ATTRIBUTES_TSV=${GTEX_V8_SAMPLE_ATTRIBUTES_TSV},GTEX_V8_SUBJECT_PHENOTYPES_TSV=${GTEX_V8_SUBJECT_PHENOTYPES_TSV}"
   "${QSUB_BIN:-qsub}" -N "${array_job_name}_hz2" -o "${SUBMISSION_WORK_DIR}/qsub_logs/gtex_hz2.out" -e "${SUBMISSION_WORK_DIR}/qsub_logs/gtex_hz2.err" -l "h_vmem=${array_memory},h_rt=${array_walltime}" -v "${export_vars}" "${runner}" full
 }
-if [[ "${model_id}" == "HZ2" ]]; then
-  [[ -z "${tissue_id}" ]] || { echo "HZ2 has no broad-tissue partition; omit --tissue-id" >&2; exit 2; }
+if [[ ${hz2_requested} -eq 1 && -z "${standard_model_id}" ]]; then
   if [[ ${submit} -eq 0 ]]; then echo "Would submit one HZ2 consensus task through run_hz2_task_apptainer.sh. Set --submit to call qsub."; exit 0; fi
   submit_hz2; exit $?
 fi
@@ -97,13 +126,13 @@ command=(env "WORK_ROOT=${SUBMISSION_WORK_DIR}" "GTEX_OUT_ROOT=${SUBMISSION_WORK
   "GTEX_V10_COUNTS_GCT=${GTEX_V10_COUNTS_GCT:-}" "GTEX_V10_SAMPLE_ATTRIBUTES_TSV=${GTEX_V10_SAMPLE_ATTRIBUTES_TSV:-}" "GTEX_V10_SUBJECT_PHENOTYPES_TSV=${GTEX_V10_SUBJECT_PHENOTYPES_TSV:-}" \
   "GTEX_V8_COUNTS_GCT=${GTEX_V8_COUNTS_GCT:-}" "GTEX_V8_SAMPLE_ATTRIBUTES_TSV=${GTEX_V8_SAMPLE_ATTRIBUTES_TSV:-}" "GTEX_V8_SUBJECT_PHENOTYPES_TSV=${GTEX_V8_SUBJECT_PHENOTYPES_TSV:-}" "GTEX_V8_HUMAN_GENE_INFO=${GTEX_V8_HUMAN_GENE_INFO:-}" "GTEX_GTF=${GTEX_GTF:-}" \
   "${legacy_launcher}" --submit)
-[[ -n "${model_id}" ]] && command+=(--model_id "${model_id}")
+[[ -n "${standard_model_id}" ]] && command+=(--model_id "${standard_model_id}")
 [[ -n "${tissue_id}" ]] && command+=(--tissue_id "${tissue_id}")
 if [[ ${submit} -eq 0 ]]; then
+  if [[ ${hz2_requested} -eq 1 ]]; then echo "Would also submit one HZ2 consensus task through run_hz2_task_apptainer.sh."; fi
   printf 'Would submit GTEx array: '
   printf '%q ' "${command[@]}"
   printf '\nSet --submit to call qsub.\n'
-  if [[ -z "${model_id}" ]]; then echo "Would also submit one HZ2 consensus task through run_hz2_task_apptainer.sh."; fi
   exit 0
 fi
 
@@ -112,6 +141,6 @@ fi
 for variable in GTEX_V10_COUNTS_GCT GTEX_V10_SAMPLE_ATTRIBUTES_TSV GTEX_V10_SUBJECT_PHENOTYPES_TSV GTEX_V8_COUNTS_GCT GTEX_V8_SAMPLE_ATTRIBUTES_TSV GTEX_V8_SUBJECT_PHENOTYPES_TSV GTEX_V8_HUMAN_GENE_INFO GTEX_GTF; do
   [[ -n "${!variable:-}" && -f "${!variable}" ]] || { echo "--submit requires existing ${variable}" >&2; exit 1; }
 done
-if [[ -z "${model_id}" ]]; then submit_hz2; fi
+if [[ ${hz2_requested} -eq 1 ]]; then submit_hz2; fi
 mkdir -p "${SUBMISSION_WORK_DIR}/qsub_logs"
 exec "${command[@]}"

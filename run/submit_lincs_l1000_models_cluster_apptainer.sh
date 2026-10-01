@@ -47,7 +47,7 @@ FILTER_MODEL_IDS=""
 usage() {
   cat <<'EOF'
 Usage:
-  ./geneset-extractor-dev/run/submit_lincs_l1000_models_cluster_apptainer.sh --submit [--write_model_only|--refresh_metadata_and_provenance] [--model_group HZ] [--model_id MODEL[,MODEL...]]
+  ./geneset-extractor-dev/run/submit_lincs_l1000_models_cluster_apptainer.sh --full --submit [--write-model-only|--refresh-metadata-and-provenance] [--model-group HZ] [--model-id MODEL[,MODEL...]]
   ./geneset-extractor-dev/run/submit_lincs_l1000_models_cluster_apptainer.sh --help
 
 Required environment variables:
@@ -66,6 +66,9 @@ Optional environment variables:
   DESCRIPTION_TEMPLATE_TSV
   PROVENANCE_MIRROR_LOCAL_PREFIX, PROVENANCE_MIRROR_REMOTE_PREFIX
   LOCAL_INPUT_SOURCE_MAP_TSV
+
+Compatibility: Hyphenated options are preferred; legacy underscore spellings
+remain accepted.
 EOF
 }
 
@@ -153,15 +156,22 @@ parse_cli() {
         SUBMIT_MODE=1
         shift
         ;;
-      --write_model_only)
+      --full)
+        shift
+        ;;
+      --smoke)
+        echo "Smoke mode is available through LINCS_L1000/run/submit_submission_models_cluster_apptainer.sh" >&2
+        exit 2
+        ;;
+      --write_model_only|--write-model-only)
         WRITE_MODEL_ONLY=1
         shift
         ;;
-      --refresh_metadata_and_provenance)
+      --refresh_metadata_and_provenance|--refresh-metadata-and-provenance)
         REFRESH_METADATA_AND_PROVENANCE=1
         shift
         ;;
-      --model_group)
+      --model_group|--model-group)
         [[ $# -ge 2 ]] || { echo "Missing value for --model_group" >&2; exit 1; }
         FILTER_MODEL_GROUP="$(canonicalize_model_group "$2")" || {
           echo "Unsupported LINCS_L1000 model group: $2" >&2
@@ -169,7 +179,7 @@ parse_cli() {
         }
         shift 2
         ;;
-      --model_id)
+      --model_id|--model-id)
         [[ $# -ge 2 ]] || { echo "Missing value for --model_id" >&2; exit 1; }
         FILTER_MODEL_IDS="$2"
         shift 2

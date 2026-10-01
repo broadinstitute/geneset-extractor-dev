@@ -79,6 +79,24 @@ class GTExModernSubmissionTest(unittest.TestCase):
         self.assertIn("GTEX_ARRAY_WALLTIME=48:00:00", completed.stdout)
         self.assertIn("GTEX_JOB_NAME=gtex_filtered_test", completed.stdout)
 
+    def test_apptainer_scheduler_wrapper_combines_hz2_with_standard_models(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp:
+            completed = subprocess.run(
+                [
+                    "bash", "run/submit_submission_models_cluster_apptainer.sh",
+                    "--full", "--model-id", "HZ1,HZ2",
+                ],
+                cwd=root,
+                env={**os.environ, "SUBMISSION_WORK_DIR": temp},
+                text=True,
+                capture_output=True,
+            )
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertIn("Would also submit one HZ2 consensus task", completed.stdout)
+        self.assertIn("--model_id HZ1", completed.stdout)
+        self.assertNotIn("--model_id HZ1,HZ2", completed.stdout)
+
     def test_full_contract_covers_all_enabled_model_tissue_pairs(self) -> None:
         root = Path(__file__).resolve().parents[1]
         with (root / "config/task_manifest.tsv").open(encoding="utf-8", newline="") as handle:
