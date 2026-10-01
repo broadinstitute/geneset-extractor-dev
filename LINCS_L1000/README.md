@@ -5,7 +5,7 @@ HZ2 CRISPR-knockout libraries. All matrix processing, ranking, mapping, and
 GMT creation belong to `dig-gene-set-extractors`; this directory only supplies
 declared inputs and dispatches DIG commands.
 
-`CP1` (`cd_signature_export`, `l1000_cp`) is distinct from the released-matrix
+`HZ4` (`cd_signature_export`, `l1000_cp`) is distinct from the released-matrix
 models. It exports each Level-5 chemical-perturbation Characteristic Direction
 signature independently: the top 250 `CD-coefficient` symbols are `up`, and
 the bottom 250 are `down`. Provide a SigCom-derived TSV manifest through

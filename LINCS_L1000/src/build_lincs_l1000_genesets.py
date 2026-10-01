@@ -94,7 +94,7 @@ def main() -> int:
     input_by_model = {
         "HZ1": require_existing_file(args.chempert_expression_tsv, "chempert expression TSV") if "HZ1" in selected_models else None,
         "HZ2": require_existing_file(args.crisprko_expression_tsv, "crisprko expression TSV") if "HZ2" in selected_models else None,
-        "CP1": require_existing_file(args.cp_signature_manifest_tsv, "CP signature manifest TSV") if "CP1" in selected_models else None,
+        "HZ4": require_existing_file(args.cp_signature_manifest_tsv, "CP signature manifest TSV") if "HZ4" in selected_models else None,
     }
 
     conflicts: list[str] = []

@@ -35,7 +35,7 @@ def main() -> int:
     manifest = Path(args.signature_manifest_tsv).resolve()
     if not manifest.is_file():
         raise SystemExit(f"Missing LINCS_CP_SIGNATURE_MANIFEST_TSV: {manifest}")
-    model_out = Path(args.run_root).resolve() / "CP1"
+    model_out = Path(args.run_root).resolve() / "HZ4"
     workflow_out = model_out / "workflow"
     extractor_out = model_out / "extractor"
     workflow_out.mkdir(parents=True, exist_ok=True)
@@ -43,7 +43,7 @@ def main() -> int:
     sidecar = {
         "schema_version": "1",
         "library": "LINCS_L1000",
-        "model_id": "CP1",
+        "model_id": "HZ4",
         "model_group": "cd_signature_export",
         "model_label": "l1000_cp",
         "workflow_name": "lincs_l1000_cp",
@@ -60,13 +60,13 @@ def main() -> int:
     workflow_cmd = [py, "-m", "geneset_extractors.cli", "workflows", "lincs_l1000_cp", "--signature_manifest_tsv", str(manifest), "--out_dir", str(workflow_out), "--cache_dir", str(cache_dir), "--top_n", str(args.top_n)]
     extractor_cmd = [py, "-m", "geneset_extractors.cli", "convert", "signed_term_gene", "--table_tsv", str(workflow_out / "lincs_l1000_cp_signed_term_gene.tsv"), "--out_dir", str(extractor_out), "--organism", "human", "--genome_build", "hg38", "--term_prefix", "", "--signature_name", "LINCS L1000 chemical perturbation Characteristic Direction signatures", "--gmt_name_separator", " ", "--gmt_signed_labels", "up_down", "--gmt_description", "", "--gmt_preserve_names", "--gmt_min_genes", str(args.top_n), "--gmt_require_symbol", "true"]
     provenance_cmd = [py, "-m", "geneset_extractors.cli", "provenance", "build", str(extractor_out / "geneset.meta.json"), "--out", str(extractor_out / "geneset.provenance.json"), "--upstream_provenance_graph_json", str(workflow_out / "lincs_l1000_cp_signed_term_gene.provenance_graph.json")]
-    commands = "\n".join(["# Commands For CP1", "", "```bash", f"cd {shlex.quote(str(dig_dir))}", f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {' '.join(shlex.quote(x) for x in workflow_cmd)}", f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {' '.join(shlex.quote(x) for x in extractor_cmd)}", f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {' '.join(shlex.quote(x) for x in provenance_cmd)}", "```,".rstrip(","), ""])
+    commands = "\n".join(["# Commands For HZ4", "", "```bash", f"cd {shlex.quote(str(dig_dir))}", f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {' '.join(shlex.quote(x) for x in workflow_cmd)}", f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {' '.join(shlex.quote(x) for x in extractor_cmd)}", f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {' '.join(shlex.quote(x) for x in provenance_cmd)}", "```", ""])
     (model_out / "commands.md").write_text(commands, encoding="utf-8")
     log = model_out / "run.log"
     for command in (workflow_cmd, extractor_cmd, provenance_cmd):
         _run(command, dig_dir, env, log)
     with (extractor_out / "run_manifest.json").open("w", encoding="utf-8", newline="\n") as handle:
-        json.dump({"model_id": "CP1", "workflow_dir": str(workflow_out), "extractor_dir": str(extractor_out)}, handle, indent=2, sort_keys=True)
+        json.dump({"model_id": "HZ4", "workflow_dir": str(workflow_out), "extractor_dir": str(extractor_out)}, handle, indent=2, sort_keys=True)
         handle.write("\n")
     return 0
 
