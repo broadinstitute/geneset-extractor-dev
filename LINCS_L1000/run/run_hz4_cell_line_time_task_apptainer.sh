@@ -10,7 +10,10 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
-[[ -n "${task_id}" ]] || { echo "--task-id is required" >&2; exit 2; }
+if [[ -z "${task_id}" ]]; then
+  task_id="${SGE_TASK_ID:-}"
+fi
+[[ -n "${task_id}" ]] || { echo "--task-id is required outside an SGE array" >&2; exit 2; }
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 [[ -n "${APPTAINER_IMAGE:-}" && -f "${APPTAINER_IMAGE}" ]] || { echo "Set APPTAINER_IMAGE to an existing image" >&2; exit 1; }
 [[ -n "${DIG_REPO:-}" && -d "${DIG_REPO}" ]] || { echo "Set DIG_REPO to a DIG checkout" >&2; exit 1; }
