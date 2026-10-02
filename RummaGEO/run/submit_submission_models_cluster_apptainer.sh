@@ -1,64 +1,27 @@
 #!/usr/bin/env bash
-# Submit a single reproducible RummaGEO Apptainer job; dry-run by default.
+# Submit enabled RummaGEO models through the standard per-model SGE/PBS array.
 set -euo pipefail
-
-root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-mode="--full"
-submit=0
-refresh_metadata_and_provenance=0
-model_id=""
-full_memory="${SUBMISSION_ARRAY_MEMORY:-16G}"
-full_walltime="${SUBMISSION_ARRAY_WALLTIME:-24:00:00}"
-smoke_memory="${SUBMISSION_SMOKE_MEMORY:-4G}"
-smoke_walltime="${SUBMISSION_SMOKE_WALLTIME:-01:00:00}"
-
-usage() {
-  cat <<'EOF'
-Usage: submit_submission_models_cluster_apptainer.sh [--smoke|--full] [--model-id ID[,ID...]] [--refresh-metadata-and-provenance] [--submit]
-
-Dry-runs by default and prints the qsub command. Set SUBMISSION_WORK_DIR,
-APPTAINER_IMAGE, and DIG_REPO. A full run also requires the declared
-RUMMAGEO_* input variables in reproduction/input_manifest.tsv. --model-id is
-optional; omit it to run both declared RummaGEO models in one job.
-
---refresh-metadata-and-provenance refreshes completed models using the standard
-metadata/provenance refresher. It requires DESCRIPTION_TEMPLATE_TSV (default:
-RummaGEO/config/model_description_templates.tsv) and accepts
-LOCAL_INPUT_SOURCE_MAP_TSV and provenance mirror variables.
+root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"; self_path="${root}/run/submit_submission_models_cluster_apptainer.sh"
+mode="--full"; submit=0; refresh=0; model_ids=""
+work_root="${SUBMISSION_WORK_DIR:-}"; worklist="${RUMMAGEO_WORKLIST:-}"
+full_memory="${SUBMISSION_ARRAY_MEMORY:-16G}"; full_walltime="${SUBMISSION_ARRAY_WALLTIME:-24:00:00}"; smoke_memory="${SUBMISSION_SMOKE_MEMORY:-4G}"; smoke_walltime="${SUBMISSION_SMOKE_WALLTIME:-01:00:00}"
+usage() { cat <<'EOF'
+Usage: submit_submission_models_cluster_apptainer.sh [--smoke|--full] [--model-id HZ1[,HZ2]] [--refresh-metadata-and-provenance] --submit
+Creates an enabled-model worklist and submits one Apptainer array task per model.
+Omit --submit to inspect the qsub command. Refresh mode processes completed models.
 EOF
 }
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --smoke) mode="--smoke" ;;
-    --full) mode="--full" ;;
-    --submit) submit=1 ;;
-    --refresh_metadata_and_provenance|--refresh-metadata-and-provenance) refresh_metadata_and_provenance=1 ;;
-    --model-id) [[ $# -ge 2 ]] || { echo "Missing value for --model-id" >&2; exit 2; }; model_id="$2"; shift ;;
-    -h|--help) usage; exit 0 ;;
-    *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
-  esac
-  shift
-done
-[[ -n "${SUBMISSION_WORK_DIR:-}" ]] || { echo "Set SUBMISSION_WORK_DIR outside the RummaGEO checkout" >&2; exit 1; }
-mkdir -p "${SUBMISSION_WORK_DIR}/qsub_logs"
-if [[ ${refresh_metadata_and_provenance} -eq 1 ]]; then
-  [[ "${mode}" == "--full" ]] || { echo "Refresh requires --full completed outputs" >&2; exit 2; }
-  DESCRIPTION_TEMPLATE_TSV="${DESCRIPTION_TEMPLATE_TSV:-${root}/config/model_description_templates.tsv}"
-  [[ -f "${DESCRIPTION_TEMPLATE_TSV}" ]] || { echo "Missing DESCRIPTION_TEMPLATE_TSV: ${DESCRIPTION_TEMPLATE_TSV}" >&2; exit 1; }
-  memory="${full_memory}"; walltime="${full_walltime}"; job_name="rummageo_refresh"
-  runner="${root}/run/refresh_submission_models_apptainer.sh"
-else
-  if [[ "${mode}" == "--smoke" ]]; then memory="${smoke_memory}"; walltime="${smoke_walltime}"; else memory="${full_memory}"; walltime="${full_walltime}"; fi
-  job_name="rummageo_submission_${mode#--}"
-  runner="${root}/run/run_submission_models_apptainer.sh"
-fi
-environment="SUBMISSION_WORK_DIR=${SUBMISSION_WORK_DIR},APPTAINER_IMAGE=${APPTAINER_IMAGE:-},APPTAINER_BIN=${APPTAINER_BIN:-},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS:-},APPTAINER_PYTHON_BIN=${APPTAINER_PYTHON_BIN:-},DIG_REPO=${DIG_REPO:-},LOCAL_INPUT_SOURCE_MAP_TSV=${LOCAL_INPUT_SOURCE_MAP_TSV:-},DESCRIPTION_TEMPLATE_TSV=${DESCRIPTION_TEMPLATE_TSV:-},PROVENANCE_MIRROR_LOCAL_PREFIX=${PROVENANCE_MIRROR_LOCAL_PREFIX:-},PROVENANCE_MIRROR_REMOTE_PREFIX=${PROVENANCE_MIRROR_REMOTE_PREFIX:-},RUMMAGEO_HUMAN_GMT=${RUMMAGEO_HUMAN_GMT:-},RUMMAGEO_MOUSE_GMT=${RUMMAGEO_MOUSE_GMT:-},RUMMAGEO_QUERY_RECORDS_JSON=${RUMMAGEO_QUERY_RECORDS_JSON:-},RUMMAGEO_DRUG_TERMS_JSON=${RUMMAGEO_DRUG_TERMS_JSON:-},RUMMAGEO_HUMAN_GENE_INFO=${RUMMAGEO_HUMAN_GENE_INFO:-},RUMMAGEO_MOUSE_GENE_INFO=${RUMMAGEO_MOUSE_GENE_INFO:-},RUMMAGEO_GENE_ORTHOLOGS=${RUMMAGEO_GENE_ORTHOLOGS:-},RUMMAGEO_GENE_LEGACY_GMT=${RUMMAGEO_GENE_LEGACY_GMT:-},RUMMAGEO_DRUG_LEGACY_GMT=${RUMMAGEO_DRUG_LEGACY_GMT:-}"
-command=("${QSUB_BIN:-qsub}" -N "${job_name}" -o "${SUBMISSION_WORK_DIR}/qsub_logs/${job_name}.out" -e "${SUBMISSION_WORK_DIR}/qsub_logs/${job_name}.err" -l "h_vmem=${memory},h_rt=${walltime}" -v "${environment}" bash "${runner}")
-[[ ${refresh_metadata_and_provenance} -eq 0 ]] && command+=("${mode}")
-[[ -n "${model_id}" ]] && command+=(--models "${model_id}")
-if [[ ${submit} -eq 0 ]]; then
-  printf 'Would submit RummaGEO job: '; printf '%q ' "${command[@]}"; printf '\nSet --submit to call qsub.\n'
-  exit 0
-fi
+task_id_from_env() { [[ -n "${PBS_ARRAYID:-}" ]] && { printf '%s\n' "${PBS_ARRAYID}"; return; }; [[ -n "${SGE_TASK_ID:-}" ]] && { printf '%s\n' "${SGE_TASK_ID}"; return; }; return 1; }
+validate_model_ids() { local requested model_id; IFS=',' read -r -a requested <<< "$1"; for model_id in "${requested[@]}"; do model_id="${model_id//[[:space:]]/}"; awk -F $'\t' -v model_id="${model_id}" 'NR>1 && $1==model_id && $NF=="true" {found=1} END {exit !found}' "${root}/config/model_list.tsv" || { echo "Unknown or disabled RummaGEO model: ${model_id}" >&2; exit 1; }; done; }
+write_worklist() { { printf 'task_id\tmodel_id\n'; awk -F $'\t' -v requested="${model_ids}" 'BEGIN {split(requested, ids, ","); for (i in ids) {gsub(/^[[:space:]]+|[[:space:]]+$/, "", ids[i]); if(ids[i]!="") wanted[ids[i]]=1}} NR==1 {for(i=1;i<=NF;i++){if($i=="model_id")model=i;if($i=="enabled")enabled=i};next} $enabled=="true" && (requested=="" || $model in wanted) {n+=1;printf "%d\t%s\n",n,$model}' "${root}/config/model_list.tsv"; } > "${worklist}"; [[ "$(awk 'NR>1{n+=1} END{print n+0}' "${worklist}")" -gt 0 ]] || { echo "No RummaGEO tasks selected" >&2; exit 1; }; }
+run_worker() { local task_id model_id; task_id="$(task_id_from_env)" || return 1; model_id="$(awk -F $'\t' -v task_id="${task_id}" 'NR>1 && $1==task_id {print $2;exit}' "${RUMMAGEO_WORKLIST}")"; [[ -n "${model_id}" ]] || { echo "No worklist row for task ${task_id}" >&2; exit 1; }; if [[ "${RUMMAGEO_REFRESH:-0}" == 1 ]]; then exec bash "${root}/run/refresh_submission_models_apptainer.sh" --models "${model_id}"; fi; exec bash "${root}/run/run_submission_models_apptainer.sh" "${RUMMAGEO_MODE}" --models "${model_id}"; }
+if [[ $# -eq 0 ]] && task_id_from_env >/dev/null 2>&1; then run_worker; fi
+while [[ $# -gt 0 ]]; do case "$1" in --smoke|--full) mode="$1";; --submit) submit=1;; --refresh_metadata_and_provenance|--refresh-metadata-and-provenance) refresh=1;; --model-id|--model_id) [[ $# -ge 2 ]] || { echo "Missing value for $1" >&2; exit 2; }; model_ids="$2"; shift;; -h|--help) usage; exit 0;; *) echo "Unknown argument: $1" >&2; usage >&2; exit 2;; esac; shift; done
+[[ -n "${work_root}" ]] || { echo "Set SUBMISSION_WORK_DIR outside the RummaGEO checkout" >&2; exit 1; }; [[ ${refresh} -eq 0 || "${mode}" == "--full" ]] || { echo "Refresh requires --full" >&2; exit 2; }; [[ -z "${model_ids}" ]] || validate_model_ids "${model_ids}"
+mkdir -p "${work_root}/qsub_logs"; worklist="${worklist:-${work_root}/rummageo_qsub_worklist.tsv}"; write_worklist
+if [[ ${refresh} -eq 1 ]]; then DESCRIPTION_TEMPLATE_TSV="${DESCRIPTION_TEMPLATE_TSV:-${root}/config/model_description_templates.tsv}"; [[ -f "${DESCRIPTION_TEMPLATE_TSV}" ]] || { echo "Missing DESCRIPTION_TEMPLATE_TSV: ${DESCRIPTION_TEMPLATE_TSV}" >&2; exit 1; }; memory="${full_memory}"; walltime="${full_walltime}"; job_name="rummageo_refresh"; else if [[ "${mode}" == "--smoke" ]]; then memory="${smoke_memory}"; walltime="${smoke_walltime}"; else memory="${full_memory}"; walltime="${full_walltime}"; fi; job_name="rummageo_submission_${mode#--}"; fi
+task_count="$(awk 'NR>1{n+=1} END{print n+0}' "${worklist}")"
+environment="SUBMISSION_WORK_DIR=${work_root},RUMMAGEO_WORKLIST=${worklist},RUMMAGEO_MODE=${mode},RUMMAGEO_REFRESH=${refresh},APPTAINER_IMAGE=${APPTAINER_IMAGE:-},APPTAINER_BIN=${APPTAINER_BIN:-},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS:-},APPTAINER_PYTHON_BIN=${APPTAINER_PYTHON_BIN:-},DIG_REPO=${DIG_REPO:-},LOCAL_INPUT_SOURCE_MAP_TSV=${LOCAL_INPUT_SOURCE_MAP_TSV:-},DESCRIPTION_TEMPLATE_TSV=${DESCRIPTION_TEMPLATE_TSV:-},PROVENANCE_MIRROR_LOCAL_PREFIX=${PROVENANCE_MIRROR_LOCAL_PREFIX:-},PROVENANCE_MIRROR_REMOTE_PREFIX=${PROVENANCE_MIRROR_REMOTE_PREFIX:-},RUMMAGEO_HUMAN_GMT=${RUMMAGEO_HUMAN_GMT:-},RUMMAGEO_MOUSE_GMT=${RUMMAGEO_MOUSE_GMT:-},RUMMAGEO_QUERY_RECORDS_JSON=${RUMMAGEO_QUERY_RECORDS_JSON:-},RUMMAGEO_DRUG_TERMS_JSON=${RUMMAGEO_DRUG_TERMS_JSON:-},RUMMAGEO_HUMAN_GENE_INFO=${RUMMAGEO_HUMAN_GENE_INFO:-},RUMMAGEO_MOUSE_GENE_INFO=${RUMMAGEO_MOUSE_GENE_INFO:-},RUMMAGEO_GENE_ORTHOLOGS=${RUMMAGEO_GENE_ORTHOLOGS:-},RUMMAGEO_GENE_LEGACY_GMT=${RUMMAGEO_GENE_LEGACY_GMT:-},RUMMAGEO_DRUG_LEGACY_GMT=${RUMMAGEO_DRUG_LEGACY_GMT:-}"
+command=("${QSUB_BIN:-qsub}" -N "${job_name}" -t "1-${task_count}" -o "${work_root}/qsub_logs/${job_name}.\$TASK_ID.out" -e "${work_root}/qsub_logs/${job_name}.\$TASK_ID.err" -l "h_vmem=${memory},h_rt=${walltime}" -v "${environment}" "${self_path}")
+if [[ ${submit} -eq 0 ]]; then printf 'Would submit RummaGEO array: '; printf '%q ' "${command[@]}"; printf '\nSet --submit to call qsub.\n'; exit 0; fi
 exec "${command[@]}"

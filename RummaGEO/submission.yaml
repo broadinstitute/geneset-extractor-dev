@@ -3,7 +3,7 @@
   "submission_status": "ready",
   "library": {"id": "RummaGEO", "display_name": "RummaGEO perturbation signatures", "organism": "human", "genome_build": "hg38", "assay_types": ["rna_seq"], "closest_reference_pattern": "rummageo", "wrapper_directory": "run"},
   "sources": [{"name": "rummageo_static_snapshot", "uri_or_identifier": "mapped by LOCAL_INPUT_SOURCE_MAP_TSV", "release": "input SHA-256 recorded at runtime", "access_restrictions": "user-provided static snapshot", "license": "source release terms"}, {"name": "ncbi_gene_mapping", "uri_or_identifier": "mapped by LOCAL_INPUT_SOURCE_MAP_TSV", "release": "input SHA-256 recorded at runtime", "access_restrictions": "user-provided NCBI snapshot", "license": "NCBI data-use policy"}],
-  "dig": {"repository_url": "https://github.com/flannick/dig-gene-set-extractors", "entrypoints": ["geneset-extractors convert rumma_geo"], "identifiers": ["rumma_geo"]},
+  "dig": {"repository_url": "https://github.com/flannick/dig-gene-set-extractors", "entrypoints": ["src/run_rummageo_model.py", "geneset-extractors convert rumma_geo_selection", "geneset-extractors convert rumma_geo"], "identifiers": ["rumma_geo_selection", "rumma_geo"]},
   "configs": {"model_config": "config/model_list.tsv", "model_manifest": "config/model_manifest.tsv", "partition_config": "config/partition_list.tsv", "description_config": "config/model_description_templates.tsv", "task_manifest": "config/task_manifest.tsv"},
   "reproduction": {"entry_point": "reproduction/reproduce.sh", "input_manifest": "reproduction/input_manifest.tsv", "smoke_test_command": "bash reproduction/reproduce.sh --smoke", "output_directory_environment": "SUBMISSION_WORK_DIR"},
   "expected_outputs": {"manifest": "expected/output_manifest.tsv"},

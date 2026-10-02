@@ -13,6 +13,15 @@ DIG = ROOT.parents[1] / "dig-gene-set-extractors"
 DIG_PYTHON = DIG / ".venv/bin/python"
 
 
+def test_model_runner_is_the_single_model_execution_entrypoint() -> None:
+    runner = (ROOT / "src/run_rummageo_model.py").read_text(encoding="utf-8")
+    dispatcher = (ROOT / "src/dispatch_rummageo_submission.py").read_text(encoding="utf-8")
+    assert "--model_id" in runner
+    assert "rumma_geo_selection" in runner
+    assert "rumma_geo" in runner
+    assert "run_rummageo_model.py" in dispatcher
+
+
 def test_smoke_wrapper_dispatches_both_declared_models() -> None:
     with TemporaryDirectory() as temp_dir:
         result = subprocess.run(
@@ -64,7 +73,8 @@ def test_cluster_adapter_is_safe_by_default_and_uses_standard_interface() -> Non
         text=True,
     )
     assert result.returncode == 0, result.stderr + result.stdout
-    assert "Would submit RummaGEO job:" in result.stdout
+    assert "Would submit RummaGEO array:" in result.stdout
+    assert "-t 1-2" in result.stdout
 
 
 def test_full_dispatch_generates_source_manifest_from_standard_source_map() -> None:

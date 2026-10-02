@@ -6,6 +6,10 @@ selection, label normalization, orthology, gene filtering, or GMT-generation
 logic; those scientific operations are implemented by DIG's
 `rumma_geo_selection` and `rumma_geo` converters.
 
+`src/run_rummageo_model.py` is the single-model execution entrypoint used by
+the dispatcher and cluster-array workers; the dispatcher only resolves inputs
+and selected model IDs.
+
 Run the committed smoke fixture:
 
 ```bash
@@ -38,8 +42,8 @@ For Apptainer, additionally set `APPTAINER_IMAGE` and run:
 bash run/run_submission_models_apptainer.sh --full
 ```
 
-For SGE/qsub cluster submission, inspect the generated command first, then
-submit it explicitly:
+For SGE/qsub cluster submission, inspect the generated per-model array command
+first, then submit it explicitly:
 
 ```bash
 bash run/submit_submission_models_cluster_apptainer.sh --full
