@@ -41,13 +41,13 @@ add_bind_path "${DIG_REPO}"
 add_bind_path "${SUBMISSION_WORK_DIR}"
 add_bind_path "${LINCS_CP_COEFF_GCTX}"
 binds="$(printf '%s\n' "${!bind_paths[@]}" | paste -sd, -)"
-overwrite_args=()
+overwrite_flag=""
 if [[ "${HZ4_OVERWRITE:-0}" == "1" ]]; then
-  overwrite_args=(--overwrite)
+  overwrite_flag="--overwrite"
 fi
 
 exec "${APPTAINER_BIN:-apptainer}" exec ${APPTAINER_EXTRA_ARGS:-} --bind "${binds}" "${APPTAINER_IMAGE}" \
   python3 "${root}/src/build_lincs_l1000_genesets.py" \
   --models HZ4 --dig_dir "${DIG_REPO}" --cp_coeff_gctx "${LINCS_CP_COEFF_GCTX}" \
   --out_root "${SUBMISSION_WORK_DIR}" --hz4_partition_mode cell_line_time \
-  --hz4_partition_plan_dir "${plan_dir}" --hz4_task_id "${task_id}" "${overwrite_args[@]}"
+  --hz4_partition_plan_dir "${plan_dir}" --hz4_task_id "${task_id}" ${overwrite_flag}
