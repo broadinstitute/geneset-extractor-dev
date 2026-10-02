@@ -34,7 +34,7 @@ add_bind_path() {
 add_bind_path "${root}"
 add_bind_path "${DIG_REPO}"
 add_bind_path "${SUBMISSION_WORK_DIR}"
-for path in "${LINCS_CHEMPERT_EXPRESSION_TSV:-}" "${LINCS_CRISPRKO_EXPRESSION_TSV:-}" "${LINCS_MAPPING_FILE:-}"; do
+for path in "${LINCS_CHEMPERT_EXPRESSION_TSV:-}" "${LINCS_CRISPRKO_EXPRESSION_TSV:-}" "${LINCS_MAPPING_FILE:-}" "${LINCS_CP_COEFF_GCTX:-}"; do
   [[ -n "${path}" ]] && add_bind_path "${path}"
 done
 binds="$(printf '%s\n' "${!bind_paths[@]}" | paste -sd, -)"
@@ -42,5 +42,6 @@ exec "${APPTAINER_BIN:-apptainer}" exec --bind "${binds}" "${APPTAINER_IMAGE}" \
   env DIG_REPO="${DIG_REPO}" SUBMISSION_WORK_DIR="${SUBMISSION_WORK_DIR}" \
   LINCS_CHEMPERT_EXPRESSION_TSV="${LINCS_CHEMPERT_EXPRESSION_TSV:-}" \
   LINCS_CRISPRKO_EXPRESSION_TSV="${LINCS_CRISPRKO_EXPRESSION_TSV:-}" \
+  LINCS_CP_COEFF_GCTX="${LINCS_CP_COEFF_GCTX:-}" \
   LINCS_MAPPING_FILE="${LINCS_MAPPING_FILE:-}" \
   bash "${root}/reproduction/reproduce.sh" "${reproduce_mode}"

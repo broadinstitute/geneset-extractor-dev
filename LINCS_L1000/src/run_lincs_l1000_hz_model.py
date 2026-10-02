@@ -388,7 +388,7 @@ def main() -> int:
     extractor_out.mkdir(parents=True, exist_ok=True)
 
     env = dict(os.environ)
-    env["PYTHONPATH"] = str(dig_dir / "src")
+    env["PYTHONPATH"] = str(dig_dir / "src") + (":" + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     workflow_cmd = build_workflow_cmd(
         python_bin=str(Path(args.python_bin).resolve()),
         expression_tsv=expression_tsv,

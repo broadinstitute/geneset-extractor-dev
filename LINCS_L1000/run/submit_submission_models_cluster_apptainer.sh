@@ -16,8 +16,10 @@ usage() {
   cat <<'EOF'
 Usage: submit_submission_models_cluster_apptainer.sh [--smoke|--full] [--model-id ID[,ID...]] [--submit]
 
---full writes the HZ1/HZ2 worklist unless --submit is supplied. --smoke runs
-the committed HZ1 smoke fixture as one Apptainer job only with --submit. Set
+--full writes the HZ1-HZ3 worklist plus an HZ4 cell-line × perturbation-time
+plan unless --submit is supplied. With --submit, HZ4 is always submitted as
+its own split array. --smoke runs the committed HZ1 smoke fixture as one
+Apptainer job only with --submit. Set
 SUBMISSION_WORK_DIR outside the LINCS_L1000 checkout, APPTAINER_IMAGE,
 DIG_REPO, LINCS_CHEMPERT_EXPRESSION_TSV, LINCS_CRISPRKO_EXPRESSION_TSV, and
 LINCS_MAPPING_FILE. Resource settings are SUBMISSION_ARRAY_MEMORY and
@@ -57,6 +59,7 @@ command=(env "WORK_ROOT=${SUBMISSION_WORK_DIR}" "LINCS_OUT_ROOT=${SUBMISSION_WOR
   "LINCS_ARRAY_MEMORY=${array_memory}" "LINCS_ARRAY_WALLTIME=${array_walltime}" \
   "LINCS_CHEMPERT_EXPRESSION_TSV=${LINCS_CHEMPERT_EXPRESSION_TSV:-}" \
   "LINCS_CRISPRKO_EXPRESSION_TSV=${LINCS_CRISPRKO_EXPRESSION_TSV:-}" \
+  "LINCS_CP_COEFF_GCTX=${LINCS_CP_COEFF_GCTX:-}" \
   "LINCS_MAPPING_FILE=${LINCS_MAPPING_FILE:-}" "${legacy_launcher}" --submit)
 [[ -n "${model_id}" ]] && command+=(--model_id "${model_id}")
 if [[ ${submit} -eq 0 ]]; then

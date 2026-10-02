@@ -18,6 +18,7 @@ QSUB_LOG_ROOT="${QSUB_LOG_ROOT:-${WORK_ROOT}/qsub_logs_lincs_l1000}"
 LINCS_WORKLIST="${LINCS_WORKLIST:-${WORK_ROOT}/lincs_l1000_qsub_worklist.tsv}"
 LINCS_CHEMPERT_EXPRESSION_TSV="${LINCS_CHEMPERT_EXPRESSION_TSV:-}"
 LINCS_CRISPRKO_EXPRESSION_TSV="${LINCS_CRISPRKO_EXPRESSION_TSV:-}"
+LINCS_CP_COEFF_GCTX="${LINCS_CP_COEFF_GCTX:-}"
 LINCS_MAPPING_FILE="${LINCS_MAPPING_FILE:-}"
 
 PYTHON_BIN="${PYTHON_BIN:-python3}"
@@ -32,8 +33,8 @@ if [[ -n "${GENESET_EXTRACTORS_IN_APPTAINER:-}" ]]; then
   PYTHON_BIN="$(command -v "${PYTHON_BIN}")"
 fi
 
-LINCS_ARRAY_MEMORY="${LINCS_ARRAY_MEMORY:-16G}"
-LINCS_ARRAY_WALLTIME="${LINCS_ARRAY_WALLTIME:-24:00:00}"
+LINCS_ARRAY_MEMORY="${LINCS_ARRAY_MEMORY:-${SUBMISSION_ARRAY_MEMORY:-16G}}"
+LINCS_ARRAY_WALLTIME="${LINCS_ARRAY_WALLTIME:-${SUBMISSION_ARRAY_WALLTIME:-24:00:00}}"
 SUBMIT_MODE="${SUBMIT_MODE:-0}"
 WRITE_MODEL_ONLY="${WRITE_MODEL_ONLY:-0}"
 REFRESH_METADATA_AND_PROVENANCE="${REFRESH_METADATA_AND_PROVENANCE:-0}"
@@ -43,12 +44,16 @@ PROVENANCE_MIRROR_REMOTE_PREFIX="${PROVENANCE_MIRROR_REMOTE_PREFIX:-}"
 LOCAL_INPUT_SOURCE_MAP_TSV="${LOCAL_INPUT_SOURCE_MAP_TSV:-}"
 FILTER_MODEL_GROUP=""
 FILTER_MODEL_IDS=""
+SPLIT_HZ4=0
 
 usage() {
   cat <<'EOF'
 Usage:
   ./geneset-extractor-dev/run/submit_lincs_l1000_models_cluster_apptainer.sh --full --submit [--write-model-only|--refresh-metadata-and-provenance] [--model-group HZ] [--model-id MODEL[,MODEL...]]
   ./geneset-extractor-dev/run/submit_lincs_l1000_models_cluster_apptainer.sh --help
+
+Normal full submissions always route HZ4 through the cell-line × perturbation-time
+planner and array. HZ1-HZ3 remain in the standard model array.
 
 Required environment variables:
   APPTAINER_IMAGE
@@ -63,6 +68,7 @@ Optional environment variables:
   APPTAINER_PYTHON_BIN
   LINCS_OUT_ROOT, QSUB_LOG_ROOT, LINCS_WORKLIST
   LINCS_ARRAY_MEMORY, LINCS_ARRAY_WALLTIME
+  SUBMISSION_ARRAY_MEMORY, SUBMISSION_ARRAY_WALLTIME (compatibility fallbacks)
   DESCRIPTION_TEMPLATE_TSV
   PROVENANCE_MIRROR_LOCAL_PREFIX, PROVENANCE_MIRROR_REMOTE_PREFIX
   LOCAL_INPUT_SOURCE_MAP_TSV
@@ -108,6 +114,8 @@ absolute_path() {
 canonicalize_model_group() {
   case "$1" in
     HZ|hz_released_matrix) printf '%s\n' "HZ" ;;
+    CM|consensus_median) printf '%s\n' "CM" ;;
+    CP|cd_signature_export) printf '%s\n' "CP" ;;
     *) return 1 ;;
   esac
 }
@@ -124,6 +132,8 @@ resolve_model_group_for_id() {
     }
     $model_id_col == model_id {
       if ($family_col == "hz_released_matrix") print "HZ"
+      if ($family_col == "consensus_median") print "CM"
+      if ($family_col == "cd_signature_export") print "CP"
       exit
     }
   ' "${LINCS_MODEL_LIST}"
@@ -250,9 +260,11 @@ prepare_common() {
     require_var LINCS_CHEMPERT_EXPRESSION_TSV
     require_var LINCS_CRISPRKO_EXPRESSION_TSV
     require_var LINCS_MAPPING_FILE
+    require_var LINCS_CP_COEFF_GCTX
     require_file "${LINCS_CHEMPERT_EXPRESSION_TSV}"
     require_file "${LINCS_CRISPRKO_EXPRESSION_TSV}"
     require_file "${LINCS_MAPPING_FILE}"
+    require_file "${LINCS_CP_COEFF_GCTX}"
   fi
 }
 
@@ -261,7 +273,8 @@ write_worklist() {
     printf "task_id\tmodel_group\tmodel_id\n"
     awk -F $'\t' \
       -v filter_group="${FILTER_MODEL_GROUP}" \
-      -v filter_models="${FILTER_MODEL_IDS}" '
+      -v filter_models="${FILTER_MODEL_IDS}" \
+      -v split_hz4="${SPLIT_HZ4}" '
       NR == 1 {
         for (i = 1; i <= NF; i++) {
           if ($i == "model_id") model_id_col = i
@@ -283,7 +296,10 @@ write_worklist() {
       $enabled_col == "true" {
         group = ""
         if ($family_col == "hz_released_matrix") group = "HZ"
+        if ($family_col == "consensus_median") group = "CM"
+        if ($family_col == "cd_signature_export") group = "CP"
         if (group == "") next
+        if (split_hz4 == "1" && $model_id_col == "HZ4") next
         if (filter_group != "" && group != filter_group) next
         if (filter_models != "" && !($model_id_col in requested_model_lookup)) next
         task_id += 1
@@ -291,6 +307,20 @@ write_worklist() {
       }
     ' "${LINCS_MODEL_LIST}"
   } > "${LINCS_WORKLIST}"
+}
+
+hz4_is_selected() {
+  [[ ${WRITE_MODEL_ONLY} -eq 0 && ${REFRESH_METADATA_AND_PROVENANCE} -eq 0 ]] || return 1
+  if [[ -n "${FILTER_MODEL_IDS}" ]]; then
+    local requested_model_id
+    IFS=',' read -r -a requested_model_ids <<< "${FILTER_MODEL_IDS}"
+    for requested_model_id in "${requested_model_ids[@]}"; do
+      requested_model_id="${requested_model_id//[[:space:]]/}"
+      [[ "${requested_model_id}" == "HZ4" ]] && return 0
+    done
+    return 1
+  fi
+  [[ -z "${FILTER_MODEL_GROUP}" || "${FILTER_MODEL_GROUP}" == "CP" ]]
 }
 
 filter_refresh_existing_worklist() {
@@ -349,6 +379,30 @@ run_inner_worker() {
   src_root="${REPO_ROOT}/geneset-extractor-dev/LINCS_L1000/src"
   local cmd expression_tsv
   build_model_only_cmd() {
+    if [[ "${model_id}" == "HZ4" ]]; then
+      cmd=(
+        "${PYTHON_BIN}"
+        "${src_root}/run_lincs_l1000_cp_model.py"
+        "--run_root" "${LINCS_OUT_ROOT}/genesets/all_signatures/models"
+        "--python_bin" "${PYTHON_BIN}"
+        "--dig_dir" "${DIG_DIR}"
+        "--gctx_path" "${LINCS_CP_COEFF_GCTX}"
+        "--write_model_only"
+      )
+      return
+    fi
+    if [[ "${model_id}" == "HZ3" ]]; then
+      cmd=(
+        "${PYTHON_BIN}"
+        "${src_root}/run_lincs_l1000_consensus_median_model.py"
+        "--run_root" "${LINCS_OUT_ROOT}/genesets/all_signatures/models"
+        "--python_bin" "${PYTHON_BIN}"
+        "--dig_dir" "${DIG_DIR}"
+        "--gctx_path" "${LINCS_CP_COEFF_GCTX}"
+        "--write_model_only"
+      )
+      return
+    fi
     expression_tsv="$(expression_tsv_for_model "${model_id}")" || {
       echo "Unsupported LINCS_L1000 model for model-only mode: ${model_id}" >&2
       exit 1
@@ -390,6 +444,7 @@ run_inner_worker() {
       "--overwrite"
       "--chempert_expression_tsv" "${LINCS_CHEMPERT_EXPRESSION_TSV}"
       "--crisprko_expression_tsv" "${LINCS_CRISPRKO_EXPRESSION_TSV}"
+      "--cp_coeff_gctx" "${LINCS_CP_COEFF_GCTX}"
     )
   fi
   if [[ -n "${PROVENANCE_MIRROR_LOCAL_PREFIX:-}" ]]; then
@@ -421,6 +476,7 @@ run_outer_worker() {
       append_bind_path "${LOCAL_INPUT_SOURCE_MAP_TSV:-}"
       append_bind_path "${LINCS_CHEMPERT_EXPRESSION_TSV}"
       append_bind_path "${LINCS_CRISPRKO_EXPRESSION_TSV}"
+      append_bind_path "${LINCS_CP_COEFF_GCTX}"
       append_bind_path "${LINCS_MAPPING_FILE}"
     } | sort -u
   )"
@@ -447,6 +503,7 @@ run_outer_worker() {
     APPTAINERENV_LOCAL_INPUT_SOURCE_MAP_TSV="${LOCAL_INPUT_SOURCE_MAP_TSV}" \
     APPTAINERENV_LINCS_CHEMPERT_EXPRESSION_TSV="${LINCS_CHEMPERT_EXPRESSION_TSV}" \
     APPTAINERENV_LINCS_CRISPRKO_EXPRESSION_TSV="${LINCS_CRISPRKO_EXPRESSION_TSV}" \
+    APPTAINERENV_LINCS_CP_COEFF_GCTX="${LINCS_CP_COEFF_GCTX}" \
     APPTAINERENV_LINCS_MAPPING_FILE="${LINCS_MAPPING_FILE}" \
     "${APPTAINER_BIN}" exec \
       --bind "${bind_csv}" \
@@ -456,23 +513,56 @@ run_outer_worker() {
 }
 
 submit_array() {
+  if hz4_is_selected; then
+    SPLIT_HZ4=1
+  fi
   write_worklist
   filter_refresh_existing_worklist
   local task_count
   task_count="$(worklist_task_count)"
-  if [[ "${task_count}" -le 0 ]]; then
+  if [[ "${task_count}" -le 0 && ${SPLIT_HZ4} -eq 0 ]]; then
     echo "No LINCS_L1000 tasks selected." >&2
     exit 1
   fi
 
-  "${QSUB_BIN}" \
-    -N "lincs_l1000_all_models_apptainer" \
-    -t "1-${task_count}" \
-    -o "${QSUB_LOG_ROOT}/lincs_l1000.\$TASK_ID.out" \
-    -e "${QSUB_LOG_ROOT}/lincs_l1000.\$TASK_ID.err" \
-    -l "h_vmem=${LINCS_ARRAY_MEMORY},h_rt=${LINCS_ARRAY_WALLTIME}" \
-    -v "REPO_ROOT=${REPO_ROOT},WORK_ROOT=${WORK_ROOT},LINCS_WORKLIST=${LINCS_WORKLIST},LINCS_OUT_ROOT=${LINCS_OUT_ROOT},LINCS_MODEL_LIST=${LINCS_MODEL_LIST},LINCS_MODEL_MANIFEST=${LINCS_MODEL_MANIFEST},DIG_DIR=${DIG_DIR},PYTHON_BIN=${PYTHON_BIN},APPTAINER_BIN=${APPTAINER_BIN},APPTAINER_IMAGE=${APPTAINER_IMAGE},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS},APPTAINER_PYTHON_BIN=${APPTAINER_PYTHON_BIN},WRITE_MODEL_ONLY=${WRITE_MODEL_ONLY},REFRESH_METADATA_AND_PROVENANCE=${REFRESH_METADATA_AND_PROVENANCE},DESCRIPTION_TEMPLATE_TSV=${DESCRIPTION_TEMPLATE_TSV},PROVENANCE_MIRROR_LOCAL_PREFIX=${PROVENANCE_MIRROR_LOCAL_PREFIX},PROVENANCE_MIRROR_REMOTE_PREFIX=${PROVENANCE_MIRROR_REMOTE_PREFIX},LOCAL_INPUT_SOURCE_MAP_TSV=${LOCAL_INPUT_SOURCE_MAP_TSV},LINCS_CHEMPERT_EXPRESSION_TSV=${LINCS_CHEMPERT_EXPRESSION_TSV},LINCS_CRISPRKO_EXPRESSION_TSV=${LINCS_CRISPRKO_EXPRESSION_TSV},LINCS_MAPPING_FILE=${LINCS_MAPPING_FILE}" \
-    "${SELF_PATH}"
+  if [[ "${task_count}" -gt 0 ]]; then
+    "${QSUB_BIN}" \
+      -N "lincs_l1000_all_models_apptainer" \
+      -t "1-${task_count}" \
+      -o "${QSUB_LOG_ROOT}/lincs_l1000.\$TASK_ID.out" \
+      -e "${QSUB_LOG_ROOT}/lincs_l1000.\$TASK_ID.err" \
+      -l "h_vmem=${LINCS_ARRAY_MEMORY},h_rt=${LINCS_ARRAY_WALLTIME}" \
+      -v "REPO_ROOT=${REPO_ROOT},WORK_ROOT=${WORK_ROOT},LINCS_WORKLIST=${LINCS_WORKLIST},LINCS_OUT_ROOT=${LINCS_OUT_ROOT},LINCS_MODEL_LIST=${LINCS_MODEL_LIST},LINCS_MODEL_MANIFEST=${LINCS_MODEL_MANIFEST},DIG_DIR=${DIG_DIR},PYTHON_BIN=${PYTHON_BIN},APPTAINER_BIN=${APPTAINER_BIN},APPTAINER_IMAGE=${APPTAINER_IMAGE},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS},APPTAINER_PYTHON_BIN=${APPTAINER_PYTHON_BIN},WRITE_MODEL_ONLY=${WRITE_MODEL_ONLY},REFRESH_METADATA_AND_PROVENANCE=${REFRESH_METADATA_AND_PROVENANCE},DESCRIPTION_TEMPLATE_TSV=${DESCRIPTION_TEMPLATE_TSV},PROVENANCE_MIRROR_LOCAL_PREFIX=${PROVENANCE_MIRROR_LOCAL_PREFIX},PROVENANCE_MIRROR_REMOTE_PREFIX=${PROVENANCE_MIRROR_REMOTE_PREFIX},LOCAL_INPUT_SOURCE_MAP_TSV=${LOCAL_INPUT_SOURCE_MAP_TSV},LINCS_CHEMPERT_EXPRESSION_TSV=${LINCS_CHEMPERT_EXPRESSION_TSV},LINCS_CRISPRKO_EXPRESSION_TSV=${LINCS_CRISPRKO_EXPRESSION_TSV},LINCS_CP_COEFF_GCTX=${LINCS_CP_COEFF_GCTX},LINCS_MAPPING_FILE=${LINCS_MAPPING_FILE}" \
+      "${SELF_PATH}"
+  fi
+
+  if [[ ${SPLIT_HZ4} -eq 1 ]]; then
+    local hz4_root
+    hz4_root="${REPO_ROOT}/geneset-extractor-dev/LINCS_L1000"
+    echo "Planning and submitting HZ4 as cell-line × perturbation-time tasks."
+    env \
+      SUBMISSION_WORK_DIR="${LINCS_OUT_ROOT}" \
+      DIG_REPO="${DIG_DIR}" \
+      QSUB_BIN="${QSUB_BIN}" \
+      APPTAINER_BIN="${APPTAINER_BIN}" \
+      APPTAINER_IMAGE="${APPTAINER_IMAGE}" \
+      APPTAINER_EXTRA_ARGS="${APPTAINER_EXTRA_ARGS}" \
+      LINCS_CP_COEFF_GCTX="${LINCS_CP_COEFF_GCTX}" \
+      SUBMISSION_ARRAY_MEMORY="${LINCS_ARRAY_MEMORY}" \
+      SUBMISSION_ARRAY_WALLTIME="${LINCS_ARRAY_WALLTIME}" \
+      bash "${hz4_root}/run/plan_hz4_cell_line_time_apptainer.sh"
+    env \
+      SUBMISSION_WORK_DIR="${LINCS_OUT_ROOT}" \
+      DIG_REPO="${DIG_DIR}" \
+      QSUB_BIN="${QSUB_BIN}" \
+      APPTAINER_BIN="${APPTAINER_BIN}" \
+      APPTAINER_IMAGE="${APPTAINER_IMAGE}" \
+      APPTAINER_EXTRA_ARGS="${APPTAINER_EXTRA_ARGS}" \
+      LINCS_CP_COEFF_GCTX="${LINCS_CP_COEFF_GCTX}" \
+      SUBMISSION_ARRAY_MEMORY="${LINCS_ARRAY_MEMORY}" \
+      SUBMISSION_ARRAY_WALLTIME="${LINCS_ARRAY_WALLTIME}" \
+      bash "${hz4_root}/run/submit_hz4_cell_line_time_cluster_apptainer.sh" --submit
+  fi
 }
 
 main() {

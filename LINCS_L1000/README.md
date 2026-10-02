@@ -5,6 +5,46 @@ HZ2 CRISPR-knockout libraries. All matrix processing, ranking, mapping, and
 GMT creation belong to `dig-gene-set-extractors`; this directory only supplies
 declared inputs and dispatches DIG commands.
 
+`HZ4` (`cd_signature_export`, `l1000_cp`) is distinct from the released-matrix
+models. It streams the single public `cp_coeff_mat.gctx` input, using
+`0/META/ROW/id`, `0/META/COL/lincs_id`, and `0/DATA/0/matrix`. Each Level-5
+chemical-perturbation signature independently emits the top 250
+`CD-coefficient` symbols as `up` and bottom 250 as `down`. Set
+`LINCS_CP_COEFF_GCTX` to a local copy of the GCTX; its public source is
+`https://lincs-dcic.s3.amazonaws.com/LINCS-sigs-2021/gctx/cd-coefficient/cp_coeff_mat.gctx`.
+The current public source contains about 102 more signatures than the legacy
+GMT; HZ4 resolves the 102 repeated nonblank `lincs_id` groups by retaining the
+last GCTX column occurrence. This yields 718,055 unique signatures (and
+1,436,110 terms). Ninety-two duplicate groups have identical coefficient
+vectors; for the ten differing groups, this is a deterministic public-source
+resolution policy, not a claim about the historical pipeline.
+
+`HZ3` (`consensus_median`) reconstructs the documented current Ma'ayan-style
+chemical-perturbation consensus method from that same public Level-5 GCTX.
+It groups profiles by `0/META/COL/pert_name`, requires at least 10 constituent
+signatures, computes a coordinate-wise median CD coefficient per gene, and
+emits the top and bottom 200 symbols. The GCTX is a bulk representation of
+the public CD profiles; provenance records its source URL together with the
+SigCom library UUID `54198d6e-fe17-5ef8-91ac-02b425761653` and metadata API
+`https://maayanlab.cloud/sigcom-lincs/metadata-api`. The historical consensus
+median GMT is a comparison target only: HZ3 does not use it as an input and is
+not expected to reproduce its historical perturbagen inventory exactly.
+
+Run HZ3 locally with a supplied GCTX:
+
+```bash
+python3 src/build_lincs_l1000_genesets.py \
+  --models HZ3 \
+  --cp_coeff_gctx /path/to/cp_coeff_mat.gctx \
+  --dig_dir /path/to/dig-gene-set-extractors \
+  --out_root /path/to/output
+```
+
+The DIG workflow supports deterministic contiguous perturbagen partitions
+through `--partition_index` and `--partition_count`; a partition never splits
+a perturbagen group. `merge_partitions` verifies complete, nonoverlapping
+partition coverage before combining their GMTs.
+
 Run the committed HZ1 smoke fixture with:
 
 ```bash
@@ -13,7 +53,8 @@ SUBMISSION_WORK_DIR=/path/out DIG_REPO=../dig-gene-set-extractors \
 ```
 
 For a full run set `LINCS_CHEMPERT_EXPRESSION_TSV`,
-`LINCS_CRISPRKO_EXPRESSION_TSV`, and `LINCS_MAPPING_FILE`, then run
+`LINCS_CRISPRKO_EXPRESSION_TSV`, `LINCS_MAPPING_FILE`, and
+`LINCS_CP_COEFF_GCTX`, then run
 `bash run/run_submission_models_apptainer.sh --full`.
 
 For an Apptainer run, use the same standard variables as the other modernized
@@ -38,3 +79,39 @@ bash run/submit_submission_models_cluster_apptainer.sh --model-id HZ1 --submit
 keep the historic `DIG_DIR`, `WORK_ROOT`, `LINCS_OUT_ROOT`, and
 `LINCS_ARRAY_*` details internal, although the latter resource variables
 remain supported as compatibility fallbacks.
+
+## HZ4 cell-line × perturbation-time array mode
+
+HZ4 is always partitioned by the joint cluster submitter, without changing the
+meaning of a gene set. Each task contains signatures from one `cell_line` × `pert_time` group; groups over
+10,000 retained signatures are split into deterministic chunks. Every task
+emits a separate, complete HZ4 GMT/model output, so the task outputs are not
+merged afterward. The planner first applies the standard HZ4 rule that the
+last GCTX column wins for duplicate `lincs_id` values.
+
+HZ4 writes its final GMT while streaming coefficient vectors from the GCTX;
+it does not create or reload a signed term-gene TSV. Consequently the HZ4
+array launcher has a `3G` default memory request. This is independent of the
+GCTX I/O load, so begin with modest concurrency on shared storage.
+
+With the standard Apptainer environment variables plus `LINCS_CP_COEFF_GCTX`
+set, create the plan, inspect its task count, then submit it:
+
+```bash
+export HZ4_MAX_SIGNATURES_PER_TASK=10000
+export HZ4_MAX_CONCURRENT_TASKS=10
+bash run/plan_hz4_cell_line_time_apptainer.sh
+wc -l "${SUBMISSION_WORK_DIR}/genesets/hz4_cell_line_time_plan/task_manifest.tsv"
+bash run/submit_hz4_cell_line_time_cluster_apptainer.sh --submit
+```
+
+The manifest has one header row, so its line count minus one is the number of
+array tasks. The submitter defaults to `3G`, `24:00:00`, and at most ten
+simultaneous tasks. `HZ4_TASK_MEMORY` and `HZ4_TASK_WALLTIME` take priority;
+otherwise it uses `SUBMISSION_ARRAY_MEMORY` and `SUBMISSION_ARRAY_WALLTIME`
+(then the legacy `LINCS_ARRAY_*` variables). Set
+`HZ4_MAX_CONCURRENT_TASKS` to change concurrency. To use a nondefault plan
+location, set `HZ4_PARTITION_PLAN_DIR` consistently for both commands.
+To replace outputs from a prior HZ4 attempt, explicitly set
+`HZ4_OVERWRITE=1` before resubmitting; otherwise existing task output is
+preserved and the task fails rather than overwriting it.
