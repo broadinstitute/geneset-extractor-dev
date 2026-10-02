@@ -132,6 +132,7 @@ def main() -> int:
     input_by_model = {
         "HZ1": require_existing_file(args.chempert_expression_tsv, "chempert expression TSV") if "HZ1" in selected_models else None,
         "HZ2": require_existing_file(args.crisprko_expression_tsv, "crisprko expression TSV") if "HZ2" in selected_models else None,
+        "HZ3": require_existing_file(args.cp_coeff_gctx, "CP coefficient GCTX") if "HZ3" in selected_models else None,
         "HZ4": require_existing_file(args.cp_coeff_gctx, "CP coefficient GCTX") if "HZ4" in selected_models else None,
     }
 
@@ -189,6 +190,18 @@ def main() -> int:
 
     for model_id in selected_models:
         model_family = str(model_by_id[model_id].get("model_family", "")).strip()
+        if model_family == "consensus_median":
+            run_command(
+                [
+                    str(Path(args.python_bin).resolve()),
+                    str(src_root / "run_lincs_l1000_consensus_median_model.py"),
+                    "--run_root", str(outputs_root / "all_signatures" / "models"),
+                    "--python_bin", str(Path(args.python_bin).resolve()),
+                    "--dig_dir", str(dig_dir),
+                    "--gctx_path", str(input_by_model[model_id]),
+                ]
+            )
+            continue
         if model_family == "cd_signature_export":
             partition_id = hz4_task["task_id"] if hz4_task else "all_signatures"
             run_command(

@@ -20,9 +20,9 @@ class LincsModernSubmissionTests(unittest.TestCase):
         def rows(path: Path):
             with path.open(encoding="utf-8", newline="") as handle:
                 return list(csv.DictReader(handle, delimiter="\t"))
-        self.assertEqual({row["model_id"] for row in rows(ROOT / "config/model_list.tsv") if row["enabled"] == "true"}, {"HZ1", "HZ2", "HZ4"})
-        self.assertEqual({row["model_id"] for row in rows(ROOT / "config/task_manifest.tsv")}, {"HZ1", "HZ2", "HZ4"})
-        self.assertEqual({row["model_id"] for row in rows(ROOT / "expected/output_manifest.tsv")}, {"HZ1", "HZ2", "HZ4"})
+        self.assertEqual({row["model_id"] for row in rows(ROOT / "config/model_list.tsv") if row["enabled"] == "true"}, {"HZ1", "HZ2", "HZ3", "HZ4"})
+        self.assertEqual({row["model_id"] for row in rows(ROOT / "config/task_manifest.tsv")}, {"HZ1", "HZ2", "HZ3", "HZ4"})
+        self.assertEqual({row["model_id"] for row in rows(ROOT / "expected/output_manifest.tsv")}, {"HZ1", "HZ2", "HZ3", "HZ4"})
 
     def test_cluster_adapter_uses_standard_submission_interface(self) -> None:
         source = (ROOT / "run/submit_submission_models_cluster_apptainer.sh").read_text(encoding="utf-8")
@@ -86,3 +86,27 @@ class LincsModernSubmissionTests(unittest.TestCase):
             for filename in ["geneset.tsv", "geneset.full.tsv", "signature_summary.tsv", "geneset.meta.json", "geneset.provenance.legacy.json", "geneset.provenance.dapper.yaml", "geneset.provenance.json"]:
                 self.assertTrue((extractor / filename).is_file(), filename)
             self.assertFalse((gmt.parent.parent / "workflow/lincs_l1000_cp_signed_term_gene.tsv").exists())
+
+    @unittest.skipUnless((DIG / "src/geneset_extractors").is_dir(), "requires sibling DIG checkout")
+    def test_hz3_wrapper_exports_consensus_median_gmt(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            source = temp / "cp_coeff_mat.gctx"
+            with h5py.File(source, "w") as handle:
+                matrix = np.vstack([np.arange(500, dtype=float) + index for index in range(10)] + [np.arange(500, dtype=float) * -1 - index for index in range(10)])
+                handle.create_dataset("0/DATA/0/matrix", data=matrix)
+                handle.create_dataset("0/META/ROW/id", data=np.asarray([f"GENE{i:03d}".encode() for i in range(500)]))
+                handle.create_dataset("0/META/COL/pert_name", data=np.asarray([b"drug_a"] * 10 + [b"drug_b"] * 10))
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "src/build_lincs_l1000_genesets.py"), "--models", "HZ3", "--cp_coeff_gctx", str(source), "--dig_dir", str(DIG), "--out_root", str(temp / "out"), "--overwrite"],
+                cwd=ROOT,
+                env={**os.environ, "PYTHONPATH": str(DIG / "src") + (":" + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else "")},
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            extractor = temp / "out/genesets/all_signatures/models/HZ3/extractor"
+            lines = (extractor / "genesets.gmt").read_text(encoding="utf-8").splitlines()
+            self.assertEqual([line.split("\t", 1)[0] for line in lines], ["drug_a up", "drug_a down", "drug_b up", "drug_b down"])
+            self.assertTrue(all(len(line.split("\t")) == 202 for line in lines))
+            self.assertTrue((extractor / "geneset.meta.json").is_file())

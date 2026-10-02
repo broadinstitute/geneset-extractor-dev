@@ -109,6 +109,7 @@ absolute_path() {
 canonicalize_model_group() {
   case "$1" in
     HZ|hz_released_matrix) printf '%s\n' "HZ" ;;
+    CM|consensus_median) printf '%s\n' "CM" ;;
     CP|cd_signature_export) printf '%s\n' "CP" ;;
     *) return 1 ;;
   esac
@@ -126,6 +127,7 @@ resolve_model_group_for_id() {
     }
     $model_id_col == model_id {
       if ($family_col == "hz_released_matrix") print "HZ"
+      if ($family_col == "consensus_median") print "CM"
       if ($family_col == "cd_signature_export") print "CP"
       exit
     }
@@ -288,6 +290,7 @@ write_worklist() {
       $enabled_col == "true" {
         group = ""
         if ($family_col == "hz_released_matrix") group = "HZ"
+        if ($family_col == "consensus_median") group = "CM"
         if ($family_col == "cd_signature_export") group = "CP"
         if (group == "") next
         if (filter_group != "" && group != filter_group) next
@@ -359,6 +362,18 @@ run_inner_worker() {
       cmd=(
         "${PYTHON_BIN}"
         "${src_root}/run_lincs_l1000_cp_model.py"
+        "--run_root" "${LINCS_OUT_ROOT}/genesets/all_signatures/models"
+        "--python_bin" "${PYTHON_BIN}"
+        "--dig_dir" "${DIG_DIR}"
+        "--gctx_path" "${LINCS_CP_COEFF_GCTX}"
+        "--write_model_only"
+      )
+      return
+    fi
+    if [[ "${model_id}" == "HZ3" ]]; then
+      cmd=(
+        "${PYTHON_BIN}"
+        "${src_root}/run_lincs_l1000_consensus_median_model.py"
         "--run_root" "${LINCS_OUT_ROOT}/genesets/all_signatures/models"
         "--python_bin" "${PYTHON_BIN}"
         "--dig_dir" "${DIG_DIR}"

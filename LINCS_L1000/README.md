@@ -19,6 +19,32 @@ last GCTX column occurrence. This yields 718,055 unique signatures (and
 vectors; for the ten differing groups, this is a deterministic public-source
 resolution policy, not a claim about the historical pipeline.
 
+`HZ3` (`consensus_median`) reconstructs the documented current Ma'ayan-style
+chemical-perturbation consensus method from that same public Level-5 GCTX.
+It groups profiles by `0/META/COL/pert_name`, requires at least 10 constituent
+signatures, computes a coordinate-wise median CD coefficient per gene, and
+emits the top and bottom 200 symbols. The GCTX is a bulk representation of
+the public CD profiles; provenance records its source URL together with the
+SigCom library UUID `54198d6e-fe17-5ef8-91ac-02b425761653` and metadata API
+`https://maayanlab.cloud/sigcom-lincs/metadata-api`. The historical consensus
+median GMT is a comparison target only: HZ3 does not use it as an input and is
+not expected to reproduce its historical perturbagen inventory exactly.
+
+Run HZ3 locally with a supplied GCTX:
+
+```bash
+python3 src/build_lincs_l1000_genesets.py \
+  --models HZ3 \
+  --cp_coeff_gctx /path/to/cp_coeff_mat.gctx \
+  --dig_dir /path/to/dig-gene-set-extractors \
+  --out_root /path/to/output
+```
+
+The DIG workflow supports deterministic contiguous perturbagen partitions
+through `--partition_index` and `--partition_count`; a partition never splits
+a perturbagen group. `merge_partitions` verifies complete, nonoverlapping
+partition coverage before combining their GMTs.
+
 Run the committed HZ1 smoke fixture with:
 
 ```bash
