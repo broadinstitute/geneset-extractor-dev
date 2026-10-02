@@ -49,6 +49,12 @@ class LincsModernSubmissionTests(unittest.TestCase):
         source = (ROOT.parent / "run/submit_lincs_l1000_models_cluster_apptainer.sh").read_text(encoding="utf-8")
         self.assertIn('"${LINCS_OUT_ROOT}"', source)
 
+    def test_joint_cluster_launcher_splits_hz4(self) -> None:
+        source = (ROOT.parent / "run/submit_lincs_l1000_models_cluster_apptainer.sh").read_text(encoding="utf-8")
+        self.assertIn("hz4_is_selected", source)
+        self.assertIn("plan_hz4_cell_line_time_apptainer.sh", source)
+        self.assertIn("submit_hz4_cell_line_time_cluster_apptainer.sh", source)
+
     @unittest.skipUnless((DIG / "src/geneset_extractors").is_dir(), "requires sibling DIG checkout")
     def test_smoke_reproduction_runs_hz1(self) -> None:
         with TemporaryDirectory() as temp_dir:

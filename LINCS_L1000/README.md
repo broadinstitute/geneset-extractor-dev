@@ -82,8 +82,8 @@ remain supported as compatibility fallbacks.
 
 ## HZ4 cell-line × perturbation-time array mode
 
-HZ4 can also be partitioned without changing the meaning of a gene set. Each
-task contains signatures from one `cell_line` × `pert_time` group; groups over
+HZ4 is always partitioned by the joint cluster submitter, without changing the
+meaning of a gene set. Each task contains signatures from one `cell_line` × `pert_time` group; groups over
 10,000 retained signatures are split into deterministic chunks. Every task
 emits a separate, complete HZ4 GMT/model output, so the task outputs are not
 merged afterward. The planner first applies the standard HZ4 rule that the
