@@ -26,6 +26,10 @@ def main() -> int:
     parser.add_argument("--run_root", required=True)
     parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--gctx_path", required=True)
+    parser.add_argument("--raw_indices_tsv")
+    parser.add_argument("--partition_id", default="all_signatures")
+    parser.add_argument("--cell_line")
+    parser.add_argument("--pert_time")
     parser.add_argument("--block_size", type=int, default=256)
     parser.add_argument("--top_n", type=int, default=250)
     parser.add_argument("--python_bin", default=sys.executable)
@@ -35,6 +39,9 @@ def main() -> int:
     gctx_path = Path(args.gctx_path).resolve()
     if not gctx_path.is_file():
         raise SystemExit(f"Missing LINCS_CP_COEFF_GCTX: {gctx_path}")
+    raw_indices_tsv = Path(args.raw_indices_tsv).resolve() if args.raw_indices_tsv else None
+    if raw_indices_tsv is not None and not raw_indices_tsv.is_file():
+        raise SystemExit(f"Missing HZ4 raw-index worklist: {raw_indices_tsv}")
     model_out = Path(args.run_root).resolve() / "HZ4"
     workflow_out = model_out / "workflow"
     extractor_out = model_out / "extractor"
@@ -48,8 +55,8 @@ def main() -> int:
         "model_label": "l1000_cp",
         "workflow_name": "lincs_l1000_cp",
         "extractor_name": "signed_term_gene",
-        "parameters": {"public_gctx_url": "https://lincs-dcic.s3.amazonaws.com/LINCS-sigs-2021/gctx/cd-coefficient/cp_coeff_mat.gctx", "top_n": args.top_n, "ranking": "CD-coefficient descending; symbol ascending", "duplicate_lincs_id_resolution": "last GCTX column occurrence wins", "term_suffixes": [" up", " down"], "gmt_description": ""},
-        "inputs": {"organism": "human", "genome_build": "hg38", "gctx_path": str(gctx_path), "required_datasets": ["0/DATA/0/matrix", "0/META/ROW/id", "0/META/COL/lincs_id"]},
+        "parameters": {"public_gctx_url": "https://lincs-dcic.s3.amazonaws.com/LINCS-sigs-2021/gctx/cd-coefficient/cp_coeff_mat.gctx", "top_n": args.top_n, "ranking": "CD-coefficient descending; symbol ascending", "duplicate_lincs_id_resolution": "last GCTX column occurrence wins", "partition_id": args.partition_id, "cell_line": args.cell_line, "pert_time": args.pert_time, "term_suffixes": [" up", " down"], "gmt_description": ""},
+        "inputs": {"organism": "human", "genome_build": "hg38", "gctx_path": str(gctx_path), "raw_indices_tsv": str(raw_indices_tsv) if raw_indices_tsv else None, "required_datasets": ["0/DATA/0/matrix", "0/META/ROW/id", "0/META/COL/lincs_id"]},
     }
     (extractor_out / "geneset.model.json").write_text(json.dumps(sidecar, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if args.write_model_only:
@@ -57,6 +64,8 @@ def main() -> int:
     env = {**os.environ, "PYTHONPATH": str(dig_dir / "src") + (":" + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else "")}
     py = str(Path(args.python_bin).resolve())
     workflow_cmd = [py, "-m", "geneset_extractors.cli", "workflows", "lincs_l1000_cp", "--gctx_path", str(gctx_path), "--out_dir", str(workflow_out), "--top_n", str(args.top_n), "--block_size", str(args.block_size)]
+    if raw_indices_tsv is not None:
+        workflow_cmd += ["--raw_indices_tsv", str(raw_indices_tsv)]
     extractor_cmd = [py, "-m", "geneset_extractors.cli", "convert", "signed_term_gene", "--table_tsv", str(workflow_out / "lincs_l1000_cp_signed_term_gene.tsv"), "--out_dir", str(extractor_out), "--organism", "human", "--genome_build", "hg38", "--term_prefix", "", "--signature_name", "LINCS L1000 chemical perturbation Characteristic Direction signatures", "--gmt_name_separator", " ", "--gmt_signed_labels", "up_down", "--gmt_description", "", "--gmt_preserve_names", "--gmt_min_genes", str(args.top_n), "--gmt_require_symbol", "true"]
     provenance_cmd = [py, "-m", "geneset_extractors.cli", "provenance", "build", str(extractor_out / "geneset.meta.json"), "--out", str(extractor_out / "geneset.provenance.json"), "--upstream_provenance_graph_json", str(workflow_out / "lincs_l1000_cp_signed_term_gene.provenance_graph.json")]
     commands = "\n".join(["# Commands For HZ4", "", "```bash", f"cd {shlex.quote(str(dig_dir))}", f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {' '.join(shlex.quote(x) for x in workflow_cmd)}", f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {' '.join(shlex.quote(x) for x in extractor_cmd)}", f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {' '.join(shlex.quote(x) for x in provenance_cmd)}", "```", ""])
@@ -65,7 +74,7 @@ def main() -> int:
     for command in (workflow_cmd, extractor_cmd, provenance_cmd):
         _run(command, dig_dir, env, log)
     with (extractor_out / "run_manifest.json").open("w", encoding="utf-8", newline="\n") as handle:
-        json.dump({"model_id": "HZ4", "workflow_dir": str(workflow_out), "extractor_dir": str(extractor_out)}, handle, indent=2, sort_keys=True)
+        json.dump({"model_id": "HZ4", "partition_id": args.partition_id, "cell_line": args.cell_line, "pert_time": args.pert_time, "workflow_dir": str(workflow_out), "extractor_dir": str(extractor_out)}, handle, indent=2, sort_keys=True)
         handle.write("\n")
     return 0
 

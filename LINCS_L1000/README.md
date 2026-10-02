@@ -53,3 +53,29 @@ bash run/submit_submission_models_cluster_apptainer.sh --model-id HZ1 --submit
 keep the historic `DIG_DIR`, `WORK_ROOT`, `LINCS_OUT_ROOT`, and
 `LINCS_ARRAY_*` details internal, although the latter resource variables
 remain supported as compatibility fallbacks.
+
+## HZ4 cell-line × perturbation-time array mode
+
+HZ4 can also be partitioned without changing the meaning of a gene set. Each
+task contains signatures from one `cell_line` × `pert_time` group; groups over
+10,000 retained signatures are split into deterministic chunks. Every task
+emits a separate, complete HZ4 GMT/model output, so the task outputs are not
+merged afterward. The planner first applies the standard HZ4 rule that the
+last GCTX column wins for duplicate `lincs_id` values.
+
+With the standard Apptainer environment variables plus `LINCS_CP_COEFF_GCTX`
+set, create the plan, inspect its task count, then submit it:
+
+```bash
+export HZ4_MAX_SIGNATURES_PER_TASK=10000
+export HZ4_MAX_CONCURRENT_TASKS=10
+bash run/plan_hz4_cell_line_time_apptainer.sh
+wc -l "${SUBMISSION_WORK_DIR}/genesets/hz4_cell_line_time_plan/task_manifest.tsv"
+bash run/submit_hz4_cell_line_time_cluster_apptainer.sh --submit
+```
+
+The manifest has one header row, so its line count minus one is the number of
+array tasks. The submitter defaults to `32G`, `24:00:00`, and at most ten
+simultaneous tasks; override these with `HZ4_TASK_MEMORY`,
+`HZ4_TASK_WALLTIME`, and `HZ4_MAX_CONCURRENT_TASKS`. To use a nondefault
+plan location, set `HZ4_PARTITION_PLAN_DIR` consistently for both commands.

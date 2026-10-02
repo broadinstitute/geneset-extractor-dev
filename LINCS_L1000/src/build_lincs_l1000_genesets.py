@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import os
 import shutil
 import subprocess
 import sys
@@ -28,6 +30,26 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--crisprko_expression_tsv")
     parser.add_argument("--cp_coeff_gctx")
     parser.add_argument("--cp_block_size", type=int, default=256)
+    parser.add_argument(
+        "--hz4_partition_mode",
+        choices=["all_signatures", "cell_line_time"],
+        default="all_signatures",
+        help="HZ4 only: export all signatures together or use cell-line × perturbation-time task worklists.",
+    )
+    parser.add_argument(
+        "--hz4_partition_plan_dir",
+        help="HZ4 cell_line_time task-plan directory (defaults below --out_root).",
+    )
+    parser.add_argument(
+        "--hz4_task_id",
+        help="HZ4 cell_line_time task id from task_manifest.tsv to export.",
+    )
+    parser.add_argument(
+        "--hz4_max_signatures_per_task",
+        type=int,
+        default=10000,
+        help="HZ4 cell_line_time maximum retained signatures per task (default: 10000).",
+    )
     parser.add_argument("--mapping_file")
     parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--provenance_mirror_local_prefix")
@@ -37,9 +59,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_command(command: list[str]) -> None:
+def run_command(command: list[str], env: dict[str, str] | None = None) -> None:
     print("$ " + " ".join(command), flush=True)
-    subprocess.run(command, check=True)
+    subprocess.run(command, check=True, env=env)
 
 
 def dir_nonempty(path: Path) -> bool:
@@ -70,6 +92,22 @@ def require_existing_file(path_text: str | None, label: str) -> Path:
     return path
 
 
+def read_hz4_task(plan_dir: Path, task_id: str) -> dict[str, str]:
+    manifest_path = plan_dir / "task_manifest.tsv"
+    if not manifest_path.is_file():
+        raise SystemExit(f"Missing HZ4 task manifest: {manifest_path}")
+    with manifest_path.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle, delimiter="\t"))
+    matches = [row for row in rows if row.get("task_id") == task_id]
+    if len(matches) != 1:
+        raise SystemExit(f"HZ4 task id {task_id!r} was not found exactly once in {manifest_path}")
+    row = matches[0]
+    index_path = Path(row.get("raw_indices_tsv", "")).resolve()
+    if not index_path.is_file():
+        raise SystemExit(f"Missing HZ4 raw-index worklist for {task_id}: {index_path}")
+    return row
+
+
 def main() -> int:
     args = build_parser().parse_args()
     model_rows = read_tsv(Path(args.model_list))
@@ -97,9 +135,48 @@ def main() -> int:
         "HZ4": require_existing_file(args.cp_coeff_gctx, "CP coefficient GCTX") if "HZ4" in selected_models else None,
     }
 
+    hz4_task: dict[str, str] | None = None
+    hz4_plan_dir: Path | None = None
+    if args.hz4_partition_mode == "cell_line_time":
+        if "HZ4" not in selected_models:
+            raise SystemExit("--hz4_partition_mode cell_line_time requires --models HZ4")
+        if len(selected_models) != 1:
+            raise SystemExit("--hz4_partition_mode cell_line_time supports HZ4 alone; submit HZ1/HZ2 separately")
+        hz4_plan_dir = Path(args.hz4_partition_plan_dir).resolve() if args.hz4_partition_plan_dir else outputs_root / "hz4_cell_line_time_plan"
+        if args.hz4_task_id:
+            hz4_task = read_hz4_task(hz4_plan_dir, args.hz4_task_id)
+        else:
+            plan_env = {**os.environ, "PYTHONPATH": str(dig_dir / "src") + (":" + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else "")}
+            run_command(
+                [
+                    str(Path(args.python_bin).resolve()),
+                    "-m",
+                    "geneset_extractors.cli",
+                    "workflows",
+                    "lincs_l1000_cp",
+                    "--gctx_path",
+                    str(input_by_model["HZ4"]),
+                    "--plan_cell_line_time",
+                    "--partition_plan_dir",
+                    str(hz4_plan_dir),
+                    "--max_signatures_per_task",
+                    str(args.hz4_max_signatures_per_task),
+                ],
+                env=plan_env,
+            )
+            print(
+                f"HZ4 partition plan written to {hz4_plan_dir}. "
+                "Re-run with --hz4_task_id TASK_ID to export one task.",
+                flush=True,
+            )
+            return 0
+    elif args.hz4_task_id or args.hz4_partition_plan_dir:
+        raise SystemExit("--hz4_task_id and --hz4_partition_plan_dir require --hz4_partition_mode cell_line_time")
+
     conflicts: list[str] = []
     for model_id in selected_models:
-        model_out = outputs_root / "all_signatures" / "models" / model_id
+        partition_id = hz4_task["task_id"] if model_id == "HZ4" and hz4_task else "all_signatures"
+        model_out = outputs_root / partition_id / "models" / model_id
         if dir_nonempty(model_out):
             conflicts.append(existing_output_message(model_id=model_id, path=model_out))
     if conflicts and not args.overwrite:
@@ -107,21 +184,27 @@ def main() -> int:
 
     if args.overwrite:
         for model_id in selected_models:
-            overwrite_dir(outputs_root / "all_signatures" / "models" / model_id)
+            partition_id = hz4_task["task_id"] if model_id == "HZ4" and hz4_task else "all_signatures"
+            overwrite_dir(outputs_root / partition_id / "models" / model_id)
 
     for model_id in selected_models:
         model_family = str(model_by_id[model_id].get("model_family", "")).strip()
         if model_family == "cd_signature_export":
+            partition_id = hz4_task["task_id"] if hz4_task else "all_signatures"
             run_command(
                 [
                     str(Path(args.python_bin).resolve()),
                     str(src_root / "run_lincs_l1000_cp_model.py"),
-                    "--run_root", str(outputs_root / "all_signatures" / "models"),
+                    "--run_root", str(outputs_root / partition_id / "models"),
                     "--python_bin", str(Path(args.python_bin).resolve()),
                     "--dig_dir", str(dig_dir),
                     "--gctx_path", str(input_by_model[model_id]),
                     "--block_size", str(args.cp_block_size),
                 ]
+                + (["--raw_indices_tsv", hz4_task["raw_indices_tsv"]] if hz4_task else [])
+                + (["--partition_id", partition_id] if hz4_task else [])
+                + (["--cell_line", hz4_task["cell_line"]] if hz4_task else [])
+                + (["--pert_time", hz4_task["pert_time"]] if hz4_task else [])
             )
             continue
         if model_family != "hz_released_matrix":
