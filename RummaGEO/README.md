@@ -22,7 +22,8 @@ For a full run, set the following local-file environment variables, then run
   with the notebook search term attached to every record)
 - `RUMMAGEO_DRUG_TERMS_JSON` (the pinned SigCom-LINCS drug-term snapshot used
   by `HZ1`)
-- `RUMMAGEO_SOURCE_MANIFEST`
+- `LOCAL_INPUT_SOURCE_MAP_TSV` (the standard `local_path` / `source_uri` map
+  used during metadata and provenance refresh)
 - `RUMMAGEO_HUMAN_GENE_INFO`
 - `RUMMAGEO_MOUSE_GENE_INFO`
 - `RUMMAGEO_GENE_ORTHOLOGS`
@@ -45,6 +46,14 @@ bash run/submit_submission_models_cluster_apptainer.sh --full
 bash run/submit_submission_models_cluster_apptainer.sh --full --submit
 ```
 
+After a successful full run, refresh the completed models into the standard
+publishable metadata and provenance form:
+
+```bash
+bash run/submit_submission_models_cluster_apptainer.sh --full --refresh-metadata-and-provenance
+bash run/submit_submission_models_cluster_apptainer.sh --full --refresh-metadata-and-provenance --submit
+```
+
 Pass `--model-id HZ1` or `--model-id HZ2` to
 the submitter to run one model. Resource and container settings are described
 in `environment.modernization.md`.
@@ -52,5 +61,6 @@ in `environment.modernization.md`.
 The wrapper generates `workflow/selection/selection_manifest.tsv` separately
 for each model before membership reconstruction. It uses only the pinned query
 and drug-term snapshots; it does not query the live API or infer selections
-from a legacy GMT. `RUMMAGEO_SOURCE_MANIFEST` preserves the source URLs and
-versions for the RummaGEO and NCBI snapshots.
+from a legacy GMT. It also generates `workflow/source_manifest.json` from the
+standard local input source map, using each input file's SHA-256 as its pinned
+version identifier.
