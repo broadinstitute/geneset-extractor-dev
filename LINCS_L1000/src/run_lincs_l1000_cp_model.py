@@ -55,7 +55,7 @@ def main() -> int:
         "model_label": "l1000_cp",
         "workflow_name": "lincs_l1000_cp",
         "extractor_name": "direct_gmt_stream",
-        "parameters": {"public_gctx_url": "https://lincs-dcic.s3.amazonaws.com/LINCS-sigs-2021/gctx/cd-coefficient/cp_coeff_mat.gctx", "top_n": args.top_n, "ranking": "CD-coefficient descending; symbol ascending", "duplicate_lincs_id_resolution": "last GCTX column occurrence wins", "partition_id": args.partition_id, "cell_line": args.cell_line, "pert_time": args.pert_time, "output_mode": "direct_streaming_gmt", "term_suffixes": [" up", " down"], "gmt_description": "LINCS L1000 chemical perturbation Characteristic Direction signature"},
+        "parameters": {"public_gctx_url": "https://lincs-dcic.s3.amazonaws.com/LINCS-sigs-2021/gctx/cd-coefficient/cp_coeff_mat.gctx", "top_n": args.top_n, "ranking": "CD-coefficient descending; symbol ascending", "duplicate_lincs_id_resolution": "last GCTX column occurrence wins", "partition_id": args.partition_id, "cell_line": args.cell_line, "pert_time": args.pert_time, "output_mode": "direct_streaming_gmt", "term_suffixes": ["_up", "_dn"], "gmt_description": "LINCS L1000 chemical perturbation Characteristic Direction signature"},
         "inputs": {"organism": "human", "genome_build": "hg38", "gctx_path": str(gctx_path), "raw_indices_tsv": str(raw_indices_tsv) if raw_indices_tsv else None, "required_datasets": ["0/DATA/0/matrix", "0/META/ROW/id", "0/META/COL/lincs_id"]},
     }
     (extractor_out / "geneset.model.json").write_text(json.dumps(sidecar, indent=2, sort_keys=True) + "\n", encoding="utf-8")

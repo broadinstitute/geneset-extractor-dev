@@ -79,7 +79,7 @@ class LincsModernSubmissionTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             gmt = temp / "out/genesets/all_signatures/models/HZ4/extractor/genesets.gmt"
             lines = gmt.read_text(encoding="utf-8").splitlines()
-            self.assertEqual([line.split("\t", 1)[0] for line in lines], ["fixture down", "fixture up"])
+            self.assertEqual([line.split("\t", 1)[0] for line in lines], ["fixture_dn", "fixture_up"])
             self.assertTrue(all(line.split("\t")[1] == "LINCS L1000 chemical perturbation Characteristic Direction signature" for line in lines))
             self.assertTrue(all(len(line.split("\t")) == 252 for line in lines))
             extractor = gmt.parent
@@ -107,6 +107,6 @@ class LincsModernSubmissionTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             extractor = temp / "out/genesets/all_signatures/models/HZ3/extractor"
             lines = (extractor / "genesets.gmt").read_text(encoding="utf-8").splitlines()
-            self.assertEqual([line.split("\t", 1)[0] for line in lines], ["drug_a up", "drug_a down", "drug_b up", "drug_b down"])
+            self.assertEqual([line.split("\t", 1)[0] for line in lines], ["drug_a_up", "drug_a_dn", "drug_b_up", "drug_b_dn"])
             self.assertTrue(all(len(line.split("\t")) == 202 for line in lines))
             self.assertTrue((extractor / "geneset.meta.json").is_file())
