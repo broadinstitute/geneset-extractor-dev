@@ -26,7 +26,7 @@ max_concurrent="${HZ4_MAX_CONCURRENT_TASKS:-10}"
 memory="${HZ4_TASK_MEMORY:-${SUBMISSION_ARRAY_MEMORY:-${LINCS_ARRAY_MEMORY:-3G}}}"
 walltime="${HZ4_TASK_WALLTIME:-${SUBMISSION_ARRAY_WALLTIME:-${LINCS_ARRAY_WALLTIME:-24:00:00}}}"
 mkdir -p "${SUBMISSION_WORK_DIR}/qsub_logs"
-command=("${QSUB_BIN:-qsub}" -V -N lincs_hz4_cell_time -t "1-${task_count}" -tc "${max_concurrent}" \
+command=("${QSUB_BIN:-qsub}" -V -v "LINCS_L1000_ROOT=${root}" -N lincs_hz4_cell_time -t "1-${task_count}" -tc "${max_concurrent}" \
   -o "${SUBMISSION_WORK_DIR}/qsub_logs/lincs_hz4_cell_time.out" \
   -e "${SUBMISSION_WORK_DIR}/qsub_logs/lincs_hz4_cell_time.err" \
   -l "h_vmem=${memory},h_rt=${walltime}" \

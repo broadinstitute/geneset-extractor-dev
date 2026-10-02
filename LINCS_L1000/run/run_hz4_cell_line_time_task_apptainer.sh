@@ -14,7 +14,11 @@ if [[ -z "${task_id}" ]]; then
   task_id="${SGE_TASK_ID:-}"
 fi
 [[ -n "${task_id}" ]] || { echo "--task-id is required outside an SGE array" >&2; exit 2; }
-root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+if [[ -n "${LINCS_L1000_ROOT:-}" ]]; then
+  root="$(cd -- "${LINCS_L1000_ROOT}" && pwd -P)"
+else
+  root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+fi
 [[ -n "${APPTAINER_IMAGE:-}" && -f "${APPTAINER_IMAGE}" ]] || { echo "Set APPTAINER_IMAGE to an existing image" >&2; exit 1; }
 [[ -n "${DIG_REPO:-}" && -d "${DIG_REPO}" ]] || { echo "Set DIG_REPO to a DIG checkout" >&2; exit 1; }
 [[ -n "${SUBMISSION_WORK_DIR:-}" ]] || { echo "Set SUBMISSION_WORK_DIR outside the LINCS_L1000 checkout" >&2; exit 1; }
