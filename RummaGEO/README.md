@@ -36,6 +36,24 @@ For a full run, set the following local-file environment variables, then run
 validation targets. They are passed only to DIG's diagnostic comparison and
 cannot alter reconstructed memberships.
 
+Generate the cached query artifacts before an offline full run. These commands
+contact the historical endpoint once and write deterministic cached records;
+all later selection and reconstruction uses those files offline:
+
+```bash
+cd /path/to/dig-gene-set-extractors
+python -m geneset_extractors.cli convert rumma_geo_acquire \
+  --model_id HZ2 --out_dir /path/to/cache/rummageo_gene
+python -m geneset_extractors.cli convert rumma_geo_acquire \
+  --model_id HZ1 --drug_terms_json /path/to/sigcom_lincs_drug_terms.json \
+  --out_dir /path/to/cache/rummageo_drug
+```
+
+Use the appropriate generated `rummageo_query_records.json` as
+`RUMMAGEO_QUERY_RECORDS_JSON` when running HZ2 or HZ1 respectively. Each cache
+directory also contains `rummageo_query_records.acquisition.json`, which
+records pagination, source endpoint, query inputs, and content hashes.
+
 For Apptainer, additionally set `APPTAINER_IMAGE` and run:
 
 ```bash
