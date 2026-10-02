@@ -63,6 +63,11 @@ emits a separate, complete HZ4 GMT/model output, so the task outputs are not
 merged afterward. The planner first applies the standard HZ4 rule that the
 last GCTX column wins for duplicate `lincs_id` values.
 
+HZ4 writes its final GMT while streaming coefficient vectors from the GCTX;
+it does not create or reload a signed term-gene TSV. Consequently the HZ4
+array launcher has a `3G` default memory request. This is independent of the
+GCTX I/O load, so begin with modest concurrency on shared storage.
+
 With the standard Apptainer environment variables plus `LINCS_CP_COEFF_GCTX`
 set, create the plan, inspect its task count, then submit it:
 
@@ -75,7 +80,7 @@ bash run/submit_hz4_cell_line_time_cluster_apptainer.sh --submit
 ```
 
 The manifest has one header row, so its line count minus one is the number of
-array tasks. The submitter defaults to `32G`, `24:00:00`, and at most ten
+array tasks. The submitter defaults to `3G`, `24:00:00`, and at most ten
 simultaneous tasks. `HZ4_TASK_MEMORY` and `HZ4_TASK_WALLTIME` take priority;
 otherwise it uses `SUBMISSION_ARRAY_MEMORY` and `SUBMISSION_ARRAY_WALLTIME`
 (then the legacy `LINCS_ARRAY_*` variables). Set

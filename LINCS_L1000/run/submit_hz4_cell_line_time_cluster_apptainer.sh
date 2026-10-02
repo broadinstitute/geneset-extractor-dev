@@ -23,7 +23,7 @@ manifest="${plan_dir}/task_manifest.tsv"
 task_count="$(awk 'NR > 1 { count += 1 } END { print count + 0 }' "${manifest}")"
 [[ "${task_count}" -gt 0 ]] || { echo "HZ4 task manifest has no tasks: ${manifest}" >&2; exit 1; }
 max_concurrent="${HZ4_MAX_CONCURRENT_TASKS:-10}"
-memory="${HZ4_TASK_MEMORY:-${SUBMISSION_ARRAY_MEMORY:-${LINCS_ARRAY_MEMORY:-32G}}}"
+memory="${HZ4_TASK_MEMORY:-${SUBMISSION_ARRAY_MEMORY:-${LINCS_ARRAY_MEMORY:-3G}}}"
 walltime="${HZ4_TASK_WALLTIME:-${SUBMISSION_ARRAY_WALLTIME:-${LINCS_ARRAY_WALLTIME:-24:00:00}}}"
 mkdir -p "${SUBMISSION_WORK_DIR}/qsub_logs"
 task_command="exec $(printf '%q' "${root}/run/run_hz4_cell_line_time_task_apptainer.sh") --task-id \"\${SGE_TASK_ID}\""
