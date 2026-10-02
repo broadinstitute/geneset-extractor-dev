@@ -36,7 +36,7 @@ def main() -> int:
     if args.smoke:
         command = [sys.executable, str(root / "src/build_lincs_l1000_genesets.py"), "--models", "HZ1", "--python_bin", sys.executable, "--chempert_expression_tsv", str(root / "tests/fixtures/lincs_smoke_chempert.tsv"), "--mapping_file", str(root / "tests/fixtures/lincs_smoke_mapping.tsv"), "--model_manifest", str(root / "config/smoke_model_manifest.tsv"), "--dig_dir", str(dig_repo), "--out_root", str(out_root / "smoke"), "--overwrite"]
         return _run(command)
-    command = [sys.executable, str(root / "src/build_lincs_l1000_genesets.py"), "--models", "all", "--python_bin", sys.executable, "--chempert_expression_tsv", str(_required_file("LINCS_CHEMPERT_EXPRESSION_TSV")), "--crisprko_expression_tsv", str(_required_file("LINCS_CRISPRKO_EXPRESSION_TSV")), "--cp_signature_manifest_tsv", str(_required_file("LINCS_CP_SIGNATURE_MANIFEST_TSV")), "--cp_cache_dir", os.environ.get("LINCS_CP_CACHE_DIR", str(out_root / "source_cache")), "--mapping_file", str(_required_file("LINCS_MAPPING_FILE")), "--dig_dir", str(dig_repo), "--out_root", str(out_root), "--overwrite"]
+    command = [sys.executable, str(root / "src/build_lincs_l1000_genesets.py"), "--models", "all", "--python_bin", sys.executable, "--chempert_expression_tsv", str(_required_file("LINCS_CHEMPERT_EXPRESSION_TSV")), "--crisprko_expression_tsv", str(_required_file("LINCS_CRISPRKO_EXPRESSION_TSV")), "--cp_coeff_gctx", str(_required_file("LINCS_CP_COEFF_GCTX")), "--mapping_file", str(_required_file("LINCS_MAPPING_FILE")), "--dig_dir", str(dig_repo), "--out_root", str(out_root), "--overwrite"]
     return _run(command)
 
 

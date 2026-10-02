@@ -26,8 +26,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--python_bin", default=sys.executable or "python3")
     parser.add_argument("--chempert_expression_tsv")
     parser.add_argument("--crisprko_expression_tsv")
-    parser.add_argument("--cp_signature_manifest_tsv")
-    parser.add_argument("--cp_cache_dir")
+    parser.add_argument("--cp_coeff_gctx")
+    parser.add_argument("--cp_block_size", type=int, default=256)
     parser.add_argument("--mapping_file")
     parser.add_argument("--dig_dir", required=True)
     parser.add_argument("--provenance_mirror_local_prefix")
@@ -94,7 +94,7 @@ def main() -> int:
     input_by_model = {
         "HZ1": require_existing_file(args.chempert_expression_tsv, "chempert expression TSV") if "HZ1" in selected_models else None,
         "HZ2": require_existing_file(args.crisprko_expression_tsv, "crisprko expression TSV") if "HZ2" in selected_models else None,
-        "HZ4": require_existing_file(args.cp_signature_manifest_tsv, "CP signature manifest TSV") if "HZ4" in selected_models else None,
+        "HZ4": require_existing_file(args.cp_coeff_gctx, "CP coefficient GCTX") if "HZ4" in selected_models else None,
     }
 
     conflicts: list[str] = []
@@ -119,8 +119,9 @@ def main() -> int:
                     "--run_root", str(outputs_root / "all_signatures" / "models"),
                     "--python_bin", str(Path(args.python_bin).resolve()),
                     "--dig_dir", str(dig_dir),
-                    "--signature_manifest_tsv", str(input_by_model[model_id]),
-                ] + (["--cache_dir", str(Path(args.cp_cache_dir).resolve())] if args.cp_cache_dir else [])
+                    "--gctx_path", str(input_by_model[model_id]),
+                    "--block_size", str(args.cp_block_size),
+                ]
             )
             continue
         if model_family != "hz_released_matrix":

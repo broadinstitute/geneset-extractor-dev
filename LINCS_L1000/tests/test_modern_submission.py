@@ -8,6 +8,9 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import h5py
+import numpy as np
+
 ROOT = Path(__file__).resolve().parents[1]
 DIG = ROOT.parents[1] / "dig-gene-set-extractors"
 
@@ -61,15 +64,13 @@ class LincsModernSubmissionTests(unittest.TestCase):
     def test_hz4_wrapper_exports_legacy_style_gmt(self) -> None:
         with TemporaryDirectory() as temp_dir:
             temp = Path(temp_dir)
-            source = temp / "signature.tsv"
-            source.write_text(
-                "symbol\tCD-coefficient\n" + "\n".join(f"GENE{i:03d}\t{500 - i}" for i in range(500)) + "\n",
-                encoding="utf-8",
-            )
-            manifest = temp / "manifest.tsv"
-            manifest.write_text(f"persistent_id\tsource_path\nL1000_LINCS_DCIC_fixture.tsv\t{source}\n", encoding="utf-8")
+            source = temp / "cp_coeff_mat.gctx"
+            with h5py.File(source, "w") as handle:
+                handle.create_dataset("0/DATA/0/matrix", data=np.arange(500, 0, -1).reshape(1, 500))
+                handle.create_dataset("0/META/ROW/id", data=np.asarray([f"GENE{i:03d}".encode() for i in range(500)]))
+                handle.create_dataset("0/META/COL/lincs_id", data=np.asarray([b"fixture"]))
             result = subprocess.run(
-                [sys.executable, str(ROOT / "src/build_lincs_l1000_genesets.py"), "--models", "HZ4", "--cp_signature_manifest_tsv", str(manifest), "--dig_dir", str(DIG), "--out_root", str(temp / "out"), "--overwrite"],
+                [sys.executable, str(ROOT / "src/build_lincs_l1000_genesets.py"), "--models", "HZ4", "--cp_coeff_gctx", str(source), "--dig_dir", str(DIG), "--out_root", str(temp / "out"), "--overwrite"],
                 cwd=ROOT,
                 env={**os.environ, "PYTHONPATH": str(DIG / "src") + (":" + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else "")},
                 capture_output=True,
