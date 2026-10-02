@@ -48,7 +48,7 @@ def main() -> int:
         "model_label": "l1000_cp",
         "workflow_name": "lincs_l1000_cp",
         "extractor_name": "signed_term_gene",
-        "parameters": {"public_gctx_url": "https://lincs-dcic.s3.amazonaws.com/LINCS-sigs-2021/gctx/cd-coefficient/cp_coeff_mat.gctx", "top_n": args.top_n, "ranking": "CD-coefficient descending; symbol ascending", "term_suffixes": [" up", " down"], "gmt_description": ""},
+        "parameters": {"public_gctx_url": "https://lincs-dcic.s3.amazonaws.com/LINCS-sigs-2021/gctx/cd-coefficient/cp_coeff_mat.gctx", "top_n": args.top_n, "ranking": "CD-coefficient descending; symbol ascending", "duplicate_lincs_id_resolution": "last GCTX column occurrence wins", "term_suffixes": [" up", " down"], "gmt_description": ""},
         "inputs": {"organism": "human", "genome_build": "hg38", "gctx_path": str(gctx_path), "required_datasets": ["0/DATA/0/matrix", "0/META/ROW/id", "0/META/COL/lincs_id"]},
     }
     (extractor_out / "geneset.model.json").write_text(json.dumps(sidecar, indent=2, sort_keys=True) + "\n", encoding="utf-8")

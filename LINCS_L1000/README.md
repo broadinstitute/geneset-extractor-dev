@@ -13,7 +13,11 @@ chemical-perturbation signature independently emits the top 250
 `LINCS_CP_COEFF_GCTX` to a local copy of the GCTX; its public source is
 `https://lincs-dcic.s3.amazonaws.com/LINCS-sigs-2021/gctx/cd-coefficient/cp_coeff_mat.gctx`.
 The current public source contains about 102 more signatures than the legacy
-GMT; HZ4 does not filter them to force a historical count.
+GMT; HZ4 resolves the 102 repeated nonblank `lincs_id` groups by retaining the
+last GCTX column occurrence. This yields 718,055 unique signatures (and
+1,436,110 terms). Ninety-two duplicate groups have identical coefficient
+vectors; for the ten differing groups, this is a deterministic public-source
+resolution policy, not a claim about the historical pipeline.
 
 Run the committed HZ1 smoke fixture with:
 
