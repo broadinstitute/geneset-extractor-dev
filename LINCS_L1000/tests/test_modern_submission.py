@@ -48,6 +48,8 @@ class LincsModernSubmissionTests(unittest.TestCase):
     def test_legacy_array_launcher_creates_the_output_bind_source(self) -> None:
         source = (ROOT.parent / "run/submit_lincs_l1000_models_cluster_apptainer.sh").read_text(encoding="utf-8")
         self.assertIn('"${LINCS_OUT_ROOT}"', source)
+        self.assertIn('SUBMISSION_ARRAY_MEMORY:-16G', source)
+        self.assertIn('SUBMISSION_ARRAY_WALLTIME:-24:00:00', source)
 
     def test_joint_cluster_launcher_splits_hz4(self) -> None:
         source = (ROOT.parent / "run/submit_lincs_l1000_models_cluster_apptainer.sh").read_text(encoding="utf-8")
