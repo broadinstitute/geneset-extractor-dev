@@ -82,7 +82,7 @@ def main() -> int:
         for key, path in inputs.items():
             command.extend([f"--{key}", str(path)])
         command.extend(["--model_id", model_id, "--out_dir", str(out_dir)])
-        legacy_env = "RUMMAGEO_GENE_LEGACY_GMT" if model_id == "gene_perturbations" else "RUMMAGEO_DRUG_LEGACY_GMT"
+        legacy_env = "RUMMAGEO_DRUG_LEGACY_GMT" if model_id == "HZ1" else "RUMMAGEO_GENE_LEGACY_GMT"
         if os.environ.get(legacy_env):
             command.extend(["--legacy_gmt", str(_required_env_file(legacy_env))])
         print("$ " + " ".join(command), flush=True)

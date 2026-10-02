@@ -1,0 +1,3 @@
+source_term	model_id	status	normalized_term	search_term
+GSE1-0-vs-1-human	HZ2	signature	GSE1_KO_human	KO
+GSE2-0-vs-1-mouse	HZ1	reversed	GSE2_drug_mouse	drug

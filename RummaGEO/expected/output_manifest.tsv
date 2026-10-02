@@ -1,0 +1,7 @@
+model_id	output_relative_path	required
+HZ1	genesets/all_signatures/models/HZ1/extractor/genesets.gmt	true
+HZ1	genesets/all_signatures/models/HZ1/extractor/geneset.meta.json	true
+HZ1	genesets/all_signatures/models/HZ1/extractor/reconstruction_diagnostics.json	true
+HZ2	genesets/all_signatures/models/HZ2/extractor/genesets.gmt	true
+HZ2	genesets/all_signatures/models/HZ2/extractor/geneset.meta.json	true
+HZ2	genesets/all_signatures/models/HZ2/extractor/reconstruction_diagnostics.json	true
