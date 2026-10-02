@@ -80,5 +80,9 @@ class LincsModernSubmissionTests(unittest.TestCase):
             gmt = temp / "out/genesets/all_signatures/models/HZ4/extractor/genesets.gmt"
             lines = gmt.read_text(encoding="utf-8").splitlines()
             self.assertEqual([line.split("\t", 1)[0] for line in lines], ["fixture down", "fixture up"])
-            self.assertTrue(all(line.split("\t")[1] == "" for line in lines))
+            self.assertTrue(all(line.split("\t")[1] == "LINCS L1000 chemical perturbation Characteristic Direction signature" for line in lines))
             self.assertTrue(all(len(line.split("\t")) == 252 for line in lines))
+            extractor = gmt.parent
+            for filename in ["geneset.tsv", "geneset.full.tsv", "signature_summary.tsv", "geneset.meta.json", "geneset.provenance.legacy.json", "geneset.provenance.dapper.yaml", "geneset.provenance.json"]:
+                self.assertTrue((extractor / filename).is_file(), filename)
+            self.assertFalse((gmt.parent.parent / "workflow/lincs_l1000_cp_signed_term_gene.tsv").exists())

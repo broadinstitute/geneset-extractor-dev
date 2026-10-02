@@ -7,7 +7,6 @@ import csv
 import json
 import os
 import shlex
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -56,7 +55,7 @@ def main() -> int:
         "model_label": "l1000_cp",
         "workflow_name": "lincs_l1000_cp",
         "extractor_name": "direct_gmt_stream",
-        "parameters": {"public_gctx_url": "https://lincs-dcic.s3.amazonaws.com/LINCS-sigs-2021/gctx/cd-coefficient/cp_coeff_mat.gctx", "top_n": args.top_n, "ranking": "CD-coefficient descending; symbol ascending", "duplicate_lincs_id_resolution": "last GCTX column occurrence wins", "partition_id": args.partition_id, "cell_line": args.cell_line, "pert_time": args.pert_time, "output_mode": "direct_streaming_gmt", "term_suffixes": [" up", " down"], "gmt_description": ""},
+        "parameters": {"public_gctx_url": "https://lincs-dcic.s3.amazonaws.com/LINCS-sigs-2021/gctx/cd-coefficient/cp_coeff_mat.gctx", "top_n": args.top_n, "ranking": "CD-coefficient descending; symbol ascending", "duplicate_lincs_id_resolution": "last GCTX column occurrence wins", "partition_id": args.partition_id, "cell_line": args.cell_line, "pert_time": args.pert_time, "output_mode": "direct_streaming_gmt", "term_suffixes": [" up", " down"], "gmt_description": "LINCS L1000 chemical perturbation Characteristic Direction signature"},
         "inputs": {"organism": "human", "genome_build": "hg38", "gctx_path": str(gctx_path), "raw_indices_tsv": str(raw_indices_tsv) if raw_indices_tsv else None, "required_datasets": ["0/DATA/0/matrix", "0/META/ROW/id", "0/META/COL/lincs_id"]},
     }
     (extractor_out / "geneset.model.json").write_text(json.dumps(sidecar, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -67,11 +66,13 @@ def main() -> int:
     workflow_cmd = [py, "-m", "geneset_extractors.cli", "workflows", "lincs_l1000_cp", "--gctx_path", str(gctx_path), "--out_dir", str(workflow_out), "--top_n", str(args.top_n), "--block_size", str(args.block_size), "--emit_signed_tsv", "false"]
     if raw_indices_tsv is not None:
         workflow_cmd += ["--raw_indices_tsv", str(raw_indices_tsv)]
-    commands = "\n".join(["# Commands For HZ4", "", "```bash", f"cd {shlex.quote(str(dig_dir))}", f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {' '.join(shlex.quote(x) for x in workflow_cmd)}", f"cp {shlex.quote(str(workflow_out / 'l1000_cp.gmt'))} {shlex.quote(str(extractor_out / 'genesets.gmt'))}", "```", ""])
+    finalizer_cmd = [py, "-m", "geneset_extractors.cli", "convert", "lincs_l1000_cp_gmt", "--gmt", str(workflow_out / "l1000_cp.gmt"), "--out_dir", str(extractor_out), "--upstream_provenance_graph_json", str(workflow_out / "l1000_cp.provenance_graph.json")]
+    provenance_cmd = [py, "-m", "geneset_extractors.cli", "provenance", "build", str(extractor_out / "geneset.meta.json"), "--out", str(extractor_out / "geneset.provenance.json"), "--upstream_provenance_graph_json", str(workflow_out / "l1000_cp.provenance_graph.json")]
+    commands = "\n".join(["# Commands For HZ4", "", "## Workflow", "", "```bash", f"cd {shlex.quote(str(dig_dir))}", f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {' '.join(shlex.quote(x) for x in workflow_cmd)}", "```", "", "## Streaming finalizer", "", "```bash", f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {' '.join(shlex.quote(x) for x in finalizer_cmd)}", "```", "", "## Provenance", "", "```bash", f"PYTHONPATH={shlex.quote(str(dig_dir / 'src'))} {' '.join(shlex.quote(x) for x in provenance_cmd)}", "```", ""])
     (model_out / "commands.md").write_text(commands, encoding="utf-8")
     log = model_out / "run.log"
-    _run(workflow_cmd, dig_dir, env, log)
-    shutil.copyfile(workflow_out / "l1000_cp.gmt", extractor_out / "genesets.gmt")
+    for command in (workflow_cmd, finalizer_cmd, provenance_cmd):
+        _run(command, dig_dir, env, log)
     with (extractor_out / "run_manifest.json").open("w", encoding="utf-8", newline="\n") as handle:
         json.dump({"model_id": "HZ4", "partition_id": args.partition_id, "cell_line": args.cell_line, "pert_time": args.pert_time, "output_mode": "direct_streaming_gmt", "workflow_dir": str(workflow_out), "extractor_dir": str(extractor_out)}, handle, indent=2, sort_keys=True)
         handle.write("\n")

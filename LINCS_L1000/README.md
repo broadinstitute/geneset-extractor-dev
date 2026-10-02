@@ -86,3 +86,6 @@ otherwise it uses `SUBMISSION_ARRAY_MEMORY` and `SUBMISSION_ARRAY_WALLTIME`
 (then the legacy `LINCS_ARRAY_*` variables). Set
 `HZ4_MAX_CONCURRENT_TASKS` to change concurrency. To use a nondefault plan
 location, set `HZ4_PARTITION_PLAN_DIR` consistently for both commands.
+To replace outputs from a prior HZ4 attempt, explicitly set
+`HZ4_OVERWRITE=1` before resubmitting; otherwise existing task output is
+preserved and the task fails rather than overwriting it.
