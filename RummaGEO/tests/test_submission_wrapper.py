@@ -22,10 +22,13 @@ def test_smoke_wrapper_dispatches_both_declared_models() -> None:
             text=True,
         )
         assert result.returncode == 0, result.stderr + result.stdout
-        for model_id, expected_term in [("HZ1", "GSE2_drug_mouse_up"), ("HZ2", "GSE1_KO_human_dn")]:
+        for model_id, expected_term in [("HZ1", "GSE2_drug_0_v_1_mouse_up"), ("HZ2", "GSE1_knockdown_0_v_1_human_up")]:
             extractor = Path(temp_dir) / "genesets/all_signatures/models" / model_id / "extractor"
+            selection = Path(temp_dir) / "genesets/all_signatures/models" / model_id / "workflow/selection"
             assert (extractor / "geneset.meta.json").is_file()
             assert (extractor / "reconstruction_diagnostics.json").is_file()
+            assert (selection / "selection_manifest.tsv").is_file()
+            assert (selection / "query_records.used.json").is_file()
             assert (extractor / "genesets.gmt").read_text(encoding="utf-8").split("\t", 1)[0] == expected_term
 
 

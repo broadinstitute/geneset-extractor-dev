@@ -18,8 +18,22 @@ fi
 [[ -n "${SUBMISSION_WORK_DIR:-}" ]] || { echo "Set SUBMISSION_WORK_DIR outside the RummaGEO checkout" >&2; exit 1; }
 mkdir -p "${SUBMISSION_WORK_DIR}"
 
+requested_models="all"
+for ((argument_index=1; argument_index <= $#; argument_index++)); do
+  argument="${!argument_index}"
+  if [[ "${argument}" == "--models" ]]; then
+    next_index=$((argument_index + 1))
+    requested_models="${!next_index:-}"
+  elif [[ "${argument}" == --models=* ]]; then
+    requested_models="${argument#--models=}"
+  fi
+done
+full_variables=(RUMMAGEO_HUMAN_GMT RUMMAGEO_MOUSE_GMT RUMMAGEO_QUERY_RECORDS_JSON RUMMAGEO_SOURCE_MANIFEST RUMMAGEO_HUMAN_GENE_INFO RUMMAGEO_MOUSE_GENE_INFO RUMMAGEO_GENE_ORTHOLOGS)
+if [[ "${requested_models}" == "all" || ",${requested_models}," == *",HZ1,"* ]]; then
+  full_variables+=(RUMMAGEO_DRUG_TERMS_JSON)
+fi
 if [[ "${mode}" == "--full" ]]; then
-  for variable in RUMMAGEO_HUMAN_GMT RUMMAGEO_MOUSE_GMT RUMMAGEO_SELECTION_MANIFEST RUMMAGEO_SOURCE_MANIFEST RUMMAGEO_HUMAN_GENE_INFO RUMMAGEO_MOUSE_GENE_INFO RUMMAGEO_GENE_ORTHOLOGS; do
+  for variable in "${full_variables[@]}"; do
     [[ -n "${!variable:-}" && -f "${!variable}" ]] || { echo "Set ${variable} to an existing full-run input file" >&2; exit 1; }
   done
 fi
@@ -35,7 +49,7 @@ add_bind_path "${root}"
 add_bind_path "${DIG_REPO}"
 add_bind_path "${SUBMISSION_WORK_DIR}"
 if [[ "${mode}" == "--full" ]]; then
-  for variable in RUMMAGEO_HUMAN_GMT RUMMAGEO_MOUSE_GMT RUMMAGEO_SELECTION_MANIFEST RUMMAGEO_SOURCE_MANIFEST RUMMAGEO_HUMAN_GENE_INFO RUMMAGEO_MOUSE_GENE_INFO RUMMAGEO_GENE_ORTHOLOGS RUMMAGEO_GENE_LEGACY_GMT RUMMAGEO_DRUG_LEGACY_GMT; do
+  for variable in "${full_variables[@]}" RUMMAGEO_GENE_LEGACY_GMT RUMMAGEO_DRUG_LEGACY_GMT; do
     [[ -n "${!variable:-}" ]] && add_bind_path "${!variable}"
   done
 fi
@@ -53,7 +67,8 @@ APPTAINERENV_DIG_REPO="${DIG_REPO}" \
 APPTAINERENV_SUBMISSION_WORK_DIR="${SUBMISSION_WORK_DIR}" \
 APPTAINERENV_RUMMAGEO_HUMAN_GMT="${RUMMAGEO_HUMAN_GMT:-}" \
 APPTAINERENV_RUMMAGEO_MOUSE_GMT="${RUMMAGEO_MOUSE_GMT:-}" \
-APPTAINERENV_RUMMAGEO_SELECTION_MANIFEST="${RUMMAGEO_SELECTION_MANIFEST:-}" \
+APPTAINERENV_RUMMAGEO_QUERY_RECORDS_JSON="${RUMMAGEO_QUERY_RECORDS_JSON:-}" \
+APPTAINERENV_RUMMAGEO_DRUG_TERMS_JSON="${RUMMAGEO_DRUG_TERMS_JSON:-}" \
 APPTAINERENV_RUMMAGEO_SOURCE_MANIFEST="${RUMMAGEO_SOURCE_MANIFEST:-}" \
 APPTAINERENV_RUMMAGEO_HUMAN_GENE_INFO="${RUMMAGEO_HUMAN_GENE_INFO:-}" \
 APPTAINERENV_RUMMAGEO_MOUSE_GENE_INFO="${RUMMAGEO_MOUSE_GENE_INFO:-}" \

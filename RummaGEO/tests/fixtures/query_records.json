@@ -1,0 +1,16 @@
+[
+  {
+    "id": "fixture-hz2-gse1",
+    "search_term": "knockdown",
+    "term": "GSE1-0-vs-1-human up",
+    "title": "fixture gene perturbation",
+    "sampleGroups": {"titles": {"0": "scrambled control", "1": "target knockdown"}}
+  },
+  {
+    "id": "fixture-hz1-gse2",
+    "search_term": "drug",
+    "term": "GSE2-0-vs-1-mouse dn",
+    "title": "fixture drug perturbation",
+    "sampleGroups": {"titles": {"0": "DMSO control", "1": "drug treatment"}}
+  }
+]

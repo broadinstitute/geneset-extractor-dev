@@ -24,29 +24,35 @@ def _required_env_file(name: str) -> Path:
     return path.resolve()
 
 
-def _full_inputs() -> dict[str, Path]:
-    return {
+def _full_inputs(selected: list[str]) -> dict[str, Path]:
+    inputs = {
         "human_gmt": _required_env_file("RUMMAGEO_HUMAN_GMT"),
         "mouse_gmt": _required_env_file("RUMMAGEO_MOUSE_GMT"),
-        "selection_manifest": _required_env_file("RUMMAGEO_SELECTION_MANIFEST"),
+        "query_records_json": _required_env_file("RUMMAGEO_QUERY_RECORDS_JSON"),
         "source_manifest": _required_env_file("RUMMAGEO_SOURCE_MANIFEST"),
         "human_gene_info": _required_env_file("RUMMAGEO_HUMAN_GENE_INFO"),
         "mouse_gene_info": _required_env_file("RUMMAGEO_MOUSE_GENE_INFO"),
         "gene_orthologs": _required_env_file("RUMMAGEO_GENE_ORTHOLOGS"),
     }
+    if "HZ1" in selected:
+        inputs["drug_terms_json"] = _required_env_file("RUMMAGEO_DRUG_TERMS_JSON")
+    return inputs
 
 
-def _smoke_inputs(root: Path) -> dict[str, Path]:
+def _smoke_inputs(root: Path, selected: list[str]) -> dict[str, Path]:
     fixture = root / "tests/fixtures"
-    return {
+    inputs = {
         "human_gmt": fixture / "human.gmt",
         "mouse_gmt": fixture / "mouse.gmt",
-        "selection_manifest": fixture / "selection_manifest.tsv",
+        "query_records_json": fixture / "query_records.json",
         "source_manifest": fixture / "source_manifest.json",
         "human_gene_info": fixture / "human_gene_info.tsv",
         "mouse_gene_info": fixture / "mouse_gene_info.tsv",
         "gene_orthologs": fixture / "gene_orthologs.tsv",
     }
+    if "HZ1" in selected:
+        inputs["drug_terms_json"] = fixture / "drug_terms.json"
+    return inputs
 
 
 def main() -> int:
@@ -67,20 +73,35 @@ def main() -> int:
     unknown = sorted(set(selected) - set(available))
     if unknown:
         raise SystemExit(f"unknown RummaGEO model ids: {', '.join(unknown)}")
-    inputs = _smoke_inputs(root) if args.smoke else _full_inputs()
+    inputs = _smoke_inputs(root, selected) if args.smoke else _full_inputs(selected)
     for key, path in inputs.items():
         if not path.is_file():
             raise SystemExit(f"missing declared {key}: {path}")
     pythonpath = str(dig_repo / "src") + (os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else "")
     for model_id in selected:
-        out_dir = Path(args.out_root).resolve() / "genesets/all_signatures/models" / model_id / "extractor"
-        if out_dir.exists():
+        model_root = Path(args.out_root).resolve() / "genesets/all_signatures/models" / model_id
+        out_dir = model_root / "extractor"
+        selection_dir = model_root / "workflow" / "selection"
+        if model_root.exists():
             if not args.overwrite:
-                raise SystemExit(f"output already exists for model={model_id}: {out_dir}; pass --overwrite to replace it")
-            shutil.rmtree(out_dir)
+                raise SystemExit(f"output already exists for model={model_id}: {model_root}; pass --overwrite to replace it")
+            shutil.rmtree(model_root)
+        selection_command = [
+            sys.executable, "-m", "geneset_extractors.cli", "convert", "rumma_geo_selection",
+            "--query_records_json", str(inputs["query_records_json"]),
+            "--model_id", model_id,
+            "--out_dir", str(selection_dir),
+        ]
+        if model_id == "HZ1":
+            selection_command.extend(["--drug_terms_json", str(inputs["drug_terms_json"])])
+        print("$ " + " ".join(selection_command), flush=True)
+        subprocess.run(selection_command, check=True, env={**os.environ, "PYTHONPATH": pythonpath})
         command = [sys.executable, "-m", "geneset_extractors.cli", "convert", "rumma_geo"]
         for key, path in inputs.items():
+            if key in {"query_records_json", "drug_terms_json"}:
+                continue
             command.extend([f"--{key}", str(path)])
+        command.extend(["--selection_manifest", str(selection_dir / "selection_manifest.tsv")])
         command.extend(["--model_id", model_id, "--out_dir", str(out_dir)])
         legacy_env = "RUMMAGEO_DRUG_LEGACY_GMT" if model_id == "HZ1" else "RUMMAGEO_GENE_LEGACY_GMT"
         if os.environ.get(legacy_env):

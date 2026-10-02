@@ -3,8 +3,8 @@
 This directory declares and dispatches the two RummaGEO models: `HZ1` (drug
 perturbations) and `HZ2` (gene perturbations). It contains no RummaGEO
 selection, label normalization, orthology, gene filtering, or GMT-generation
-logic; those scientific operations are implemented by DIG's `rumma_geo`
-converter.
+logic; those scientific operations are implemented by DIG's
+`rumma_geo_selection` and `rumma_geo` converters.
 
 Run the committed smoke fixture:
 
@@ -18,7 +18,10 @@ For a full run, set the following local-file environment variables, then run
 
 - `RUMMAGEO_HUMAN_GMT`
 - `RUMMAGEO_MOUSE_GMT`
-- `RUMMAGEO_SELECTION_MANIFEST`
+- `RUMMAGEO_QUERY_RECORDS_JSON` (a pinned cached RummaGEO GraphQL response,
+  with the notebook search term attached to every record)
+- `RUMMAGEO_DRUG_TERMS_JSON` (the pinned SigCom-LINCS drug-term snapshot used
+  by `HZ1`)
 - `RUMMAGEO_SOURCE_MANIFEST`
 - `RUMMAGEO_HUMAN_GENE_INFO`
 - `RUMMAGEO_MOUSE_GENE_INFO`
@@ -46,7 +49,8 @@ Pass `--model-id HZ1` or `--model-id HZ2` to
 the submitter to run one model. Resource and container settings are described
 in `environment.modernization.md`.
 
-The source manifest and selection manifest are required production inputs.
-They preserve the historically queried selection records and pinned URLs /
-versions for the RummaGEO and NCBI snapshots rather than inferring either from
-sample titles or current annotations.
+The wrapper generates `workflow/selection/selection_manifest.tsv` separately
+for each model before membership reconstruction. It uses only the pinned query
+and drug-term snapshots; it does not query the live API or infer selections
+from a legacy GMT. `RUMMAGEO_SOURCE_MANIFEST` preserves the source URLs and
+versions for the RummaGEO and NCBI snapshots.
