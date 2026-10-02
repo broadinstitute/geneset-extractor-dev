@@ -27,7 +27,7 @@ memory="${HZ4_TASK_MEMORY:-${SUBMISSION_ARRAY_MEMORY:-${LINCS_ARRAY_MEMORY:-3G}}
 walltime="${HZ4_TASK_WALLTIME:-${SUBMISSION_ARRAY_WALLTIME:-${LINCS_ARRAY_WALLTIME:-24:00:00}}}"
 mkdir -p "${SUBMISSION_WORK_DIR}/qsub_logs"
 task_command="exec $(printf '%q' "${root}/run/run_hz4_cell_line_time_task_apptainer.sh") --task-id \"\${SGE_TASK_ID}\""
-command=("${QSUB_BIN:-qsub}" -N lincs_hz4_cell_time -t "1-${task_count}%${max_concurrent}" \
+command=("${QSUB_BIN:-qsub}" -N lincs_hz4_cell_time -t "1-${task_count}" -tc "${max_concurrent}" \
   -o "${SUBMISSION_WORK_DIR}/qsub_logs/lincs_hz4_cell_time.out" \
   -e "${SUBMISSION_WORK_DIR}/qsub_logs/lincs_hz4_cell_time.err" \
   -l "h_vmem=${memory},h_rt=${walltime}" \
