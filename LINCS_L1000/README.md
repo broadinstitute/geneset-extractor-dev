@@ -76,6 +76,8 @@ bash run/submit_hz4_cell_line_time_cluster_apptainer.sh --submit
 
 The manifest has one header row, so its line count minus one is the number of
 array tasks. The submitter defaults to `32G`, `24:00:00`, and at most ten
-simultaneous tasks; override these with `HZ4_TASK_MEMORY`,
-`HZ4_TASK_WALLTIME`, and `HZ4_MAX_CONCURRENT_TASKS`. To use a nondefault
-plan location, set `HZ4_PARTITION_PLAN_DIR` consistently for both commands.
+simultaneous tasks. `HZ4_TASK_MEMORY` and `HZ4_TASK_WALLTIME` take priority;
+otherwise it uses `SUBMISSION_ARRAY_MEMORY` and `SUBMISSION_ARRAY_WALLTIME`
+(then the legacy `LINCS_ARRAY_*` variables). Set
+`HZ4_MAX_CONCURRENT_TASKS` to change concurrency. To use a nondefault plan
+location, set `HZ4_PARTITION_PLAN_DIR` consistently for both commands.
