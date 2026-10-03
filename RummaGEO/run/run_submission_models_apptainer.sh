@@ -10,6 +10,7 @@ case "${mode}" in --smoke|--full|full) ;; *) echo "usage: run_submission_models_
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 if [[ -n "${GENESET_EXTRACTORS_IN_APPTAINER:-}" ]]; then
   export PYTHON_BIN="${APPTAINER_PYTHON_BIN:-python}"
+  export PYTHONPATH="${DIG_REPO}/src${PYTHONPATH:+:${PYTHONPATH}}"
   exec bash "${root}/reproduction/reproduce.sh" "${mode}" "$@"
 fi
 
