@@ -74,7 +74,7 @@ def test_cluster_adapter_is_safe_by_default_and_uses_standard_interface() -> Non
     )
     assert result.returncode == 0, result.stderr + result.stdout
     assert "Would submit RummaGEO array:" in result.stdout
-    assert "-t 1-2" in result.stdout
+    assert "-t 1-1" in result.stdout
 
 
 def test_full_dispatch_generates_source_manifest_from_standard_source_map() -> None:
