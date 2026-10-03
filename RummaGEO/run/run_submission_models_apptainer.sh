@@ -33,6 +33,9 @@ if [[ "${requested_models}" == "all" || ",${requested_models}," == *",HZ1,"* ]];
   full_variables+=(RUMMAGEO_DRUG_TERMS_JSON)
 fi
 if [[ "${mode}" == "--full" ]]; then
+  if [[ "${RUMMAGEO_ORCHESTRATE_ALL:-0}" == "1" ]]; then
+    full_variables=(RUMMAGEO_HUMAN_GMT RUMMAGEO_MOUSE_GMT RUMMAGEO_HUMAN_GENE_INFO RUMMAGEO_MOUSE_GENE_INFO RUMMAGEO_GENE_ORTHOLOGS)
+  fi
   for variable in "${full_variables[@]}"; do
     [[ -n "${!variable:-}" && -f "${!variable}" ]] || { echo "Set ${variable} to an existing full-run input file" >&2; exit 1; }
   done
@@ -62,6 +65,7 @@ fi
 
 echo "+ ${APPTAINER_BIN:-apptainer} exec --bind ${bind_csv} ${APPTAINER_IMAGE} ..."
 APPTAINERENV_GENESET_EXTRACTORS_IN_APPTAINER=1 \
+APPTAINERENV_RUMMAGEO_ORCHESTRATE_ALL="${RUMMAGEO_ORCHESTRATE_ALL:-0}" \
 APPTAINERENV_APPTAINER_PYTHON_BIN="${APPTAINER_PYTHON_BIN:-python}" \
 APPTAINERENV_DIG_REPO="${DIG_REPO}" \
 APPTAINERENV_SUBMISSION_WORK_DIR="${SUBMISSION_WORK_DIR}" \
