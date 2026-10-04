@@ -71,6 +71,9 @@
 !RummaGEO/reproduction/*.tsv
 !RummaGEO/expected/
 !RummaGEO/expected/*.tsv
+!RummaGEO/adoption/
+!RummaGEO/adoption/*.md
+!RummaGEO/adoption/*.tsv
 !RummaGEO/tests/
 !RummaGEO/tests/fixtures/
 !RummaGEO/tests/fixtures/*.tsv
