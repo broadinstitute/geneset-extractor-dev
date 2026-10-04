@@ -24,7 +24,7 @@ DIRECTORY_ARG_PLACEHOLDERS = {
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEV_REPO_ROOT = WORKSPACE_ROOT / "geneset-extractor-dev"
-KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "RummaGEO")
+KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "RummaGEO", "GlyGen")
 LEGACY_EXTRACTOR_DIR_NAMES = ("extractor", "tissue_extractor")
 TRANSITIONAL_PROVENANCE_FILENAME = "geneset.provenance.json"
 LEGACY_PROVENANCE_FILENAME = "geneset.provenance.legacy.json"
@@ -951,6 +951,31 @@ def regenerate_rummageo_model_sidecars(args: argparse.Namespace, metadata_paths:
         write_json(metadata_path.with_name("geneset.model.json"), payload)
 
 
+def regenerate_glygen_model_sidecars(args: argparse.Namespace, metadata_paths: list[Path]) -> None:
+    model_name = {"HZ1": "glycosylated_proteins", "HZ2": "glycan_synthesizing_enzymes"}.get(args.model_id)
+    if model_name is None:
+        raise SystemExit(f"Unsupported GlyGen model id: {args.model_id}")
+    for metadata_path in metadata_paths:
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise SystemExit(f"Unable to read GlyGen metadata: {metadata_path}") from exc
+        converter_name = str(metadata.get("converter", "")) if isinstance(metadata, dict) else ""
+        payload = {
+            "schema_version": "1",
+            "library": "GlyGen",
+            "model_id": args.model_id,
+            "model_group": "HZ",
+            "model_label": model_name.replace("_", " "),
+            "workflow_name": converter_name or "glygen_reconstruction",
+            "extractor_name": converter_name or "glygen",
+            "parameters": {"model_name": model_name, "scientific_reimplementation": True},
+            "inputs": {"organism": "human", "genome_build": "hg38"},
+            "naming": {"gene_set_pattern": "GlyTouCan accession"},
+        }
+        write_json(metadata_path.with_name("geneset.model.json"), payload)
+
+
 def regenerate_model_sidecars(
     *,
     args: argparse.Namespace,
@@ -981,6 +1006,9 @@ def regenerate_model_sidecars(
         return
     if library_name == "RummaGEO":
         regenerate_rummageo_model_sidecars(args, metadata_paths)
+        return
+    if library_name == "GlyGen":
+        regenerate_glygen_model_sidecars(args, metadata_paths)
         return
     raise SystemExit(f"Unsupported library for standalone model-sidecar regeneration: {library_name}")
 

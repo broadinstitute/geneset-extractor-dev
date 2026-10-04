@@ -129,6 +129,7 @@
 !GlyGen/tests/fixtures/**/*.csv
 !GlyGen/tests/fixtures/**/*.tsv
 !GlyGen/tests/fixtures/**/*.json
+!GlyGen/tests/test_submission_wrapper.py
 
 # Allow traversing these subdirectories
 !LINCS_L1000/

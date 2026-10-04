@@ -1,3 +1,9 @@
 output_id	relative_path	role	required	model_id	partition_id
 glygen_smoke_hz1_gmt	genesets/all_glycans/models/HZ1/extractor/genesets.gmt	gmt	true	HZ1	all_glycans
+glygen_smoke_hz1_metadata	genesets/all_glycans/models/HZ1/extractor/geneset.meta.json	metadata	true	HZ1	all_glycans
+glygen_smoke_hz1_model	genesets/all_glycans/models/HZ1/extractor/geneset.model.json	model_metadata	true	HZ1	all_glycans
+glygen_smoke_hz1_diagnostics	genesets/all_glycans/models/HZ1/extractor/reconstruction_diagnostics.json	diagnostics	true	HZ1	all_glycans
 glygen_smoke_hz2_gmt	genesets/all_glycans/models/HZ2/extractor/genesets.gmt	gmt	true	HZ2	all_glycans
+glygen_smoke_hz2_metadata	genesets/all_glycans/models/HZ2/extractor/geneset.meta.json	metadata	true	HZ2	all_glycans
+glygen_smoke_hz2_model	genesets/all_glycans/models/HZ2/extractor/geneset.model.json	model_metadata	true	HZ2	all_glycans
+glygen_smoke_hz2_diagnostics	genesets/all_glycans/models/HZ2/extractor/reconstruction_diagnostics.json	diagnostics	true	HZ2	all_glycans

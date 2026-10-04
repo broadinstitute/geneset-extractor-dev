@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Thin GlyGen submission adapter; DIG owns both scientific reconstructions."""
+"""Thin GlyGen submission dispatcher; single-model runners own execution."""
 from __future__ import annotations
 
 import argparse
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -22,11 +21,6 @@ def _dir(variable: str) -> Path:
     return path.resolve()
 
 
-def _run(command: list[str], env: dict[str, str]) -> None:
-    print("$ " + " ".join(command), flush=True)
-    subprocess.run(command, check=True, env=env)
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     mode = parser.add_mutually_exclusive_group(required=True); mode.add_argument("--smoke", action="store_true"); mode.add_argument("--full", action="store_true")
@@ -34,26 +28,20 @@ def main() -> int:
     args = parser.parse_args(); root = Path(__file__).resolve().parents[1]
     dig = Path(os.environ.get("DIG_REPO", root.parents[1] / "dig-gene-set-extractors")).resolve()
     if not (dig / "src/geneset_extractors").is_dir(): raise SystemExit("DIG_REPO must identify a dig-gene-set-extractors checkout")
-    available = ["HZ1", "HZ2"]
-    selected = available if args.models == "all" else args.models.split(",")
-    if set(selected) - set(available): raise SystemExit("unknown GlyGen model id")
+    selected = ["HZ1", "HZ2"] if args.models == "all" else args.models.split(",")
+    if set(selected) - {"HZ1", "HZ2"}: raise SystemExit("unknown GlyGen model id")
     fixture = root / "tests/fixtures"
-    pythonpath = str(dig / "src") + (os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else "")
-    env = {**os.environ, "PYTHONPATH": pythonpath}
     for model in selected:
-        model_root = Path(args.out_root).resolve() / ("smoke" if args.smoke else "full") / "genesets/all_glycans/models" / model
-        if model_root.exists():
-            if not args.overwrite: raise SystemExit(f"output exists: {model_root}; pass --overwrite")
-            shutil.rmtree(model_root)
-        out = model_root / "extractor"
+        command = [sys.executable, str(root / "src/run_glygen_model.py"), "--model_id", model, "--run_root", str(Path(args.out_root).resolve() / "genesets/all_glycans/models"), "--dig_repo", str(dig)]
         if model == "HZ1":
             inputs = {"unicarbkb": fixture / "glycosylation_unicarbkb.csv", "harvard": fixture / "glycosylation_harvard.csv", "glyconnect": fixture / "glycosylation_glyconnect.csv", "masterlist": fixture / "human_protein_masterlist.csv"} if args.smoke else {"unicarbkb": _file("GLYGEN_UNICARBKB_CSV"), "harvard": _file("GLYGEN_HARVARD_CSV"), "glyconnect": _file("GLYGEN_GLYCONNECT_CSV"), "masterlist": _file("GLYGEN_PROTEIN_MASTERLIST_CSV")}
-            command = [sys.executable, "-m", "geneset_extractors.cli", "convert", "glygen_glycosylated_proteins", "--model_id", "HZ1", "--out_dir", str(out)]
             for name, path in inputs.items(): command.extend([f"--{name}", str(path)])
         else:
-            cache_dir = fixture / "glygen_api_cache" if args.smoke else _dir("GLYGEN_API_CACHE_DIR")
-            command = [sys.executable, "-m", "geneset_extractors.cli", "convert", "glygen_glycan_synthesizing_enzymes", "--model_id", "HZ2", "--cache_dir", str(cache_dir), "--out_dir", str(out)]
-        _run(command, env)
+            command.extend(["--cache_dir", str(fixture / "glygen_api_cache" if args.smoke else _dir("GLYGEN_API_CACHE_DIR"))])
+        if os.environ.get("LOCAL_INPUT_SOURCE_MAP_TSV"): command.extend(["--local_input_source_map_tsv", os.environ["LOCAL_INPUT_SOURCE_MAP_TSV"]])
+        if args.overwrite: command.append("--overwrite")
+        print("$ " + " ".join(command), flush=True)
+        subprocess.run(command, check=True)
     return 0
 
 
