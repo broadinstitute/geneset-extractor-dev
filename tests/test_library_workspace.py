@@ -21,6 +21,11 @@ class NewLibraryWorkspaceTest(unittest.TestCase):
     def identity(self, repo: Path) -> None:
         self.git(repo, "config", "user.name", "Gene Set Extractor Tests")
         self.git(repo, "config", "user.email", "geneset-extractor-tests@example.invalid")
+        # These repositories are intentionally short-lived.  Disable Git's
+        # automatic/background maintenance so TemporaryDirectory teardown
+        # cannot race a receive-side maintenance process in a bare test fork.
+        self.git(repo, "config", "gc.auto", "0")
+        self.git(repo, "config", "maintenance.auto", "false")
 
     def remote(self, root: Path, name: str, *, tools: bool = False, dig: bool = False) -> Path:
         source = root / f"{name}-source"
@@ -41,6 +46,9 @@ class NewLibraryWorkspaceTest(unittest.TestCase):
         remote = root / f"{name}.git"
         completed = subprocess.run(["git", "clone", "--bare", str(source), str(remote)], text=True, capture_output=True)
         self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.git(remote, "config", "gc.auto", "0")
+        self.git(remote, "config", "maintenance.auto", "false")
+        self.git(remote, "config", "receive.autogc", "false")
         return remote
 
     def workspace(self, root: Path, *, pattern: str = "generic") -> tuple[Path, Path, Path, Path]:
