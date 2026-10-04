@@ -21,5 +21,5 @@ for model in "${selected[@]}"; do
   [[ "${model}" == "HZ1" || "${model}" == "HZ2" ]] || { echo "Unknown GlyGen model: ${model}" >&2; exit 2; }
   command=(bash "${root}/run/run_submission_models_apptainer.sh" "${mode}" --models "${model}")
   if [[ ${submit} -eq 0 ]]; then printf 'Would submit GlyGen %s: ' "${model}"; printf '%q ' "${command[@]}"; printf '\n'; continue; fi
-  "${QSUB_BIN:-qsub}" -N "glygen_${model}" -o "${SUBMISSION_WORK_DIR}/qsub_logs/glygen_${model}.out" -e "${SUBMISSION_WORK_DIR}/qsub_logs/glygen_${model}.err" -l "h_vmem=${SUBMISSION_ARRAY_MEMORY:-4G},h_rt=${SUBMISSION_ARRAY_WALLTIME:-04:00:00}" "${command[@]}"
+  "${QSUB_BIN:-qsub}" -V -b y -N "glygen_${model}" -o "${SUBMISSION_WORK_DIR}/qsub_logs/glygen_${model}.out" -e "${SUBMISSION_WORK_DIR}/qsub_logs/glygen_${model}.err" -l "h_vmem=${SUBMISSION_ARRAY_MEMORY:-4G},h_rt=${SUBMISSION_ARRAY_WALLTIME:-04:00:00}" /bin/bash "${root}/run/run_submission_models_apptainer.sh" "${mode}" --models "${model}"
 done
