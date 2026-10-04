@@ -1,0 +1,3 @@
+model_id	model_family	description	enabled
+HZ1	glycosylated_proteins	GlyGen_v1_12_1_glycosylated_proteins	true
+HZ2	glycan_synthesizing_enzymes	GlyGen_sandbox_glycan_synthesizing_enzymes	true

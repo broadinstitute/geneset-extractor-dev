@@ -28,7 +28,7 @@ def main() -> int:
     args = parser.parse_args(); root = Path(__file__).resolve().parents[1]
     dig = Path(os.environ.get("DIG_REPO", root.parents[1] / "dig-gene-set-extractors")).resolve()
     if not (dig / "src/geneset_extractors").is_dir(): raise SystemExit("DIG_REPO must identify a dig-gene-set-extractors checkout")
-    available = ["glycosylated_proteins", "glycan_synthesizing_enzymes"]
+    available = ["HZ1", "HZ2"]
     selected = available if args.models == "all" else args.models.split(",")
     if set(selected) - set(available): raise SystemExit("unknown GlyGen model id")
     fixture = root / "tests/fixtures"
@@ -40,13 +40,13 @@ def main() -> int:
             if not args.overwrite: raise SystemExit(f"output exists: {model_root}; pass --overwrite")
             shutil.rmtree(model_root)
         out = model_root / "extractor"
-        if model == "glycosylated_proteins":
+        if model == "HZ1":
             inputs = {"unicarbkb": fixture / "glycosylation_unicarbkb.csv", "harvard": fixture / "glycosylation_harvard.csv", "glyconnect": fixture / "glycosylation_glyconnect.csv", "masterlist": fixture / "human_protein_masterlist.csv"} if args.smoke else {"unicarbkb": _file("GLYGEN_UNICARBKB_CSV"), "harvard": _file("GLYGEN_HARVARD_CSV"), "glyconnect": _file("GLYGEN_GLYCONNECT_CSV"), "masterlist": _file("GLYGEN_PROTEIN_MASTERLIST_CSV")}
-            command = [sys.executable, "-m", "geneset_extractors.cli", "convert", "glygen_glycosylated_proteins", "--out_dir", str(out)]
+            command = [sys.executable, "-m", "geneset_extractors.cli", "convert", "glygen_glycosylated_proteins", "--model_id", "HZ1", "--out_dir", str(out)]
             for name, path in inputs.items(): command.extend([f"--{name}", str(path)])
         else:
             manifest = fixture / "glygen_api_manifest.tsv" if args.smoke else _file("GLYGEN_API_CACHE_MANIFEST_TSV")
-            command = [sys.executable, "-m", "geneset_extractors.cli", "convert", "glygen_glycan_synthesizing_enzymes", "--cache_manifest", str(manifest), "--out_dir", str(out)]
+            command = [sys.executable, "-m", "geneset_extractors.cli", "convert", "glygen_glycan_synthesizing_enzymes", "--model_id", "HZ2", "--cache_manifest", str(manifest), "--out_dir", str(out)]
         _run(command, env)
     return 0
 

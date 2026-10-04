@@ -1,6 +1,6 @@
 # GlyGen
 
-Library ID: `GlyGen`. Models are `glycosylated_proteins` and `glycan_synthesizing_enzymes`.
+Library ID: `GlyGen`. `HZ1` is the `glycosylated_proteins` model and `HZ2` is the `glycan_synthesizing_enzymes` model.
 
 The wrapper is intentionally thin; all transformation logic and output metadata are in DIG. Run the deterministic smoke package with:
 
