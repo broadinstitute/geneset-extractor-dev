@@ -14,10 +14,15 @@ if [[ "${mode}" == "full" && "${RUMMAGEO_ORCHESTRATE_ALL:-0}" == "1" ]]; then
   : "${RUMMAGEO_HUMAN_GENE_INFO:?Set RUMMAGEO_HUMAN_GENE_INFO}"
   : "${RUMMAGEO_MOUSE_GENE_INFO:?Set RUMMAGEO_MOUSE_GENE_INFO}"
   : "${RUMMAGEO_GENE_ORTHOLOGS:?Set RUMMAGEO_GENE_ORTHOLOGS}"
-  exec "${PYTHON_BIN:-python3}" -m geneset_extractors.cli convert rumma_geo_all \
+  command=("${PYTHON_BIN:-python3}" -m geneset_extractors.cli convert rumma_geo_all \
     --human_gmt "${RUMMAGEO_HUMAN_GMT}" --mouse_gmt "${RUMMAGEO_MOUSE_GMT}" \
     --human_gene_info "${RUMMAGEO_HUMAN_GENE_INFO}" --mouse_gene_info "${RUMMAGEO_MOUSE_GENE_INFO}" \
-    --gene_orthologs "${RUMMAGEO_GENE_ORTHOLOGS}" --out_dir "${output_root}" "$@"
+    --gene_orthologs "${RUMMAGEO_GENE_ORTHOLOGS}" --out_dir "${output_root}")
+  [[ -n "${RUMMAGEO_SIGCOM_SIGNATURES_META_JSON:-}" ]] && command+=(--sigcom_signatures_meta_json "${RUMMAGEO_SIGCOM_SIGNATURES_META_JSON}")
+  [[ -n "${RUMMAGEO_DRUG_TERMS_JSON:-}" ]] && command+=(--drug_terms_json "${RUMMAGEO_DRUG_TERMS_JSON}")
+  [[ -n "${RUMMAGEO_GENE_QUERY_RECORDS_JSON:-}" ]] && command+=(--gene_query_records_json "${RUMMAGEO_GENE_QUERY_RECORDS_JSON}")
+  [[ -n "${RUMMAGEO_DRUG_QUERY_RECORDS_JSON:-}" ]] && command+=(--drug_query_records_json "${RUMMAGEO_DRUG_QUERY_RECORDS_JSON}")
+  exec "${command[@]}" "$@"
 fi
 dispatch_mode="${mode}"
 [[ "${dispatch_mode}" == "full" ]] && dispatch_mode="--full"
