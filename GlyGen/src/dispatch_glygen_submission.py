@@ -16,6 +16,12 @@ def _file(variable: str) -> Path:
     return path.resolve()
 
 
+def _dir(variable: str) -> Path:
+    path = Path(os.environ.get(variable, "")).expanduser()
+    if not path.is_dir(): raise SystemExit(f"missing required input directory {variable}; see reproduction/input_manifest.tsv")
+    return path.resolve()
+
+
 def _run(command: list[str], env: dict[str, str]) -> None:
     print("$ " + " ".join(command), flush=True)
     subprocess.run(command, check=True, env=env)
@@ -45,8 +51,8 @@ def main() -> int:
             command = [sys.executable, "-m", "geneset_extractors.cli", "convert", "glygen_glycosylated_proteins", "--model_id", "HZ1", "--out_dir", str(out)]
             for name, path in inputs.items(): command.extend([f"--{name}", str(path)])
         else:
-            manifest = fixture / "glygen_api_manifest.tsv" if args.smoke else _file("GLYGEN_API_CACHE_MANIFEST_TSV")
-            command = [sys.executable, "-m", "geneset_extractors.cli", "convert", "glygen_glycan_synthesizing_enzymes", "--model_id", "HZ2", "--cache_manifest", str(manifest), "--out_dir", str(out)]
+            cache_dir = fixture / "glygen_api_cache" if args.smoke else _dir("GLYGEN_API_CACHE_DIR")
+            command = [sys.executable, "-m", "geneset_extractors.cli", "convert", "glygen_glycan_synthesizing_enzymes", "--model_id", "HZ2", "--cache_dir", str(cache_dir), "--out_dir", str(out)]
         _run(command, env)
     return 0
 
