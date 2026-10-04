@@ -1,0 +1,3 @@
+model_id	model_family	description	enabled
+HZ1	rumma_geo_drug_perturbations	rummageo_drug_perturbation_signatures	true
+HZ2	rumma_geo_gene_perturbations	rummageo_gene_perturbation_signatures	true
