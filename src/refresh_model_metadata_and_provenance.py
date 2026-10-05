@@ -976,6 +976,19 @@ def regenerate_glygen_model_sidecars(args: argparse.Namespace, metadata_paths: l
         write_json(metadata_path.with_name("geneset.model.json"), payload)
 
 
+def regenerate_impc_model_sidecars(args: argparse.Namespace, metadata_paths: list[Path]) -> None:
+    if args.model_id != "HZ1":
+        raise SystemExit(f"Unsupported IMPC model id: {args.model_id}")
+    for metadata_path in metadata_paths:
+        write_json(metadata_path.with_name("geneset.model.json"), {
+            "schema_version": "1", "library": "IMPC", "model_id": "HZ1", "model_group": "HZ",
+            "model_label": "historical Harmonizome reconstruction", "workflow_name": "impc_dr18_direct_assertions",
+            "extractor_name": "impc_hz1", "parameters": {"min_genes": 5, "mapping": "Harmonizome mappingFile_2017"},
+            "inputs": {"organism": "human", "genome_build": "hg38", "impc_release": "18.0"},
+            "naming": {"gene_set_pattern": "<Mouse Phenotype term> (MP:identifier)"},
+        })
+
+
 def regenerate_model_sidecars(
     *,
     args: argparse.Namespace,
@@ -1011,8 +1024,7 @@ def regenerate_model_sidecars(
         regenerate_glygen_model_sidecars(args, metadata_paths)
         return
     if library_name == "IMPC":
-        # The IMPC local builder writes a complete, deterministic model sidecar.
-        # Keep it intact while applying the shared metadata/provenance refresh.
+        regenerate_impc_model_sidecars(args, metadata_paths)
         return
     raise SystemExit(f"Unsupported library for standalone model-sidecar regeneration: {library_name}")
 
