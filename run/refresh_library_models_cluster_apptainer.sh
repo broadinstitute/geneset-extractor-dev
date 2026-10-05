@@ -4,6 +4,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="${REPO_ROOT:-$(cd -- "${script_dir}/../.." && pwd -P)}"
+refresh_apptainer_wrapper="${repo_root}/geneset-extractor-dev/run/refresh_model_metadata_and_provenance_apptainer.sh"
 library_id=""
 library_root=""
 out_root="${LIBRARY_OUT_ROOT:-${SUBMISSION_WORK_DIR:-}}"
@@ -89,6 +90,7 @@ worklist="${worklist:-${qsub_log_root}/${library_id,,}_refresh_worklist.tsv}"
 
 [[ -f "${targets_tsv}" ]] || { echo "Missing refresh target map: ${targets_tsv}" >&2; exit 1; }
 [[ -f "${description_template_tsv}" ]] || { echo "Missing DESCRIPTION_TEMPLATE_TSV: ${description_template_tsv}" >&2; exit 1; }
+[[ -f "${refresh_apptainer_wrapper}" ]] || { echo "Missing shared refresh wrapper: ${refresh_apptainer_wrapper}" >&2; exit 1; }
 
 run_worker() {
   local row model_id partition_id model_dir
@@ -97,7 +99,7 @@ run_worker() {
   IFS=$'\t' read -r _ model_id partition_id model_dir <<< "${row}"
   [[ -d "${model_dir}" ]] || { echo "Missing model output: ${model_dir}" >&2; exit 1; }
   [[ -d "${dig_dir}" ]] || { echo "Missing DIG checkout: ${dig_dir}" >&2; exit 1; }
-  command=(bash "${script_dir}/refresh_model_metadata_and_provenance_apptainer.sh"
+  command=(bash "${refresh_apptainer_wrapper}"
     --model_id "${model_id}" --model_dir "${model_dir}"
     --description_template_tsv "${description_template_tsv}")
   [[ -n "${PROVENANCE_MIRROR_LOCAL_PREFIX:-}" ]] && command+=(--provenance_mirror_local_prefix "${PROVENANCE_MIRROR_LOCAL_PREFIX}")
