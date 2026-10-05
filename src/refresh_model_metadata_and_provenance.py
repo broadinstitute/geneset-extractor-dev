@@ -24,7 +24,7 @@ DIRECTORY_ARG_PLACEHOLDERS = {
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEV_REPO_ROOT = WORKSPACE_ROOT / "geneset-extractor-dev"
-KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "RummaGEO", "GlyGen")
+KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "RummaGEO", "GlyGen", "IMPC")
 LEGACY_EXTRACTOR_DIR_NAMES = ("extractor", "tissue_extractor")
 TRANSITIONAL_PROVENANCE_FILENAME = "geneset.provenance.json"
 LEGACY_PROVENANCE_FILENAME = "geneset.provenance.legacy.json"
@@ -976,6 +976,19 @@ def regenerate_glygen_model_sidecars(args: argparse.Namespace, metadata_paths: l
         write_json(metadata_path.with_name("geneset.model.json"), payload)
 
 
+def regenerate_impc_model_sidecars(args: argparse.Namespace, metadata_paths: list[Path]) -> None:
+    if args.model_id != "HZ1":
+        raise SystemExit(f"Unsupported IMPC model id: {args.model_id}")
+    for metadata_path in metadata_paths:
+        write_json(metadata_path.with_name("geneset.model.json"), {
+            "schema_version": "1", "library": "IMPC", "model_id": "HZ1", "model_group": "HZ",
+            "model_label": "historical Harmonizome reconstruction", "workflow_name": "impc_dr18_direct_assertions",
+            "extractor_name": "impc_hz1", "parameters": {"min_genes": 5, "mapping": "Harmonizome mappingFile_2017"},
+            "inputs": {"organism": "human", "genome_build": "hg38", "impc_release": "18.0"},
+            "naming": {"gene_set_pattern": "<Mouse Phenotype term> (MP:identifier)"},
+        })
+
+
 def regenerate_model_sidecars(
     *,
     args: argparse.Namespace,
@@ -1009,6 +1022,9 @@ def regenerate_model_sidecars(
         return
     if library_name == "GlyGen":
         regenerate_glygen_model_sidecars(args, metadata_paths)
+        return
+    if library_name == "IMPC":
+        regenerate_impc_model_sidecars(args, metadata_paths)
         return
     raise SystemExit(f"Unsupported library for standalone model-sidecar regeneration: {library_name}")
 

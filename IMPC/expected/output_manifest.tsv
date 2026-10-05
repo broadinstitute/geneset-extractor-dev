@@ -1,0 +1,5 @@
+output_id	relative_path	role	required	model_id	partition_id
+impc_hz1_gmt	genesets/all_phenotypes/models/HZ1/extractor/genesets.gmt	gmt	true	HZ1	all_phenotypes
+impc_hz1_metadata	genesets/all_phenotypes/models/HZ1/extractor/geneset.meta.json	metadata	true	HZ1	all_phenotypes
+impc_hz1_model	genesets/all_phenotypes/models/HZ1/extractor/geneset.model.json	model_metadata	true	HZ1	all_phenotypes
+impc_hz1_diagnostics	genesets/all_phenotypes/models/HZ1/extractor/reconstruction_diagnostics.json	diagnostics	true	HZ1	all_phenotypes
