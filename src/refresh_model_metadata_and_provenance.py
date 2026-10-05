@@ -24,7 +24,7 @@ DIRECTORY_ARG_PLACEHOLDERS = {
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEV_REPO_ROOT = WORKSPACE_ROOT / "geneset-extractor-dev"
-KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "RummaGEO", "GlyGen")
+KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "RummaGEO", "GlyGen", "IMPC")
 LEGACY_EXTRACTOR_DIR_NAMES = ("extractor", "tissue_extractor")
 TRANSITIONAL_PROVENANCE_FILENAME = "geneset.provenance.json"
 LEGACY_PROVENANCE_FILENAME = "geneset.provenance.legacy.json"
@@ -1009,6 +1009,10 @@ def regenerate_model_sidecars(
         return
     if library_name == "GlyGen":
         regenerate_glygen_model_sidecars(args, metadata_paths)
+        return
+    if library_name == "IMPC":
+        # The IMPC local builder writes a complete, deterministic model sidecar.
+        # Keep it intact while applying the shared metadata/provenance refresh.
         return
     raise SystemExit(f"Unsupported library for standalone model-sidecar regeneration: {library_name}")
 

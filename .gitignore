@@ -159,6 +159,8 @@
 !IDG/**/
 !Metabolomics/**/
 !GlyGen/**/
+!IMPC/
+!IMPC/**/
 !HuBMAP/**/
 !MoTrPAC/**/
 !KOMP2/**/
@@ -276,3 +278,9 @@
 !KOMP2/**/*.png
 
 archive/
+
+# IMPC HZ1 submission library
+!IMPC/
+!IMPC/**
+IMPC/**/__pycache__/
+IMPC/**/*.pyc

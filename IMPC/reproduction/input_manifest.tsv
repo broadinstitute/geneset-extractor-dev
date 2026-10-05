@@ -1,0 +1,3 @@
+input_id	environment_variable	format	release	uri_or_identifier
+impc_dr18_assertions	IMPC_ASSERTIONS_CSV_GZ	csv.gz	IMPC_Data_Release_18.0	https://ftp.ebi.ac.uk/pub/databases/impc/all-data-releases/release-18.0/results/genotype-phenotype-assertions-ALL.csv.gz
+harmonizome_mappingfile_2017	IMPC_SYMBOL_MAPPING_FILE	tsv	2017	https://github.com/MaayanLab/HarmonizomePythonScripts/blob/master/mappingFile_2017.txt
