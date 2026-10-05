@@ -83,6 +83,7 @@ require_file "${APPTAINER_IMAGE}"
 declare -a BIND_DIRS
 BIND_DIRS+=("${REPO_ROOT}")
 BIND_DIRS+=("${WORK_ROOT}")
+BIND_DIRS+=("${DIG_DIR}")
 
 FORWARDED_ARGS=()
 while [[ $# -gt 0 ]]; do
@@ -103,10 +104,12 @@ done
 mapfile -t UNIQUE_BIND_DIRS < <(printf '%s\n' "${BIND_DIRS[@]}" | awk 'NF && !seen[$0]++')
 BIND_ARG="$(IFS=,; printf '%s' "${UNIQUE_BIND_DIRS[*]}")"
 
-REFRESH_WRAPPER="${REPO_ROOT}/geneset-extractor-dev/run/refresh_model_metadata_and_provenance.sh"
+REFRESH_PYTHON="${REPO_ROOT}/geneset-extractor-dev/src/refresh_model_metadata_and_provenance.py"
+require_file "${REFRESH_PYTHON}"
 
 declare -a EXEC_CMD
 EXEC_CMD=(
+  env "APPTAINERENV_DIG_DIR=${DIG_DIR}"
   "${APPTAINER_BIN}" exec
   --bind "${BIND_ARG}"
 )
@@ -118,7 +121,7 @@ fi
 EXEC_CMD+=(
   "${APPTAINER_IMAGE}"
   bash --noprofile --norc -c
-  "export PYTHON_BIN='${APPTAINER_PYTHON_BIN}'; bash '${REFRESH_WRAPPER}'$(printf ' %q' "${FORWARDED_ARGS[@]}")"
+  "exec $(printf '%q' "${APPTAINER_PYTHON_BIN}") $(printf '%q' "${REFRESH_PYTHON}") --dig_dir $(printf '%q' "${DIG_DIR}")$(printf ' %q' "${FORWARDED_ARGS[@]}")"
 )
 
 exec "${EXEC_CMD[@]}"

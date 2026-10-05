@@ -103,9 +103,11 @@ def main() -> int:
     else:
         command = [sys.executable, "-m", "geneset_extractors.cli", "convert", "glygen_glycan_synthesizing_enzymes", "--model_id", "HZ2", "--cache_dir", str(sources["glygen_api_cache_snapshot"]), "--workflow_dir", str(workflow), "--out_dir", str(extractor)]
     _run(command, env)
-    refresh = ["bash", str(root.parent / "run/refresh_model_metadata_and_provenance.sh"), "--model_id", args.model_id, "--model_dir", str(model_root), "--description_template_tsv", str(root / "config/model_description_templates.tsv"), "--python_bin", sys.executable]
+    # Call the shared Python entry point directly.  This runner is also used
+    # in cluster images where the checkout may not include shell wrappers.
+    refresh = [sys.executable, str(root.parent / "src/refresh_model_metadata_and_provenance.py"), "--dig_dir", str(dig), "--model_id", args.model_id, "--model_dir", str(model_root), "--description_template_tsv", str(root / "config/model_description_templates.tsv"), "--python_bin", sys.executable]
     if args.local_input_source_map_tsv: refresh.extend(["--local_input_source_map_tsv", args.local_input_source_map_tsv])
-    _run(refresh, {**env, "DIG_DIR": str(dig), "PYTHON_BIN": sys.executable})
+    _run(refresh, env)
     return 0
 
 
