@@ -24,7 +24,7 @@ DIRECTORY_ARG_PLACEHOLDERS = {
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEV_REPO_ROOT = WORKSPACE_ROOT / "geneset-extractor-dev"
-KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "RummaGEO", "GlyGen", "IMPC", "IDG", "MetabolomicsWorkbench")
+KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "RummaGEO", "GlyGen", "IMPC", "IDG", "MetabolomicsWorkbench", "GaultonLab")
 LEGACY_EXTRACTOR_DIR_NAMES = ("extractor", "tissue_extractor")
 TRANSITIONAL_PROVENANCE_FILENAME = "geneset.provenance.json"
 LEGACY_PROVENANCE_FILENAME = "geneset.provenance.legacy.json"
@@ -1023,6 +1023,38 @@ def regenerate_idg_model_sidecars(args: argparse.Namespace, metadata_paths: list
         })
 
 
+def regenerate_gaultonlab_model_sidecars(args: argparse.Namespace, metadata_paths: list[Path]) -> None:
+    labels = {
+        "HZ1": "combined incoming and outgoing signaling genes",
+        "HZ2": "incoming receptor genes",
+        "HZ3": "outgoing ligand genes",
+    }
+    if args.model_id not in labels:
+        raise SystemExit(f"Unsupported GaultonLab model id: {args.model_id}")
+    for metadata_path in metadata_paths:
+        tissue_id = metadata_path.parents[3].name
+        write_json(metadata_path.with_name("geneset.model.json"), {
+            "schema_version": "1",
+            "library": "GaultonLab",
+            "model_id": args.model_id,
+            "model_group": "cell_cell_communication_signal_genes",
+            "model_label": labels[args.model_id],
+            "workflow_name": "external_precomputed_gmt_import",
+            "extractor_name": "external_precomputed_import",
+            "parameters": {
+                "generation_status": "external_precomputed_incomplete_code",
+                "import_policy": "verified byte-for-byte GMT import without repository-side scientific reprocessing",
+            },
+            "inputs": {
+                "organism": "human",
+                "genome_build": "hg38",
+                "tissue_id": tissue_id,
+                "source_repository": "https://github.com/kjgaulton/liana-ccc-pipeline",
+            },
+            "naming": {"gene_set_pattern": "<cell type>_<signal class>"},
+        })
+
+
 def regenerate_model_sidecars(
     *,
     args: argparse.Namespace,
@@ -1065,6 +1097,9 @@ def regenerate_model_sidecars(
         return
     if library_name == "IDG":
         regenerate_idg_model_sidecars(args, metadata_paths)
+        return
+    if library_name == "GaultonLab":
+        regenerate_gaultonlab_model_sidecars(args, metadata_paths)
         return
     raise SystemExit(f"Unsupported library for standalone model-sidecar regeneration: {library_name}")
 
@@ -1455,7 +1490,13 @@ def main() -> int:
             rewrite_passes=rewrite_passes,
         )
     regenerate_dapper_sidecars(metadata_paths=metadata_paths, dig_dir=dig_dir)
-    if not args.show_template_vars:
+    # External precomputed GMTs are source artifacts.  Unlike regenerated
+    # libraries, changing their description column would invalidate the
+    # checksum-verified import claim even though memberships were untouched.
+    if not args.show_template_vars and infer_library_name(
+        description_template_tsv=args.description_template_tsv,
+        metadata_paths=metadata_paths,
+    ) != "GaultonLab":
         rewrite_gmt_descriptions(
             model_dir=model_dir,
             template_map=template_map,

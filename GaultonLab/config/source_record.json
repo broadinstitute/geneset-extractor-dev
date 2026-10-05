@@ -1,0 +1,12 @@
+{
+  "name": "gaultonlab_supplied_gmts_source",
+  "uri_or_identifier": "https://github.com/kjgaulton/liana-ccc-pipeline",
+  "release": "supplied GMT snapshot",
+  "license": "See upstream repository",
+  "access_restrictions": "supplied local snapshot",
+  "organism": "human",
+  "genome_build": "hg38",
+  "assay": "cell_cell_communication",
+  "data_type": "knowledgebase",
+  "documentation": "https://github.com/kjgaulton/liana-ccc-pipeline"
+}

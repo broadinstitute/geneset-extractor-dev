@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0.0",
+  "submission_status": "draft",
+  "library": {
+    "id": "GaultonLab",
+    "display_name": "GaultonLab LIANA cell-cell communication signal gene sets",
+    "organism": "human",
+    "genome_build": "hg38",
+    "assay_types": ["cell_cell_communication"],
+    "closest_reference_pattern": "generic",
+    "wrapper_directory": "run"
+  },
+  "sources": [{
+    "name": "gaultonlab_supplied_gmts_source",
+    "uri_or_identifier": "https://github.com/kjgaulton/liana-ccc-pipeline",
+    "release": "supplied GMT snapshot",
+    "access_restrictions": "supplied local snapshot",
+    "license": "See upstream repository"
+  }],
+  "dig": {
+    "repository_url": "https://github.com/flannick/dig-gene-set-extractors",
+    "commit": "local-paired-change",
+    "entrypoints": ["geneset-extractors external-import"],
+    "identifiers": ["external_precomputed_import"]
+  },
+  "configs": {
+    "model_config": "config/model_list.tsv",
+    "model_manifest": "config/model_manifest.tsv",
+    "partition_config": "config/partition_list.tsv",
+    "description_config": "config/model_description_templates.tsv",
+    "task_manifest": "config/task_manifest.tsv"
+  },
+  "reproduction": {
+    "entry_point": "reproduction/reproduce.sh",
+    "input_manifest": "reproduction/input_manifest.tsv",
+    "smoke_test_command": "bash reproduction/reproduce.sh --smoke",
+    "output_directory_environment": "SUBMISSION_WORK_DIR"
+  },
+  "expected_outputs": {"manifest": "expected/output_manifest.tsv"},
+  "provenance": {"contracts": [{
+    "scope": "full",
+    "output_manifest": "expected/output_manifest.tsv",
+    "provenance_filename": "geneset.provenance.legacy.json",
+    "required_input_ids": ["gaultonlab_supplied_gmts_source"],
+    "artifact_roles": ["gmt"]
+  }]},
+  "adoption": {"comparison_policy": {
+    "mode": "exact_reproduction",
+    "reason": "The supplied GMTs are checksum-verified and imported without modification.",
+    "source_assessment_path": "adoption/source_assessment.md"
+  }},
+  "environment": {"declaration": "README.md"},
+  "runtime": {
+    "mode": "apptainer_cluster",
+    "task_manifest": "config/task_manifest.tsv",
+    "local_builder": "run/run_submission_models.sh",
+    "cluster_submitter": "run/submit_submission_models_cluster_apptainer.sh",
+    "apptainer_builder": "run/run_submission_models_apptainer.sh",
+    "refresh_runner": "run/refresh_submission_models_apptainer.sh"
+  },
+  "deviations": {"from_standard_architecture": ["No upstream execution environment or generation inputs were supplied; this library truthfully imports the supplied precomputed GMTs."], "allow_wrapper_findings": [], "allow_provenance_findings": []},
+  "paired_pull_requests": {"geneset_extractor_dev": "TBD", "dig_gene_set_extractors": "N/A"}
+}

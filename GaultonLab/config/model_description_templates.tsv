@@ -1,0 +1,4 @@
+model_id	description_template
+HZ1	GaultonLab LIANA cell-cell communication combined signaling genes, imported unchanged from the supplied GMT.
+HZ2	GaultonLab LIANA cell-cell communication incoming receptor genes, imported unchanged from the supplied GMT.
+HZ3	GaultonLab LIANA cell-cell communication outgoing ligand genes, imported unchanged from the supplied GMT.

@@ -1,0 +1,13 @@
+partition_id	model_id	input_gmt
+heart	HZ1	heart_combined_signal_sets.gmt
+heart	HZ2	heart_incoming_receptor_sets.gmt
+heart	HZ3	heart_outgoing_ligand_sets.gmt
+liver	HZ1	liver_combined_signal_sets.gmt
+liver	HZ2	liver_incoming_receptor_sets.gmt
+liver	HZ3	liver_outgoing_ligand_sets.gmt
+lung	HZ1	lung_combined_signal_sets.gmt
+lung	HZ2	lung_incoming_receptor_sets.gmt
+lung	HZ3	lung_outgoing_ligand_sets.gmt
+spleen	HZ1	spleen_combined_signal_sets.gmt
+spleen	HZ2	spleen_incoming_receptor_sets.gmt
+spleen	HZ3	spleen_outgoing_ligand_sets.gmt
