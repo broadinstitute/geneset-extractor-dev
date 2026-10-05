@@ -48,7 +48,7 @@ class ProvenanceRefreshTest(unittest.TestCase):
             dapper_gmt = directory / "genesets.dapper-ids.gmt"
             white_paper = directory / "geneset.whitepaper.md"
             white_paper_pdf = directory / "geneset.whitepaper.pdf"
-            model_sidecar.write_text('{"model_id": "old"}\n', encoding="utf-8")
+            model_sidecar.write_text('{"model_id": "old", "input_path": "/local/model.json"}\n', encoding="utf-8")
             dapper_gmt.write_text("old-dapper-row\tdescription\tGENE1\n", encoding="utf-8")
             white_paper.write_text("# Original report\n", encoding="utf-8")
             white_paper_pdf.write_bytes(b"%PDF-original\n")
@@ -68,6 +68,7 @@ class ProvenanceRefreshTest(unittest.TestCase):
                 metadata_paths=[metadata], rewrite_passes=[{"/local": "https://example.org"}]
             )
             self.assertIn("https://example.org", legacy.read_text(encoding="utf-8"))
+            self.assertIn("https://example.org/model.json", model_sidecar.read_text(encoding="utf-8"))
             self.assertIn("/local/input.tsv", Path(f"{legacy}.orig").read_text(encoding="utf-8"))
 
             model_sidecar.write_text('{"model_id": "new"}\n', encoding="utf-8")
