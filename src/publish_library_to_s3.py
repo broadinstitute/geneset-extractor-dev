@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from urllib.parse import urlparse
@@ -105,6 +106,12 @@ def parse_args():  # type: () -> argparse.Namespace
         help="Skip S3 existence checks and prefix listings. For real uploads, requires --overwrite.",
     )
     parser.add_argument("--aws_cli_bin", default="aws", help="AWS CLI executable to use. Default: aws.")
+    parser.add_argument(
+        "--progress_every",
+        type=int,
+        default=100,
+        help="Print provenance collection and resolution progress every N items. Default: 100.",
+    )
     return parser.parse_args()
 
 
@@ -517,6 +524,7 @@ def filter_output_candidates_to_provenance_paths(
     output_candidates,  # type: List[CandidateFile]
     provenance_paths,  # type: List[Path]
     s3_output_root=None,  # type: Optional[str]
+    progress_every=100,  # type: int
 ):  # type: (**Any) -> List[CandidateFile]
     if not provenance_paths:
         return []
@@ -524,25 +532,40 @@ def filter_output_candidates_to_provenance_paths(
     by_path = {candidate.local_path.resolve(): candidate for candidate in output_candidates}  # type: Dict[Path, CandidateFile]
     keep_paths = set(path.resolve() for path in provenance_paths)  # type: Set[Path]
     referenced_candidates = set()  # type: Set[Tuple[str, Path]]
+    progress_every = max(1, progress_every)
 
     print("collecting_provenance_file_references files={0}".format(len(provenance_paths)), flush=True)
     for index, provenance_path in enumerate(provenance_paths, 1):
-        if index == 1 or index % 100 == 0 or index == len(provenance_paths):
+        if index == 1 or index % progress_every == 0 or index == len(provenance_paths):
             print(
-                "collecting_provenance_file_references {0}/{1} unique_candidates={2}".format(
+                "collecting_provenance_file_references {0}/{1} unique_candidates={2} path={3}".format(
                     index,
                     len(provenance_paths),
                     len(referenced_candidates),
+                    provenance_path,
                 ),
                 flush=True,
             )
+        started = time.monotonic()
         referenced_candidates.update(
             (candidate, provenance_path.parent)
             for candidate in provenance_file_candidates(provenance_path)
         )
+        elapsed = time.monotonic() - started
+        if elapsed >= 5:
+            print("slow_provenance_parse seconds={0:.1f} path={1}".format(elapsed, provenance_path), flush=True)
 
     print("resolving_provenance_file_references unique_candidates={0}".format(len(referenced_candidates)), flush=True)
-    for candidate, provenance_dir in sorted(referenced_candidates):
+    for index, (candidate, provenance_dir) in enumerate(sorted(referenced_candidates), 1):
+        if index == 1 or index % progress_every == 0 or index == len(referenced_candidates):
+            print(
+                "resolving_provenance_file_references {0}/{1} candidate={2}".format(
+                    index,
+                    len(referenced_candidates),
+                    candidate,
+                ),
+                flush=True,
+            )
         resolved = _resolve_provenance_file_candidate(
             candidate,
             local_output_root,
@@ -710,6 +733,8 @@ def build_publisher_artifact_paths(*, log_path, manifest_path, summary_path, pat
 
 def main():  # type: () -> int
     args = parse_args()
+    if args.progress_every < 1:
+        raise SystemExit("--progress_every must be at least 1")
     if args.force_publish and not args.dry_run and not args.overwrite:
         raise SystemExit("--force_publish requires --overwrite for non-dry-run uploads.")
     local_output_root = ensure_directory(Path(args.local_output_root), "local output root")
@@ -758,6 +783,7 @@ def main():  # type: () -> int
             output_candidates=output_candidates,
             provenance_paths=provenance_paths,
             s3_output_root=args.s3_output_root,
+            progress_every=args.progress_every,
         )
     log_line(log_path, f"discovered_output_files={len(output_candidates)}")
     log_line(log_path, f"scanned_provenance_files={len(provenance_paths)}")
