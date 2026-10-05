@@ -1268,7 +1268,12 @@ def build_source_input_replacements(
             input_paths.add(source_path)
 
     replacements: dict[str, str] = {}
-    for source_path in sorted(input_paths):
+    # A source map is an explicit declaration that either representation of a
+    # local source is replaceable.  Do not rely exclusively on graph-edge
+    # discovery: some converters retain file nodes without the conventional
+    # input edge pattern (notably IDG), leaving ``file://`` URLs unreplaced.
+    mapped_paths = input_paths | {Path(local_path) for local_path in source_map}
+    for source_path in sorted(mapped_paths):
         source_key = str(source_path)
         source_uri = source_map.get(source_key)
         if not source_uri:

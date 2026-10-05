@@ -105,6 +105,19 @@ class ProvenanceRefreshTest(unittest.TestCase):
             self.assertEqual(observed["provenance"], {"graph": {"nodes": []}})
             self.assertTrue(dapper.exists())
 
+    def test_source_map_rewrites_file_uri_without_a_discovered_input_edge(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            source_path = Path(temp) / "IDG_Drug_Targets_2022.gmt"
+            replacements = REFRESH.build_source_input_replacements(
+                metadata_paths=[],
+                local_output_root=Path(temp) / "outputs",
+                source_map={str(source_path): "s3://example/IDG_Drug_Targets_2022.gmt"},
+            )
+            self.assertEqual(
+                replacements[source_path.as_uri()],
+                "s3://example/IDG_Drug_Targets_2022.gmt",
+            )
+
     def test_refresh_regenerates_white_paper_when_declared_dig_support_is_available(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)
