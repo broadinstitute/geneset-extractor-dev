@@ -43,7 +43,7 @@ class ProvenanceRefreshTest(unittest.TestCase):
             legacy, dapper, transitional = REFRESH.provenance_sidecar_paths(metadata)
             legacy.write_text('{"path": "/local/input.tsv"}\n', encoding="utf-8")
             dapper.write_text("gene_sets: []\n", encoding="utf-8")
-            transitional.write_text('{"old": true}\n', encoding="utf-8")
+            transitional.write_text('{"path": "/local/transitional.tsv"}\n', encoding="utf-8")
             model_sidecar = directory / "geneset.model.json"
             dapper_gmt = directory / "genesets.dapper-ids.gmt"
             white_paper = directory / "geneset.whitepaper.md"
@@ -68,6 +68,7 @@ class ProvenanceRefreshTest(unittest.TestCase):
                 metadata_paths=[metadata], rewrite_passes=[{"/local": "https://example.org"}]
             )
             self.assertIn("https://example.org", legacy.read_text(encoding="utf-8"))
+            self.assertIn("https://example.org", transitional.read_text(encoding="utf-8"))
             self.assertIn("https://example.org/model.json", model_sidecar.read_text(encoding="utf-8"))
             self.assertIn("/local/input.tsv", Path(f"{legacy}.orig").read_text(encoding="utf-8"))
 

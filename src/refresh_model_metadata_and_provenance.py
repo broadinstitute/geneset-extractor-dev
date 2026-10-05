@@ -1296,9 +1296,14 @@ def rewrite_metadata_and_provenance(
     if not any(rewrite_passes):
         return
     for metadata_path in metadata_paths:
-        provenance_path = active_provenance_path(metadata_path)
+        legacy_provenance_path, _dapper_provenance_path, transitional_provenance_path = provenance_sidecar_paths(metadata_path)
         model_sidecar_path = metadata_path.with_name("geneset.model.json")
-        for path in (metadata_path, provenance_path, model_sidecar_path):
+        for path in (
+            metadata_path,
+            legacy_provenance_path,
+            transitional_provenance_path,
+            model_sidecar_path,
+        ):
             if not path.exists():
                 continue
             payload = json.loads(path.read_text(encoding="utf-8"))
