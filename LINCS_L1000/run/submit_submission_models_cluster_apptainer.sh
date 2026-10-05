@@ -5,6 +5,7 @@ set -euo pipefail
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 legacy_launcher="${root}/../run/submit_lincs_l1000_models_cluster_apptainer.sh"
 submit=0
+refresh=0
 model_id=""
 mode="--full"
 array_memory="${SUBMISSION_ARRAY_MEMORY:-${LINCS_ARRAY_MEMORY:-16G}}"
@@ -14,7 +15,7 @@ smoke_walltime="${SUBMISSION_SMOKE_WALLTIME:-${LINCS_SUBMISSION_WALLTIME:-01:00:
 
 usage() {
   cat <<'EOF'
-Usage: submit_submission_models_cluster_apptainer.sh [--smoke|--full] [--model-id ID[,ID...]] [--submit]
+Usage: submit_submission_models_cluster_apptainer.sh [--smoke|--full] [--model-id ID[,ID...]] [--refresh-metadata-and-provenance] [--submit]
 
 --full writes the HZ1-HZ3 worklist plus an HZ4 cell-line × perturbation-time
 plan unless --submit is supplied. With --submit, HZ4 is always submitted as
@@ -34,6 +35,7 @@ while [[ $# -gt 0 ]]; do
     --smoke) mode="--smoke" ;;
     --full) mode="--full" ;;
     --submit) submit=1 ;;
+    --refresh-metadata-and-provenance|--refresh_metadata_and_provenance) refresh=1 ;;
     --model-id) [[ $# -ge 2 ]] || { echo "Missing value for --model-id" >&2; exit 2; }; model_id="$2"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -42,6 +44,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "${SUBMISSION_WORK_DIR:-}" ]] || { echo "Set SUBMISSION_WORK_DIR outside the LINCS_L1000 checkout" >&2; exit 1; }
+if [[ ${refresh} -eq 1 ]]; then
+  [[ "${mode}" == "--full" ]] || { echo "Refresh requires --full" >&2; exit 2; }
+  command=(bash "${root}/run/refresh_submission_models_apptainer.sh")
+  [[ -n "${model_id}" ]] && command+=(--model-id "${model_id}")
+  [[ ${submit} -eq 1 ]] && command+=(--submit)
+  exec "${command[@]}"
+fi
 if [[ "${mode}" == "--smoke" ]]; then
   [[ -z "${model_id}" ]] || { echo "--model-id is supported only with --full" >&2; exit 2; }
   if [[ ${submit} -eq 0 ]]; then
