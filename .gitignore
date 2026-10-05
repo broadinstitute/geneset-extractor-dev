@@ -131,6 +131,26 @@
 !GlyGen/tests/fixtures/**/*.json
 !GlyGen/tests/test_submission_wrapper.py
 
+!IDG/config/model_list.tsv
+!IDG/config/model_manifest.tsv
+!IDG/config/model_description_templates.tsv
+!IDG/config/partition_list.tsv
+!IDG/config/task_manifest.tsv
+!IDG/submission.yaml
+!IDG/environment.modernization.md
+!IDG/reproduction/
+!IDG/reproduction/*.sh
+!IDG/reproduction/*.tsv
+!IDG/expected/
+!IDG/expected/*.tsv
+!IDG/adoption/
+!IDG/adoption/*.md
+!IDG/adoption/*.tsv
+!IDG/tests/
+!IDG/tests/fixtures/
+!IDG/tests/fixtures/*.gmt
+!IDG/tests/test_submission_wrapper.py
+
 # Allow traversing these subdirectories
 !LINCS_L1000/
 !RummaGEO/

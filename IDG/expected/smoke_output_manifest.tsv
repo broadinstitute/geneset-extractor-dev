@@ -1,0 +1,3 @@
+output_id	relative_path	role	required	model_id	partition_id
+idg_smoke_hz1_gmt	genesets/idg/models/HZ1/extractor/genesets.gmt	gmt	true	HZ1	idg
+idg_smoke_hz2_gmt	genesets/idg/models/HZ2/extractor/genesets.gmt	gmt	true	HZ2	idg
