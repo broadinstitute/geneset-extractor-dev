@@ -1,0 +1,3 @@
+model_id	description_template
+HZ1	IDG Drug Targets 2022 acquired from the named Enrichr library.
+HZ2	ARCHS4 IDG coexpression sets acquired from the named Enrichr library.

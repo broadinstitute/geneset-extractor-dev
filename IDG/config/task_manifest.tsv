@@ -1,0 +1,3 @@
+task_id	model_id	partition_id	enabled	dig_identifier	output_relative_path
+idg_hz1	HZ1	idg	true	idg_drug_targets_2022	genesets/idg/models/HZ1/extractor/genesets.gmt
+idg_hz2	HZ2	idg	true	idg_archs4_coexp	genesets/idg/models/HZ2/extractor/genesets.gmt

@@ -24,7 +24,7 @@ DIRECTORY_ARG_PLACEHOLDERS = {
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEV_REPO_ROOT = WORKSPACE_ROOT / "geneset-extractor-dev"
-KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "RummaGEO", "GlyGen", "IMPC")
+KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "RummaGEO", "GlyGen", "IMPC", "IDG")
 LEGACY_EXTRACTOR_DIR_NAMES = ("extractor", "tissue_extractor")
 TRANSITIONAL_PROVENANCE_FILENAME = "geneset.provenance.json"
 LEGACY_PROVENANCE_FILENAME = "geneset.provenance.legacy.json"
@@ -989,6 +989,22 @@ def regenerate_impc_model_sidecars(args: argparse.Namespace, metadata_paths: lis
         })
 
 
+def regenerate_idg_model_sidecars(args: argparse.Namespace, metadata_paths: list[Path]) -> None:
+    model_name = {"HZ1": "idg_drug_targets_2022", "HZ2": "idg_archs4_coexp"}.get(args.model_id)
+    if model_name is None:
+        raise SystemExit(f"Unsupported IDG model id: {args.model_id}")
+    library_name = {"HZ1": "IDG_Drug_Targets_2022", "HZ2": "ARCHS4_IDG_Coexp"}[args.model_id]
+    for metadata_path in metadata_paths:
+        write_json(metadata_path.with_name("geneset.model.json"), {
+            "schema_version": "1", "library": "IDG", "model_id": args.model_id, "model_group": "HZ",
+            "model_label": model_name, "workflow_name": "named_enrichr_library",
+            "extractor_name": model_name,
+            "parameters": {"enrichr_library": library_name, "omit_empty_sets": True},
+            "inputs": {"organism": "human", "genome_build": "hg38"},
+            "naming": {"gene_set_pattern": "source Enrichr term"},
+        })
+
+
 def regenerate_model_sidecars(
     *,
     args: argparse.Namespace,
@@ -1025,6 +1041,9 @@ def regenerate_model_sidecars(
         return
     if library_name == "IMPC":
         regenerate_impc_model_sidecars(args, metadata_paths)
+        return
+    if library_name == "IDG":
+        regenerate_idg_model_sidecars(args, metadata_paths)
         return
     raise SystemExit(f"Unsupported library for standalone model-sidecar regeneration: {library_name}")
 
