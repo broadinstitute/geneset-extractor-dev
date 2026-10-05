@@ -912,6 +912,11 @@ def regenerate_hubmap_model_sidecars(args: argparse.Namespace, model_dir: Path) 
 
 
 def regenerate_lincs_model_sidecars(args: argparse.Namespace, model_dir: Path) -> None:
+    # HZ3 and HZ4 are emitted by distinct consensus/characteristic-direction
+    # runners.  Their existing sidecars are restored from the refresh snapshot
+    # and then path-rewritten below; the HZ1/HZ2 helper cannot construct them.
+    if args.model_id in {"HZ3", "HZ4"}:
+        return
     with prepend_sys_path(DEV_REPO_ROOT / "LINCS_L1000" / "src"):
         module = importlib.import_module("run_lincs_l1000_hz_model")
         settings_by_model = module.load_model_settings(DEV_REPO_ROOT / "LINCS_L1000" / "config" / "model_manifest.tsv")

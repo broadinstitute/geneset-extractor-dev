@@ -118,6 +118,13 @@ class ProvenanceRefreshTest(unittest.TestCase):
                 "s3://example/IDG_Drug_Targets_2022.gmt",
             )
 
+    def test_lincs_hz3_and_hz4_sidecars_do_not_use_hz1_hz2_regenerator(self) -> None:
+        for model_id in ("HZ3", "HZ4"):
+            REFRESH.regenerate_lincs_model_sidecars(
+                SimpleNamespace(model_id=model_id),
+                Path("/unused"),
+            )
+
     def test_refresh_regenerates_white_paper_when_declared_dig_support_is_available(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)
