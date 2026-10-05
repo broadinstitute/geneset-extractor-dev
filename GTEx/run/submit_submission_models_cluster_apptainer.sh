@@ -6,6 +6,7 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 legacy_launcher="${root}/../run/submit_gtex_models_cluster_apptainer.sh"
 mode="full"
 submit=0
+refresh=0
 model_id=""
 tissue_id=""
 array_memory="${SUBMISSION_ARRAY_MEMORY:-${GTEX_ARRAY_MEMORY:-16G}}"
@@ -17,7 +18,7 @@ smoke_job_name="${SUBMISSION_SMOKE_JOB_NAME:-${GTEX_SUBMISSION_JOB_NAME:-gtex_su
 
 usage() {
   cat <<'EOF'
-Usage: submit_submission_models_cluster_apptainer.sh [--smoke|--full] [--model-id ID[,ID...]] [--tissue-id ID] [--submit]
+Usage: submit_submission_models_cluster_apptainer.sh [--smoke|--full] [--model-id ID[,ID...]] [--tissue-id ID] [--refresh-metadata-and-provenance] [--submit]
 
 --full delegates to the established GTEx Apptainer array launcher with the
 modern declared inputs and SUBMISSION_WORK_DIR. It creates one task for every
@@ -47,6 +48,7 @@ while [[ $# -gt 0 ]]; do
     --smoke) mode="--smoke" ;;
     --full) mode="full" ;;
     --submit) submit=1 ;;
+    --refresh-metadata-and-provenance|--refresh_metadata_and_provenance) refresh=1 ;;
     --model-id) [[ $# -ge 2 ]] || { echo "Missing value for --model-id" >&2; exit 2; }; model_id="$2"; shift ;;
     --tissue-id) [[ $# -ge 2 ]] || { echo "Missing value for --tissue-id" >&2; exit 2; }; tissue_id="$2"; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -56,6 +58,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "${SUBMISSION_WORK_DIR:-}" ]] || { echo "Set SUBMISSION_WORK_DIR outside the GTEx checkout" >&2; exit 1; }
+if [[ ${refresh} -eq 1 ]]; then
+  [[ "${mode}" == "full" ]] || { echo "Refresh requires --full" >&2; exit 2; }
+  command=(bash "${root}/run/refresh_submission_models_apptainer.sh")
+  [[ -n "${model_id}" ]] && command+=(--model-id "${model_id}")
+  [[ -n "${tissue_id}" ]] && command+=(--partition-id "${tissue_id}")
+  [[ ${submit} -eq 1 ]] && command+=(--submit)
+  exec "${command[@]}"
+fi
 if [[ "${mode}" == "--smoke" ]]; then
   [[ -z "${model_id}" && -z "${tissue_id}" ]] || { echo "--model-id and --tissue-id are supported only with --full" >&2; exit 2; }
   if [[ ${submit} -eq 0 ]]; then

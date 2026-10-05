@@ -23,6 +23,7 @@
 !GTEx/config/partition_list.tsv
 !GTEx/config/task_manifest.tsv
 !GTEx/config/provenance_overlay.json
+!GTEx/config/refresh_targets.tsv
 !GTEx/reproduction/
 !GTEx/reproduction/*.sh
 !GTEx/reproduction/*.tsv
@@ -289,6 +290,7 @@
 !MoTrPAC/**/*.md
 !MoTrPAC/**/*.pdf
 !MoTrPAC/**/*.png
+!MoTrPAC/config/refresh_targets.tsv
 !KOMP2/**/*.py
 !KOMP2/**/*.r
 !KOMP2/**/*.R
@@ -302,5 +304,10 @@ archive/
 # IMPC HZ1 submission library
 !IMPC/
 !IMPC/**
+!HuBMAP/config/refresh_targets.tsv
+!LINCS_L1000/config/refresh_targets.tsv
+!GlyGen/config/refresh_targets.tsv
+!RummaGEO/config/refresh_targets.tsv
+!IDG/config/refresh_targets.tsv
 IMPC/**/__pycache__/
 IMPC/**/*.pyc

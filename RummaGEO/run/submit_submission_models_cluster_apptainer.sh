@@ -18,6 +18,12 @@ run_worker() { local task_id model_id; task_id="$(task_id_from_env)" || return 1
 if [[ $# -eq 0 ]] && task_id_from_env >/dev/null 2>&1; then run_worker; fi
 while [[ $# -gt 0 ]]; do case "$1" in --smoke|--full) mode="$1";; --submit) submit=1;; --refresh_metadata_and_provenance|--refresh-metadata-and-provenance) refresh=1;; --model-id|--model_id) [[ $# -ge 2 ]] || { echo "Missing value for $1" >&2; exit 2; }; model_ids="$2"; shift;; -h|--help) usage; exit 0;; *) echo "Unknown argument: $1" >&2; usage >&2; exit 2;; esac; shift; done
 [[ -n "${work_root}" ]] || { echo "Set SUBMISSION_WORK_DIR outside the RummaGEO checkout" >&2; exit 1; }; [[ ${refresh} -eq 0 || "${mode}" == "--full" ]] || { echo "Refresh requires --full" >&2; exit 2; }; [[ -z "${model_ids}" ]] || validate_model_ids "${model_ids}"
+if [[ ${refresh} -eq 1 ]]; then
+  command=(bash "${root}/../run/refresh_library_models_cluster_apptainer.sh" --library-id RummaGEO --library-root "${root}" --out-root "${work_root}" --refresh-metadata-and-provenance)
+  [[ -n "${model_ids}" ]] && command+=(--model-id "${model_ids}")
+  [[ ${submit} -eq 1 ]] && command+=(--submit)
+  exec "${command[@]}"
+fi
 mkdir -p "${work_root}/qsub_logs"; worklist="${worklist:-${work_root}/rummageo_qsub_worklist.tsv}"; write_worklist
 orchestrate_all=0; if [[ "${mode}" == "--full" && ${refresh} -eq 0 && -z "${model_ids}" ]]; then orchestrate_all=1; printf 'task_id\tmodel_id\n1\tprepare\n2\tHZ2\n3\tHZ1\n' > "${worklist}"; fi
 if [[ ${refresh} -eq 1 ]]; then DESCRIPTION_TEMPLATE_TSV="${DESCRIPTION_TEMPLATE_TSV:-${root}/config/model_description_templates.tsv}"; [[ -f "${DESCRIPTION_TEMPLATE_TSV}" ]] || { echo "Missing DESCRIPTION_TEMPLATE_TSV: ${DESCRIPTION_TEMPLATE_TSV}" >&2; exit 1; }; memory="${full_memory}"; walltime="${full_walltime}"; job_name="rummageo_refresh"; else if [[ "${mode}" == "--smoke" ]]; then memory="${smoke_memory}"; walltime="${smoke_walltime}"; else memory="${full_memory}"; walltime="${full_walltime}"; fi; job_name="rummageo_submission_${mode#--}"; fi

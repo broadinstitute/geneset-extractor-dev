@@ -43,12 +43,12 @@ class ProvenanceRefreshTest(unittest.TestCase):
             legacy, dapper, transitional = REFRESH.provenance_sidecar_paths(metadata)
             legacy.write_text('{"path": "/local/input.tsv"}\n', encoding="utf-8")
             dapper.write_text("gene_sets: []\n", encoding="utf-8")
-            transitional.write_text('{"old": true}\n', encoding="utf-8")
+            transitional.write_text('{"path": "/local/transitional.tsv"}\n', encoding="utf-8")
             model_sidecar = directory / "geneset.model.json"
             dapper_gmt = directory / "genesets.dapper-ids.gmt"
             white_paper = directory / "geneset.whitepaper.md"
             white_paper_pdf = directory / "geneset.whitepaper.pdf"
-            model_sidecar.write_text('{"model_id": "old"}\n', encoding="utf-8")
+            model_sidecar.write_text('{"model_id": "old", "input_path": "/local/model.json"}\n', encoding="utf-8")
             dapper_gmt.write_text("old-dapper-row\tdescription\tGENE1\n", encoding="utf-8")
             white_paper.write_text("# Original report\n", encoding="utf-8")
             white_paper_pdf.write_bytes(b"%PDF-original\n")
@@ -68,6 +68,8 @@ class ProvenanceRefreshTest(unittest.TestCase):
                 metadata_paths=[metadata], rewrite_passes=[{"/local": "https://example.org"}]
             )
             self.assertIn("https://example.org", legacy.read_text(encoding="utf-8"))
+            self.assertIn("https://example.org", transitional.read_text(encoding="utf-8"))
+            self.assertIn("https://example.org/model.json", model_sidecar.read_text(encoding="utf-8"))
             self.assertIn("/local/input.tsv", Path(f"{legacy}.orig").read_text(encoding="utf-8"))
 
             model_sidecar.write_text('{"model_id": "new"}\n', encoding="utf-8")
@@ -103,6 +105,26 @@ class ProvenanceRefreshTest(unittest.TestCase):
 
             self.assertEqual(observed["provenance"], {"graph": {"nodes": []}})
             self.assertTrue(dapper.exists())
+
+    def test_source_map_rewrites_file_uri_without_a_discovered_input_edge(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            source_path = Path(temp) / "IDG_Drug_Targets_2022.gmt"
+            replacements = REFRESH.build_source_input_replacements(
+                metadata_paths=[],
+                local_output_root=Path(temp) / "outputs",
+                source_map={str(source_path): "s3://example/IDG_Drug_Targets_2022.gmt"},
+            )
+            self.assertEqual(
+                replacements[source_path.as_uri()],
+                "s3://example/IDG_Drug_Targets_2022.gmt",
+            )
+
+    def test_lincs_hz3_and_hz4_sidecars_do_not_use_hz1_hz2_regenerator(self) -> None:
+        for model_id in ("HZ3", "HZ4"):
+            REFRESH.regenerate_lincs_model_sidecars(
+                SimpleNamespace(model_id=model_id),
+                Path("/unused"),
+            )
 
     def test_refresh_regenerates_white_paper_when_declared_dig_support_is_available(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

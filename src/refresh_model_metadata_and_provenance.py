@@ -912,6 +912,11 @@ def regenerate_hubmap_model_sidecars(args: argparse.Namespace, model_dir: Path) 
 
 
 def regenerate_lincs_model_sidecars(args: argparse.Namespace, model_dir: Path) -> None:
+    # HZ3 and HZ4 are emitted by distinct consensus/characteristic-direction
+    # runners.  Their existing sidecars are restored from the refresh snapshot
+    # and then path-rewritten below; the HZ1/HZ2 helper cannot construct them.
+    if args.model_id in {"HZ3", "HZ4"}:
+        return
     with prepend_sys_path(DEV_REPO_ROOT / "LINCS_L1000" / "src"):
         module = importlib.import_module("run_lincs_l1000_hz_model")
         settings_by_model = module.load_model_settings(DEV_REPO_ROOT / "LINCS_L1000" / "config" / "model_manifest.tsv")
@@ -1268,7 +1273,12 @@ def build_source_input_replacements(
             input_paths.add(source_path)
 
     replacements: dict[str, str] = {}
-    for source_path in sorted(input_paths):
+    # A source map is an explicit declaration that either representation of a
+    # local source is replaceable.  Do not rely exclusively on graph-edge
+    # discovery: some converters retain file nodes without the conventional
+    # input edge pattern (notably IDG), leaving ``file://`` URLs unreplaced.
+    mapped_paths = input_paths | {Path(local_path) for local_path in source_map}
+    for source_path in sorted(mapped_paths):
         source_key = str(source_path)
         source_uri = source_map.get(source_key)
         if not source_uri:
@@ -1286,8 +1296,14 @@ def rewrite_metadata_and_provenance(
     if not any(rewrite_passes):
         return
     for metadata_path in metadata_paths:
-        provenance_path = active_provenance_path(metadata_path)
-        for path in (metadata_path, provenance_path):
+        legacy_provenance_path, _dapper_provenance_path, transitional_provenance_path = provenance_sidecar_paths(metadata_path)
+        model_sidecar_path = metadata_path.with_name("geneset.model.json")
+        for path in (
+            metadata_path,
+            legacy_provenance_path,
+            transitional_provenance_path,
+            model_sidecar_path,
+        ):
             if not path.exists():
                 continue
             payload = json.loads(path.read_text(encoding="utf-8"))

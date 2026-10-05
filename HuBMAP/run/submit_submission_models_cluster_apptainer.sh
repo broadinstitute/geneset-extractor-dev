@@ -6,10 +6,11 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 legacy_launcher="${root}/../run/submit_hubmap_models_cluster_apptainer.sh"
 submit=0
 model_id=""
+refresh=0
 
 usage() {
   cat <<'EOF'
-Usage: submit_submission_models_cluster_apptainer.sh [--full] [--model-id ID[,ID...]] [--submit]
+Usage: submit_submission_models_cluster_apptainer.sh [--full] [--model-id ID[,ID...]] [--refresh-metadata-and-provenance] [--submit]
 
 HuBMAP currently supports full execution only; --full is accepted explicitly
 for consistency with the other library launchers. Writes the HZ1/HZ2 worklist
@@ -25,6 +26,7 @@ while [[ $# -gt 0 ]]; do
     --full) ;;
     --smoke) echo "HuBMAP has no cluster smoke mode; use reproduction/reproduce.sh --smoke" >&2; exit 2 ;;
     --submit) submit=1 ;;
+    --refresh-metadata-and-provenance|--refresh_metadata_and_provenance) refresh=1 ;;
     --model-id) [[ $# -ge 2 ]] || { echo "Missing value for --model-id" >&2; exit 2; }; model_id="$2"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -33,6 +35,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "${SUBMISSION_WORK_DIR:-}" ]] || { echo "Set SUBMISSION_WORK_DIR outside the HuBMAP checkout" >&2; exit 1; }
+if [[ ${refresh} -eq 1 ]]; then
+  command=(bash "${root}/run/refresh_submission_models_apptainer.sh")
+  [[ -n "${model_id}" ]] && command+=(--model-id "${model_id}")
+  [[ ${submit} -eq 1 ]] && command+=(--submit)
+  exec "${command[@]}"
+fi
 command=(env "WORK_ROOT=${SUBMISSION_WORK_DIR}" "HUBMAP_OUT_ROOT=${SUBMISSION_WORK_DIR}" "DIG_DIR=${DIG_REPO:-}" \
   "HUBMAP_ARRAY_MEMORY=${SUBMISSION_ARRAY_MEMORY:-${HUBMAP_ARRAY_MEMORY:-16G}}" \
   "HUBMAP_ARRAY_WALLTIME=${SUBMISSION_ARRAY_WALLTIME:-${HUBMAP_ARRAY_WALLTIME:-24:00:00}}" \

@@ -1,0 +1,2 @@
+target_id	model_id	partition_id	enabled	model_dir_glob
+impc_hz1	HZ1	all_phenotypes	true	genesets/all_phenotypes/models/HZ1

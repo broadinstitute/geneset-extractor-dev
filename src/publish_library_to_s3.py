@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from urllib.parse import urlparse
@@ -105,6 +106,12 @@ def parse_args():  # type: () -> argparse.Namespace
         help="Skip S3 existence checks and prefix listings. For real uploads, requires --overwrite.",
     )
     parser.add_argument("--aws_cli_bin", default="aws", help="AWS CLI executable to use. Default: aws.")
+    parser.add_argument(
+        "--progress_every",
+        type=int,
+        default=100,
+        help="Print provenance collection and resolution progress every N items. Default: 100.",
+    )
     return parser.parse_args()
 
 
@@ -285,6 +292,12 @@ def _resolve_provenance_file_candidate(
     path = Path(candidate)
     candidate_paths = []  # type: List[Path]
     if path.is_absolute():
+        # Publication only considers artifacts below the declared output root.
+        # Avoid network-filesystem metadata probes for external source inputs.
+        try:
+            path.relative_to(local_output_root)
+        except ValueError:
+            return None
         candidate_paths.append(path)
     else:
         candidate_paths.append((local_output_root.parent / path))
@@ -307,11 +320,7 @@ def _resolve_provenance_file_candidate(
     return None
 
 
-def extract_local_output_paths_from_provenance(
-    provenance_path,  # type: Path
-    local_output_root,  # type: Path
-    s3_output_root=None,  # type: Optional[str]
-):  # type: (...) -> List[Path]
+def provenance_file_candidates(provenance_path):  # type: (Path) -> List[str]
     if provenance_path.suffix in {".yaml", ".yml"}:
         if yaml is None:
             raise SystemExit(
@@ -319,48 +328,51 @@ def extract_local_output_paths_from_provenance(
                 "Install the wrapper's documented Python dependencies or use --all_output_files explicitly."
             )
         try:
-            payload = yaml.safe_load(provenance_path.read_text(encoding="utf-8"))
+            # SafeLoader is pure Python; use the compatible libyaml-backed
+            # loader when present because DAPPER provenance may be very large.
+            safe_loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+            payload = yaml.load(provenance_path.read_text(encoding="utf-8"), Loader=safe_loader)
         except Exception as exc:
             raise SystemExit(f"Unable to parse DAPPER provenance YAML {provenance_path}: {exc}") from exc
         if not isinstance(payload, dict):
             raise SystemExit(f"Expected DAPPER provenance YAML object: {provenance_path}")
-        paths = set()  # type: Set[Path]
+        candidates = set()  # type: Set[str]
         for node in payload.get("files", []):
             if not isinstance(node, dict):
                 continue
             for candidate in (node.get("location"), node.get("filename")):
-                if not isinstance(candidate, str):
-                    continue
-                resolved = _resolve_provenance_file_candidate(
-                    candidate,
-                    local_output_root,
-                    provenance_dir=provenance_path.parent,
-                    s3_output_root=s3_output_root,
-                )
-                if resolved is not None and is_within_directory(resolved, local_output_root):
-                    paths.add(resolved)
-        return sorted(paths)
+                if isinstance(candidate, str):
+                    candidates.add(candidate)
+        return sorted(candidates)
     try:
         payload = json.loads(provenance_path.read_text(encoding="utf-8"))
     except Exception as exc:
         raise SystemExit(f"Unable to parse provenance JSON {provenance_path}: {exc}") from exc
 
-    paths = set()  # type: Set[Path]
+    candidates = set()  # type: Set[str]
     for graph in payload.values():
         for node in graph.get("nodes", []):
             if node.get("type") != "File":
                 continue
-            for candidate in _candidate_strings_from_file_node(node):
-                resolved = _resolve_provenance_file_candidate(
-                    candidate,
-                    local_output_root,
-                    provenance_dir=provenance_path.parent,
-                    s3_output_root=s3_output_root,
-                )
-                if resolved is None:
-                    continue
-                if is_within_directory(resolved, local_output_root):
-                    paths.add(resolved)
+            candidates.update(_candidate_strings_from_file_node(node))
+    return sorted(candidates)
+
+
+def extract_local_output_paths_from_provenance(
+    provenance_path,  # type: Path
+    local_output_root,  # type: Path
+    s3_output_root=None,  # type: Optional[str]
+):  # type: (...) -> List[Path]
+    paths = set()  # type: Set[Path]
+    for candidate in provenance_file_candidates(provenance_path):
+        resolved = _resolve_provenance_file_candidate(
+            candidate,
+            local_output_root,
+            provenance_dir=provenance_path.parent,
+            s3_output_root=s3_output_root,
+        )
+        if resolved is not None and is_within_directory(resolved, local_output_root):
+            paths.add(resolved)
     return sorted(paths)
 
 
@@ -515,31 +527,56 @@ def filter_output_candidates_to_provenance_paths(
     output_candidates,  # type: List[CandidateFile]
     provenance_paths,  # type: List[Path]
     s3_output_root=None,  # type: Optional[str]
+    progress_every=100,  # type: int
 ):  # type: (**Any) -> List[CandidateFile]
     if not provenance_paths:
         return []
 
     by_path = {candidate.local_path.resolve(): candidate for candidate in output_candidates}  # type: Dict[Path, CandidateFile]
     keep_paths = set(path.resolve() for path in provenance_paths)  # type: Set[Path]
+    referenced_candidates = set()  # type: Set[Tuple[str, Path]]
+    progress_every = max(1, progress_every)
 
-    print("filtering_output_candidates_to_provenance files={0}".format(len(provenance_paths)), flush=True)
+    print("collecting_provenance_file_references files={0}".format(len(provenance_paths)), flush=True)
     for index, provenance_path in enumerate(provenance_paths, 1):
-        if index == 1 or index % 100 == 0 or index == len(provenance_paths):
+        if index == 1 or index % progress_every == 0 or index == len(provenance_paths):
             print(
-                "filtering_output_candidates_to_provenance {0}/{1} kept_paths={2}".format(
+                "collecting_provenance_file_references {0}/{1} unique_candidates={2} path={3}".format(
                     index,
                     len(provenance_paths),
-                    len(keep_paths),
+                    len(referenced_candidates),
+                    provenance_path,
                 ),
                 flush=True,
             )
-        keep_paths.update(
-            extract_local_output_paths_from_provenance(
-                provenance_path,
-                local_output_root,
-                s3_output_root=s3_output_root,
-            )
+        started = time.monotonic()
+        referenced_candidates.update(
+            (candidate, provenance_path.parent)
+            for candidate in provenance_file_candidates(provenance_path)
         )
+        elapsed = time.monotonic() - started
+        if elapsed >= 5:
+            print("slow_provenance_parse seconds={0:.1f} path={1}".format(elapsed, provenance_path), flush=True)
+
+    print("resolving_provenance_file_references unique_candidates={0}".format(len(referenced_candidates)), flush=True)
+    for index, (candidate, provenance_dir) in enumerate(sorted(referenced_candidates), 1):
+        if index == 1 or index % progress_every == 0 or index == len(referenced_candidates):
+            print(
+                "resolving_provenance_file_references {0}/{1} candidate={2}".format(
+                    index,
+                    len(referenced_candidates),
+                    candidate,
+                ),
+                flush=True,
+            )
+        resolved = _resolve_provenance_file_candidate(
+            candidate,
+            local_output_root,
+            provenance_dir=provenance_dir,
+            s3_output_root=s3_output_root,
+        )
+        if resolved is not None and is_within_directory(resolved, local_output_root):
+            keep_paths.add(resolved)
 
     filtered = []  # type: List[CandidateFile]
     for path in sorted(keep_paths):
@@ -699,6 +736,8 @@ def build_publisher_artifact_paths(*, log_path, manifest_path, summary_path, pat
 
 def main():  # type: () -> int
     args = parse_args()
+    if args.progress_every < 1:
+        raise SystemExit("--progress_every must be at least 1")
     if args.force_publish and not args.dry_run and not args.overwrite:
         raise SystemExit("--force_publish requires --overwrite for non-dry-run uploads.")
     local_output_root = ensure_directory(Path(args.local_output_root), "local output root")
@@ -747,6 +786,7 @@ def main():  # type: () -> int
             output_candidates=output_candidates,
             provenance_paths=provenance_paths,
             s3_output_root=args.s3_output_root,
+            progress_every=args.progress_every,
         )
     log_line(log_path, f"discovered_output_files={len(output_candidates)}")
     log_line(log_path, f"scanned_provenance_files={len(provenance_paths)}")

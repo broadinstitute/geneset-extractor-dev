@@ -68,6 +68,26 @@ append_bind_path() {
   fi
 }
 
+append_source_map_bind_paths() {
+  local source_map_tsv="$1"
+  local source_map_dir local_path
+  [[ -n "${source_map_tsv}" && -f "${source_map_tsv}" ]] || return
+  source_map_dir="$(cd -- "$(dirname -- "${source_map_tsv}")" && pwd -P)"
+  while IFS= read -r local_path; do
+    [[ -n "${local_path}" ]] || continue
+    [[ "${local_path}" == /* ]] || local_path="${source_map_dir}/${local_path}"
+    BIND_DIRS+=("$(append_bind_path "${local_path}")")
+  done < <(
+    awk -F $'\t' '
+      NR == 1 {
+        for (i = 1; i <= NF; i++) if ($i == "local_path") local_path_col = i
+        next
+      }
+      local_path_col && $local_path_col != "" { print $local_path_col }
+    ' "${source_map_tsv}"
+  )
+}
+
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || "${1:-}" == "help" ]]; then
   usage
   exit 0
@@ -83,6 +103,7 @@ require_file "${APPTAINER_IMAGE}"
 declare -a BIND_DIRS
 BIND_DIRS+=("${REPO_ROOT}")
 BIND_DIRS+=("${WORK_ROOT}")
+BIND_DIRS+=("${DIG_DIR}")
 
 FORWARDED_ARGS=()
 while [[ $# -gt 0 ]]; do
@@ -100,13 +121,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+append_source_map_bind_paths "${LOCAL_INPUT_SOURCE_MAP_TSV:-}"
+
 mapfile -t UNIQUE_BIND_DIRS < <(printf '%s\n' "${BIND_DIRS[@]}" | awk 'NF && !seen[$0]++')
 BIND_ARG="$(IFS=,; printf '%s' "${UNIQUE_BIND_DIRS[*]}")"
 
-REFRESH_WRAPPER="${REPO_ROOT}/geneset-extractor-dev/run/refresh_model_metadata_and_provenance.sh"
+REFRESH_PYTHON="${REPO_ROOT}/geneset-extractor-dev/src/refresh_model_metadata_and_provenance.py"
+require_file "${REFRESH_PYTHON}"
 
 declare -a EXEC_CMD
 EXEC_CMD=(
+  env "APPTAINERENV_DIG_DIR=${DIG_DIR}"
   "${APPTAINER_BIN}" exec
   --bind "${BIND_ARG}"
 )
@@ -118,7 +143,7 @@ fi
 EXEC_CMD+=(
   "${APPTAINER_IMAGE}"
   bash --noprofile --norc -c
-  "export PYTHON_BIN='${APPTAINER_PYTHON_BIN}'; bash '${REFRESH_WRAPPER}'$(printf ' %q' "${FORWARDED_ARGS[@]}")"
+  "exec $(printf '%q' "${APPTAINER_PYTHON_BIN}") $(printf '%q' "${REFRESH_PYTHON}") --dig_dir $(printf '%q' "${DIG_DIR}")$(printf ' %q' "${FORWARDED_ARGS[@]}")"
 )
 
 exec "${EXEC_CMD[@]}"
