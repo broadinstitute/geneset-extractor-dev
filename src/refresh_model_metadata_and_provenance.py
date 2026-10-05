@@ -24,7 +24,7 @@ DIRECTORY_ARG_PLACEHOLDERS = {
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 DEV_REPO_ROOT = WORKSPACE_ROOT / "geneset-extractor-dev"
-KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "RummaGEO", "GlyGen", "IMPC", "IDG")
+KNOWN_LIBRARIES = ("GTEx", "MoTrPAC", "HuBMAP", "LINCS_L1000", "RummaGEO", "GlyGen", "IMPC", "IDG", "MetabolomicsWorkbench")
 LEGACY_EXTRACTOR_DIR_NAMES = ("extractor", "tissue_extractor")
 TRANSITIONAL_PROVENANCE_FILENAME = "geneset.provenance.json"
 LEGACY_PROVENANCE_FILENAME = "geneset.provenance.legacy.json"
@@ -994,6 +994,19 @@ def regenerate_impc_model_sidecars(args: argparse.Namespace, metadata_paths: lis
         })
 
 
+def regenerate_metabolomics_workbench_model_sidecars(args: argparse.Namespace, metadata_paths: list[Path]) -> None:
+    if args.model_id != "HZ1":
+        raise SystemExit(f"Unsupported MetabolomicsWorkbench model id: {args.model_id}")
+    for metadata_path in metadata_paths:
+        write_json(metadata_path.with_name("geneset.model.json"), {
+            "schema_version": "1", "library": "MetabolomicsWorkbench", "model_id": "HZ1", "model_group": "HZ",
+            "model_label": "historical Harmonizome reconstruction", "workflow_name": "harmonizome_metabolite_gene_edge_grouping",
+            "extractor_name": "metabolomics_workbench_hz1", "parameters": {"min_genes": 5, "deduplicate_edges": True, "deterministic_sort": "metabolite_then_gene"},
+            "inputs": {"organism": "human", "genome_build": "hg38", "source": "Harmonizome mwmetabolites gene_attribute_edges"},
+            "naming": {"gene_set_pattern": "source metabolite name"},
+        })
+
+
 def regenerate_idg_model_sidecars(args: argparse.Namespace, metadata_paths: list[Path]) -> None:
     model_name = {"HZ1": "idg_drug_targets_2022", "HZ2": "idg_archs4_coexp"}.get(args.model_id)
     if model_name is None:
@@ -1046,6 +1059,9 @@ def regenerate_model_sidecars(
         return
     if library_name == "IMPC":
         regenerate_impc_model_sidecars(args, metadata_paths)
+        return
+    if library_name == "MetabolomicsWorkbench":
+        regenerate_metabolomics_workbench_model_sidecars(args, metadata_paths)
         return
     if library_name == "IDG":
         regenerate_idg_model_sidecars(args, metadata_paths)

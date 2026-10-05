@@ -1,0 +1,5 @@
+# HZ1 provenance and validation
+
+HZ1 follows the algorithm in MaayanLab/HarmonizomePythonScripts `MW/Enzyme Metabolite Associations/MWMetabolites.ipynb`: deduplicate gene/metabolite associations, group genes by metabolite, and retain sets with at least five unique genes. The notebook's original `MW_gene_metabolite.tsv` is not committed. HZ1 instead uses the official Harmonizome `mwmetabolites/gene_attribute_edges.txt.gz`, the closest available processed descendant, whose `Gene` values are already harmonized human symbols.
+
+Provenance: Metabolomics Workbench; MetGENE; MaayanLab/HarmonizomePythonScripts and `MWMetabolites.ipynb`; the Harmonizome MW edge-list URL; and the December 2022 CFDE legacy GMT, which is validation-only. Current-source changes in associations and mappings account for differences from the historic snapshot. With the supplied reference reconstruction, case-insensitive term matching recovers all 233 legacy terms and historical membership recall is approximately 95%; additional current qualifying metabolites remain in the output.
