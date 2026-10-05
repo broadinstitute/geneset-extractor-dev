@@ -1,0 +1,2 @@
+task_id	model_id	partition_id	enabled	dig_identifier	output_relative_path
+metabolomics_workbench_hz1_all_metabolites	HZ1	all_metabolites	true	metabolomics_workbench_hz1	genesets/all_metabolites/models/HZ1/extractor/genesets.gmt

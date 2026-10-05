@@ -152,6 +152,34 @@
 !IDG/tests/fixtures/*.gmt
 !IDG/tests/test_submission_wrapper.py
 
+!MetabolomicsWorkbench/config/model_list.tsv
+!MetabolomicsWorkbench/config/model_manifest.tsv
+!MetabolomicsWorkbench/config/model_description_templates.tsv
+!MetabolomicsWorkbench/config/partition_list.tsv
+!MetabolomicsWorkbench/config/task_manifest.tsv
+!MetabolomicsWorkbench/config/refresh_targets.tsv
+!MetabolomicsWorkbench/submission.yaml
+!MetabolomicsWorkbench/README.md
+!MetabolomicsWorkbench/reproduction/
+!MetabolomicsWorkbench/reproduction/*.sh
+!MetabolomicsWorkbench/reproduction/*.tsv
+!MetabolomicsWorkbench/expected/
+!MetabolomicsWorkbench/expected/*.tsv
+!MetabolomicsWorkbench/adoption/
+!MetabolomicsWorkbench/adoption/*.md
+!MetabolomicsWorkbench/adoption/*.tsv
+!MetabolomicsWorkbench/planning/
+!MetabolomicsWorkbench/planning/*.md
+!MetabolomicsWorkbench/environment.modernization.md
+!MetabolomicsWorkbench/run/
+!MetabolomicsWorkbench/run/*.sh
+!MetabolomicsWorkbench/src/
+!MetabolomicsWorkbench/src/*.py
+!MetabolomicsWorkbench/tests/
+!MetabolomicsWorkbench/tests/*.py
+!MetabolomicsWorkbench/tests/fixtures/
+!MetabolomicsWorkbench/tests/fixtures/*.tsv
+
 # Allow traversing these subdirectories
 !LINCS_L1000/
 !RummaGEO/
@@ -159,6 +187,7 @@
 !GTEx/
 !IDG/
 !Metabolomics/
+!MetabolomicsWorkbench/
 !GlyGen/
 !HuBMAP/
 !MoTrPAC/
@@ -179,6 +208,7 @@
 !GTEx/**/
 !IDG/**/
 !Metabolomics/**/
+!MetabolomicsWorkbench/**/
 !GlyGen/**/
 !IMPC/
 !IMPC/**/

@@ -1,0 +1,11 @@
+Gene	Gene ID	Metabolite	Metabolite ID	Threshold
+G5	5	Metabolite A	C00001	1
+G2	2	Metabolite A	C00001	1
+G1	1	Metabolite A	C00001	1
+G4	4	Metabolite A	C00001	1
+G3	3	Metabolite A	C00001	1
+G1	1	Metabolite A	C00001	1
+G1	1	Metabolite B	C00002	1
+G2	2	Metabolite B	C00002	1
+G3	3	Metabolite B	C00002	1
+G4	4	Metabolite B	C00002	1
