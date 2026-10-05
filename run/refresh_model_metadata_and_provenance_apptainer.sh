@@ -68,6 +68,26 @@ append_bind_path() {
   fi
 }
 
+append_source_map_bind_paths() {
+  local source_map_tsv="$1"
+  local source_map_dir local_path
+  [[ -n "${source_map_tsv}" && -f "${source_map_tsv}" ]] || return
+  source_map_dir="$(cd -- "$(dirname -- "${source_map_tsv}")" && pwd -P)"
+  while IFS= read -r local_path; do
+    [[ -n "${local_path}" ]] || continue
+    [[ "${local_path}" == /* ]] || local_path="${source_map_dir}/${local_path}"
+    BIND_DIRS+=("$(append_bind_path "${local_path}")")
+  done < <(
+    awk -F $'\t' '
+      NR == 1 {
+        for (i = 1; i <= NF; i++) if ($i == "local_path") local_path_col = i
+        next
+      }
+      local_path_col && $local_path_col != "" { print $local_path_col }
+    ' "${source_map_tsv}"
+  )
+}
+
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || "${1:-}" == "help" ]]; then
   usage
   exit 0
@@ -100,6 +120,8 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+append_source_map_bind_paths "${LOCAL_INPUT_SOURCE_MAP_TSV:-}"
 
 mapfile -t UNIQUE_BIND_DIRS < <(printf '%s\n' "${BIND_DIRS[@]}" | awk 'NF && !seen[$0]++')
 BIND_ARG="$(IFS=,; printf '%s' "${UNIQUE_BIND_DIRS[*]}")"
