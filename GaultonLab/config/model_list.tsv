@@ -1,0 +1,4 @@
+model_id	model_family	description	enabled
+HZ1	combined_signal_sets	combined outgoing ligand and incoming receptor genes	true
+HZ2	incoming_receptor_sets	incoming receptor genes	true
+HZ3	outgoing_ligand_sets	outgoing ligand genes	true

@@ -1,0 +1,2 @@
+output_id	relative_path	role	required	model_id	partition_id
+gaultonlab_direct_import	genesets/heart/models/HZ1/extractor/genesets.gmt	gmt	true	HZ1	heart

@@ -1,0 +1,2 @@
+target_id	model_id	partition_id	enabled	model_dir_glob
+gaultonlab_models	*	*	true	genesets/*/models/*

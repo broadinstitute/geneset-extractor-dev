@@ -1,0 +1,2 @@
+input_id	source_uri_or_access_instructions	version_release	checksum	access_method	smoke_full	workflow_stage	redistribution_status	committed_fixture	fixture_path	source_version_confidence	legacy_input_relationship
+gaultonlab_supplied_gmts_source	Supplied GMT snapshot; default location is submissions/cfde_legacy/GaultonLab, or set GAULTONLAB_GMT_DIR.	supplied GMT snapshot	Per-file SHA-256 in config/task_manifest.tsv	user_provided_local_snapshot	smoke_and_full	external_precomputed_import	user-provided	false	N/A	exact supplied artifact	direct generation input

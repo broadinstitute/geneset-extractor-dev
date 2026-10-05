@@ -1,0 +1,4 @@
+model_id	model_family	genome_build	import_policy
+HZ1	combined_signal_sets	hg38	byte_for_byte_external_gmt_import
+HZ2	incoming_receptor_sets	hg38	byte_for_byte_external_gmt_import
+HZ3	outgoing_ligand_sets	hg38	byte_for_byte_external_gmt_import

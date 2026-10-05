@@ -1,0 +1,13 @@
+partition_id	model_id	gmt_relative_path	gene_set_count	artifact_summary
+heart	HZ1	genesets/heart/models/HZ1/extractor/genesets.gmt	25	checksum-verified direct GMT import with metadata and provenance sidecars
+heart	HZ2	genesets/heart/models/HZ2/extractor/genesets.gmt	25	checksum-verified direct GMT import with metadata and provenance sidecars
+heart	HZ3	genesets/heart/models/HZ3/extractor/genesets.gmt	25	checksum-verified direct GMT import with metadata and provenance sidecars
+liver	HZ1	genesets/liver/models/HZ1/extractor/genesets.gmt	8	checksum-verified direct GMT import with metadata and provenance sidecars
+liver	HZ2	genesets/liver/models/HZ2/extractor/genesets.gmt	7	checksum-verified direct GMT import with metadata and provenance sidecars
+liver	HZ3	genesets/liver/models/HZ3/extractor/genesets.gmt	7	checksum-verified direct GMT import with metadata and provenance sidecars
+lung	HZ1	genesets/lung/models/HZ1/extractor/genesets.gmt	33	checksum-verified direct GMT import with metadata and provenance sidecars
+lung	HZ2	genesets/lung/models/HZ2/extractor/genesets.gmt	33	checksum-verified direct GMT import with metadata and provenance sidecars
+lung	HZ3	genesets/lung/models/HZ3/extractor/genesets.gmt	33	checksum-verified direct GMT import with metadata and provenance sidecars
+spleen	HZ1	genesets/spleen/models/HZ1/extractor/genesets.gmt	6	checksum-verified direct GMT import with metadata and provenance sidecars
+spleen	HZ2	genesets/spleen/models/HZ2/extractor/genesets.gmt	6	checksum-verified direct GMT import with metadata and provenance sidecars
+spleen	HZ3	genesets/spleen/models/HZ3/extractor/genesets.gmt	6	checksum-verified direct GMT import with metadata and provenance sidecars
