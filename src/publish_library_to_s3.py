@@ -285,6 +285,12 @@ def _resolve_provenance_file_candidate(
     path = Path(candidate)
     candidate_paths = []  # type: List[Path]
     if path.is_absolute():
+        # Publication only considers artifacts below the declared output root.
+        # Avoid network-filesystem metadata probes for external source inputs.
+        try:
+            path.relative_to(local_output_root)
+        except ValueError:
+            return None
         candidate_paths.append(path)
     else:
         candidate_paths.append((local_output_root.parent / path))
@@ -307,11 +313,7 @@ def _resolve_provenance_file_candidate(
     return None
 
 
-def extract_local_output_paths_from_provenance(
-    provenance_path,  # type: Path
-    local_output_root,  # type: Path
-    s3_output_root=None,  # type: Optional[str]
-):  # type: (...) -> List[Path]
+def provenance_file_candidates(provenance_path):  # type: (Path) -> List[str]
     if provenance_path.suffix in {".yaml", ".yml"}:
         if yaml is None:
             raise SystemExit(
@@ -324,43 +326,43 @@ def extract_local_output_paths_from_provenance(
             raise SystemExit(f"Unable to parse DAPPER provenance YAML {provenance_path}: {exc}") from exc
         if not isinstance(payload, dict):
             raise SystemExit(f"Expected DAPPER provenance YAML object: {provenance_path}")
-        paths = set()  # type: Set[Path]
+        candidates = set()  # type: Set[str]
         for node in payload.get("files", []):
             if not isinstance(node, dict):
                 continue
             for candidate in (node.get("location"), node.get("filename")):
-                if not isinstance(candidate, str):
-                    continue
-                resolved = _resolve_provenance_file_candidate(
-                    candidate,
-                    local_output_root,
-                    provenance_dir=provenance_path.parent,
-                    s3_output_root=s3_output_root,
-                )
-                if resolved is not None and is_within_directory(resolved, local_output_root):
-                    paths.add(resolved)
-        return sorted(paths)
+                if isinstance(candidate, str):
+                    candidates.add(candidate)
+        return sorted(candidates)
     try:
         payload = json.loads(provenance_path.read_text(encoding="utf-8"))
     except Exception as exc:
         raise SystemExit(f"Unable to parse provenance JSON {provenance_path}: {exc}") from exc
 
-    paths = set()  # type: Set[Path]
+    candidates = set()  # type: Set[str]
     for graph in payload.values():
         for node in graph.get("nodes", []):
             if node.get("type") != "File":
                 continue
-            for candidate in _candidate_strings_from_file_node(node):
-                resolved = _resolve_provenance_file_candidate(
-                    candidate,
-                    local_output_root,
-                    provenance_dir=provenance_path.parent,
-                    s3_output_root=s3_output_root,
-                )
-                if resolved is None:
-                    continue
-                if is_within_directory(resolved, local_output_root):
-                    paths.add(resolved)
+            candidates.update(_candidate_strings_from_file_node(node))
+    return sorted(candidates)
+
+
+def extract_local_output_paths_from_provenance(
+    provenance_path,  # type: Path
+    local_output_root,  # type: Path
+    s3_output_root=None,  # type: Optional[str]
+):  # type: (...) -> List[Path]
+    paths = set()  # type: Set[Path]
+    for candidate in provenance_file_candidates(provenance_path):
+        resolved = _resolve_provenance_file_candidate(
+            candidate,
+            local_output_root,
+            provenance_dir=provenance_path.parent,
+            s3_output_root=s3_output_root,
+        )
+        if resolved is not None and is_within_directory(resolved, local_output_root):
+            paths.add(resolved)
     return sorted(paths)
 
 
@@ -521,25 +523,34 @@ def filter_output_candidates_to_provenance_paths(
 
     by_path = {candidate.local_path.resolve(): candidate for candidate in output_candidates}  # type: Dict[Path, CandidateFile]
     keep_paths = set(path.resolve() for path in provenance_paths)  # type: Set[Path]
+    referenced_candidates = set()  # type: Set[Tuple[str, Path]]
 
-    print("filtering_output_candidates_to_provenance files={0}".format(len(provenance_paths)), flush=True)
+    print("collecting_provenance_file_references files={0}".format(len(provenance_paths)), flush=True)
     for index, provenance_path in enumerate(provenance_paths, 1):
         if index == 1 or index % 100 == 0 or index == len(provenance_paths):
             print(
-                "filtering_output_candidates_to_provenance {0}/{1} kept_paths={2}".format(
+                "collecting_provenance_file_references {0}/{1} unique_candidates={2}".format(
                     index,
                     len(provenance_paths),
-                    len(keep_paths),
+                    len(referenced_candidates),
                 ),
                 flush=True,
             )
-        keep_paths.update(
-            extract_local_output_paths_from_provenance(
-                provenance_path,
-                local_output_root,
-                s3_output_root=s3_output_root,
-            )
+        referenced_candidates.update(
+            (candidate, provenance_path.parent)
+            for candidate in provenance_file_candidates(provenance_path)
         )
+
+    print("resolving_provenance_file_references unique_candidates={0}".format(len(referenced_candidates)), flush=True)
+    for candidate, provenance_dir in sorted(referenced_candidates):
+        resolved = _resolve_provenance_file_candidate(
+            candidate,
+            local_output_root,
+            provenance_dir=provenance_dir,
+            s3_output_root=s3_output_root,
+        )
+        if resolved is not None and is_within_directory(resolved, local_output_root):
+            keep_paths.add(resolved)
 
     filtered = []  # type: List[CandidateFile]
     for path in sorted(keep_paths):
