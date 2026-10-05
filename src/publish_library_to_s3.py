@@ -328,7 +328,10 @@ def provenance_file_candidates(provenance_path):  # type: (Path) -> List[str]
                 "Install the wrapper's documented Python dependencies or use --all_output_files explicitly."
             )
         try:
-            payload = yaml.safe_load(provenance_path.read_text(encoding="utf-8"))
+            # SafeLoader is pure Python; use the compatible libyaml-backed
+            # loader when present because DAPPER provenance may be very large.
+            safe_loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+            payload = yaml.load(provenance_path.read_text(encoding="utf-8"), Loader=safe_loader)
         except Exception as exc:
             raise SystemExit(f"Unable to parse DAPPER provenance YAML {provenance_path}: {exc}") from exc
         if not isinstance(payload, dict):
