@@ -66,7 +66,7 @@ awk -F $'\t' -v task="$TASK_ID" -v model="$MODEL_ID" -v partition="$PARTITION_ID
 [[ $(wc -l < "$worklist") -gt 1 ]] || { echo "No enabled tasks matched requested filters" >&2; exit 1; }
 
 if [[ -n "$TASK_INDEX" ]]; then
-  task_id=$(awk -F $'\t' -v index="$TASK_INDEX" 'NR > 1 && $1 == index {print $2; exit}' "$worklist")
+  task_id=$(awk -F $'\t' -v task_number="$TASK_INDEX" 'NR > 1 && $1 == task_number {print $2; exit}' "$worklist")
   [[ -n "$task_id" ]] || { echo "No task for array index $TASK_INDEX" >&2; exit 1; }
   exec bash "$builder" full --task-id "$task_id" --out-root "$WORK_ROOT"
 fi

@@ -92,7 +92,7 @@ worklist="${worklist:-${qsub_log_root}/${library_id,,}_refresh_worklist.tsv}"
 
 run_worker() {
   local row model_id partition_id model_dir
-  row="$(awk -F $'\t' -v index="${task_index}" 'NR > 1 && $1 == index { print; exit }' "${worklist}")"
+  row="$(awk -F $'\t' -v task_number="${task_index}" 'NR > 1 && $1 == task_number { print; exit }' "${worklist}")"
   [[ -n "${row}" ]] || { echo "No refresh worklist row for task ${task_index}" >&2; exit 1; }
   IFS=$'\t' read -r _ model_id partition_id model_dir <<< "${row}"
   [[ -d "${model_dir}" ]] || { echo "Missing model output: ${model_dir}" >&2; exit 1; }
