@@ -1,0 +1,3 @@
+model_id	workflow_min_gmt_size	input_release	input_mode
+HZ1	5	GlyGen_v1.12.1	local_release_snapshot
+HZ2	1	GlyGen_API_Sandbox	cached_api_snapshot

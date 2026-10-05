@@ -109,6 +109,28 @@
 !HuBMAP/tests/fixtures/**/*.csv
 !HuBMAP/tests/fixtures/**/*.tsv
 
+!GlyGen/config/model_list.tsv
+!GlyGen/config/model_manifest.tsv
+!GlyGen/config/model_description_templates.tsv
+!GlyGen/config/partition_list.tsv
+!GlyGen/config/task_manifest.tsv
+!GlyGen/submission.yaml
+!GlyGen/environment.modernization.md
+!GlyGen/reproduction/
+!GlyGen/reproduction/*.sh
+!GlyGen/reproduction/*.tsv
+!GlyGen/expected/
+!GlyGen/expected/*.tsv
+!GlyGen/adoption/
+!GlyGen/adoption/*.md
+!GlyGen/adoption/*.tsv
+!GlyGen/tests/
+!GlyGen/tests/fixtures/
+!GlyGen/tests/fixtures/**/*.csv
+!GlyGen/tests/fixtures/**/*.tsv
+!GlyGen/tests/fixtures/**/*.json
+!GlyGen/tests/test_submission_wrapper.py
+
 # Allow traversing these subdirectories
 !LINCS_L1000/
 !RummaGEO/

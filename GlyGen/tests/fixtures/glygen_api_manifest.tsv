@@ -1,0 +1,3 @@
+accession	request_url	acquired_at	cache_file	sha256	status	error
+G00024MO	https://api.glygen.org/glycan/detail/G00024MO/	2026-10-04T00:00:00Z	glygen_api_cache/G00024MO.json	fixture	cached
+GEMPTY	https://api.glygen.org/glycan/detail/GEMPTY/	2026-10-04T00:00:00Z	glygen_api_cache/GEMPTY.json	fixture	cached
