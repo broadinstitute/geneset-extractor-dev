@@ -57,6 +57,16 @@ class PostrunReportTests(unittest.TestCase):
             with gzip.open(root / "report/legacy_per_set_comparison.tsv.gz", "rt", encoding="utf-8") as handle:
                 self.assertIn("old_a\tnew_a\tmatched", handle.read())
 
+    def test_regenerated_name_mapping_is_applied(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write(root / "run/generated.gmt", "new_a\td\tG1\n")
+            self.write(root / "old.gmt", "old_a\td\tG1\n")
+            self.write(root / "mapping.tsv", "legacy_set_name\tregenerated_set_name\nold_a\tnew_a\n")
+            create_report(root / "run", root / "report", legacy_gmts=[root / "old.gmt"], mapping_path=root / "mapping.tsv")
+            with gzip.open(root / "report/legacy_per_set_comparison.tsv.gz", "rt", encoding="utf-8") as handle:
+                self.assertIn("old_a\tnew_a\tmatched", handle.read())
+
     def test_explicit_gmt_does_not_require_run_root(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

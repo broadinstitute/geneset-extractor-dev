@@ -89,13 +89,26 @@ def _safe_div(left: int | float, right: int | float) -> float:
 
 
 def read_set_mapping(path: Path) -> dict[str, str]:
-    """Read a one-to-one legacy-to-generated name mapping TSV."""
+    """Read a one-to-one legacy-to-generated name mapping TSV.
+
+    ``regenerated_set_name`` is the established header in the wrapper's
+    derived legacy-reference mappings; retain ``generated_set_name`` as a
+    supported alias for manually authored mappings.
+    """
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
-        required = {"legacy_set_name", "generated_set_name"}
+        generated_column = (
+            "regenerated_set_name"
+            if reader.fieldnames and "regenerated_set_name" in reader.fieldnames
+            else "generated_set_name"
+        )
+        required = {"legacy_set_name", generated_column}
         if not reader.fieldnames or not required <= set(reader.fieldnames):
-            raise ValueError("set mapping must contain legacy_set_name and generated_set_name columns")
-        mapping = {str(row["legacy_set_name"]).strip(): str(row["generated_set_name"]).strip() for row in reader}
+            raise ValueError(
+                "set mapping must contain legacy_set_name and either "
+                "regenerated_set_name or generated_set_name columns"
+            )
+        mapping = {str(row["legacy_set_name"]).strip(): str(row[generated_column]).strip() for row in reader}
     if not mapping or any(not left or not right for left, right in mapping.items()) or len(mapping) != len(set(mapping.values())):
         raise ValueError("set mapping must be non-empty, one-to-one, and contain no blank names")
     return mapping
@@ -321,7 +334,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--gmt", type=Path, action="append", help="Explicit generated GMT; repeatable. Defaults to discovery below --run-root.")
     parser.add_argument("--legacy-gmt", type=Path, action="append", default=[], help="Legacy GMT paired positionally with each generated GMT.")
-    parser.add_argument("--name-mapping", type=Path, help="Optional TSV mapping legacy_set_name to generated_set_name.")
+    parser.add_argument("--name-mapping", type=Path, help="Optional TSV mapping legacy_set_name to regenerated_set_name (or generated_set_name).")
     parser.add_argument("--min-gene-set-size", type=int, default=1)
     parser.add_argument("--max-gene-set-size", type=int)
     args = parser.parse_args(argv)
