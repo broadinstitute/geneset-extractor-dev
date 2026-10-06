@@ -57,6 +57,13 @@ class PostrunReportTests(unittest.TestCase):
             with gzip.open(root / "report/legacy_per_set_comparison.tsv.gz", "rt", encoding="utf-8") as handle:
                 self.assertIn("old_a\tnew_a\tmatched", handle.read())
 
+    def test_explicit_gmt_does_not_require_run_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write(root / "current.gmt", "A\td\tG1\n")
+            create_report(None, root / "report", gmts=[root / "current.gmt"])
+            self.assertTrue((root / "report/report.md").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

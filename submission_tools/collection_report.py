@@ -17,7 +17,7 @@ from .postrun_report import _markdown_table, _write_tsv_gz, create_report
 
 
 LOG = logging.getLogger(__name__)
-REQUIRED_COLUMNS = {"library_id", "run_root"}
+REQUIRED_COLUMNS = {"library_id", "model_id", "legacy_gmt", "current_gmt"}
 
 
 def _safe_library_id(value: str) -> str:
@@ -39,18 +39,21 @@ def read_collection_manifest(path: Path) -> list[dict[str, Path | str | None]]:
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         if not reader.fieldnames or not REQUIRED_COLUMNS <= set(reader.fieldnames):
-            raise ValueError("collection manifest must contain library_id and run_root columns")
+            raise ValueError("pair manifest must contain library_id, model_id, legacy_gmt, and current_gmt columns")
         rows: list[dict[str, Path | str | None]] = []
-        seen: set[str] = set()
+        seen: set[tuple[str, str]] = set()
         for line_number, row in enumerate(reader, 2):
             library_id = _safe_library_id(str(row["library_id"] or "").strip())
-            if library_id in seen:
-                raise ValueError(f"duplicate library_id {library_id!r} at {path}:{line_number}")
-            run_root = _resolve(path.parent, str(row["run_root"] or ""))
-            if run_root is None:
-                raise ValueError(f"blank run_root at {path}:{line_number}")
-            rows.append({"library_id": library_id, "run_root": run_root, "generated_gmt": _resolve(path.parent, str(row.get("generated_gmt", "") or "")), "legacy_gmt": _resolve(path.parent, str(row.get("legacy_gmt", "") or "")), "name_mapping": _resolve(path.parent, str(row.get("name_mapping", "") or ""))})
-            seen.add(library_id)
+            model_id = _safe_library_id(str(row["model_id"] or "").strip())
+            key = (library_id, model_id)
+            if key in seen:
+                raise ValueError(f"duplicate library/model pair {library_id!r}/{model_id!r} at {path}:{line_number}")
+            legacy_gmt = _resolve(path.parent, str(row["legacy_gmt"] or ""))
+            current_gmt = _resolve(path.parent, str(row["current_gmt"] or ""))
+            if legacy_gmt is None or current_gmt is None:
+                raise ValueError(f"blank legacy_gmt or current_gmt at {path}:{line_number}")
+            rows.append({"library_id": library_id, "model_id": model_id, "legacy_gmt": legacy_gmt, "current_gmt": current_gmt, "name_mapping": _resolve(path.parent, str(row.get("name_mapping", "") or ""))})
+            seen.add(key)
     if not rows:
         raise ValueError("collection manifest contains no libraries")
     return rows
@@ -91,7 +94,7 @@ def _write_collection_pdf(output_dir: Path, summary: dict[str, object], rows: li
     except ImportError:
         return "Collection PDF skipped: optional dependency reportlab is unavailable."
     styles = getSampleStyleSheet()
-    fields = ["library_id", "gene_set_count", "generated_gmt_count", "qc_flag_count", "legacy_comparison", "membership_jaccard", "median_set_jaccard"]
+    fields = ["library_id", "model_count", "gene_set_count", "qc_flag_count", "mean_membership_jaccard", "mean_median_set_jaccard"]
     data = [[Paragraph(escape(field.replace("_", " ")), styles["BodyText"]) for field in fields]]
     for row in rows:
         data.append([Paragraph(escape((f"{row.get(field, ''):.4f}" if isinstance(row.get(field), float) else str(row.get(field, "")))[:80]), styles["BodyText"]) for field in fields])
@@ -118,34 +121,39 @@ def create_collection_report(manifest_path: Path, output_dir: Path, *, command: 
     rows: list[dict[str, object]] = []
     warnings: list[str] = []
     for entry in entries:
-        library_id, run_root = str(entry["library_id"]), Path(entry["run_root"])
-        if not run_root.is_dir():
-            raise ValueError(f"run_root for {library_id} is not a directory: {run_root}")
-        library_output = output_dir / "libraries" / library_id
-        generated, legacy = entry["generated_gmt"], entry["legacy_gmt"]
+        library_id, model_id = str(entry["library_id"]), str(entry["model_id"])
+        generated, legacy = Path(entry["current_gmt"]), Path(entry["legacy_gmt"])
+        if not generated.is_file() or not legacy.is_file():
+            raise ValueError(f"GMT pair for {library_id}/{model_id} must contain existing files: legacy={legacy}, current={generated}")
+        library_output = output_dir / "pairs" / library_id / model_id
         mapping = entry["name_mapping"]
-        result = create_report(run_root, library_output, gmts=[Path(generated)] if generated else None, legacy_gmts=[Path(legacy)] if legacy else [], mapping_path=Path(mapping) if mapping else None, command=command)
+        result = create_report(None, library_output, gmts=[generated], legacy_gmts=[legacy], mapping_path=Path(mapping) if mapping else None, command=command)
         comparison = _read_first_tsv_gz(library_output / "legacy_comparison_summary.tsv.gz")
-        rows.append({"library_id": library_id, "run_root": str(run_root), "report_path": str(library_output / "report.md"), "generated_gmt_count": int(result["generated_gmt_count"]), "gene_set_count": int(result["gene_set_count"]), "qc_flag_count": int(result["qc_flag_count"]), "warning_count": int(result["warning_count"]), "legacy_comparison": "run" if comparison else "not_run", "membership_jaccard": float(comparison["membership_jaccard"]) if comparison else "", "median_set_jaccard": float(comparison["median_set_jaccard"]) if comparison else ""})
-        LOG.info("reported %s", library_id)
-    plot_message = _write_overview_plot(output_dir, rows)
-    summary: dict[str, object] = {"created_at_utc": datetime.now(timezone.utc).isoformat(), "library_count": len(rows), "generated_gmt_count": sum(int(row["generated_gmt_count"]) for row in rows), "gene_set_count": sum(int(row["gene_set_count"]) for row in rows), "qc_flag_count": sum(int(row["qc_flag_count"]) for row in rows), "legacy_comparison_count": sum(row["legacy_comparison"] == "run" for row in rows), "plots": "available" if plot_message is None else "skipped", "pdf": "available", "command": command}
-    pdf_message = _write_collection_pdf(output_dir, summary, rows, ([plot_message] if plot_message else []))
+        rows.append({"library_id": library_id, "model_id": model_id, "legacy_gmt": str(legacy), "current_gmt": str(generated), "report_path": str(library_output / "report.md"), "generated_gmt_count": int(result["generated_gmt_count"]), "gene_set_count": int(result["gene_set_count"]), "qc_flag_count": int(result["qc_flag_count"]), "warning_count": int(result["warning_count"]), "membership_jaccard": float(comparison["membership_jaccard"]), "median_set_jaccard": float(comparison["median_set_jaccard"]), "exact_match_rate": float(comparison["exact_match_rate"])})
+        LOG.info("reported %s/%s", library_id, model_id)
+    library_rows: list[dict[str, object]] = []
+    for library_id in sorted({str(row["library_id"]) for row in rows}):
+        pairs = [row for row in rows if row["library_id"] == library_id]
+        library_rows.append({"library_id": library_id, "model_count": len(pairs), "gene_set_count": sum(int(row["gene_set_count"]) for row in pairs), "qc_flag_count": sum(int(row["qc_flag_count"]) for row in pairs), "mean_membership_jaccard": sum(float(row["membership_jaccard"]) for row in pairs) / len(pairs), "mean_median_set_jaccard": sum(float(row["median_set_jaccard"]) for row in pairs) / len(pairs)})
+    plot_message = _write_overview_plot(output_dir, library_rows)
+    summary: dict[str, object] = {"created_at_utc": datetime.now(timezone.utc).isoformat(), "library_count": len(library_rows), "pair_count": len(rows), "generated_gmt_count": sum(int(row["generated_gmt_count"]) for row in rows), "gene_set_count": sum(int(row["gene_set_count"]) for row in rows), "qc_flag_count": sum(int(row["qc_flag_count"]) for row in rows), "legacy_comparison_count": len(rows), "plots": "available" if plot_message is None else "skipped", "pdf": "available", "command": command}
+    pdf_message = _write_collection_pdf(output_dir, summary, library_rows, ([plot_message] if plot_message else []))
     summary["pdf"] = "available" if pdf_message is None else "skipped"
-    _write_tsv_gz(output_dir / "library_summary.tsv.gz", rows)
+    _write_tsv_gz(output_dir / "pair_summary.tsv.gz", rows)
+    _write_tsv_gz(output_dir / "library_summary.tsv.gz", library_rows)
     _write_tsv_gz(output_dir / "summary.tsv.gz", [summary])
-    markdown = ["# Gene-set library collection report", "", "## Overall summary", "", _markdown_table([summary], ["library_count", "generated_gmt_count", "gene_set_count", "qc_flag_count", "legacy_comparison_count", "plots", "pdf"]), "## Library summary", "", _markdown_table(rows, ["library_id", "generated_gmt_count", "gene_set_count", "qc_flag_count", "legacy_comparison", "membership_jaccard", "median_set_jaccard", "report_path"])]
+    markdown = ["# Gene-set library collection report", "", "## Overall summary", "", _markdown_table([summary], ["library_count", "pair_count", "generated_gmt_count", "gene_set_count", "qc_flag_count", "legacy_comparison_count", "plots", "pdf"]), "## Library summary", "", _markdown_table(library_rows, ["library_id", "model_count", "gene_set_count", "qc_flag_count", "mean_membership_jaccard", "mean_median_set_jaccard"]), "## Model-pair summary", "", _markdown_table(rows, ["library_id", "model_id", "gene_set_count", "qc_flag_count", "membership_jaccard", "median_set_jaccard", "exact_match_rate", "report_path"])]
     if plot_message or pdf_message:
         markdown.extend(["", "## Warnings", ""] + [f"- {message}" for message in (message for message in (plot_message, pdf_message) if message)])
     (output_dir / "report.md").write_text("\n".join(markdown) + "\n", encoding="utf-8")
     (output_dir / "commands.md").write_text("# Command\n\n```bash\n" + (command or "command unavailable") + "\n```\n", encoding="utf-8")
-    (output_dir / "MANIFEST.md").write_text("# Collection report manifest\n\n- `report.md`: aggregate human-readable report.\n- `report.pdf`: optional combined PDF when ReportLab is available.\n- `library_summary.tsv.gz`: aggregate library table.\n- `libraries/<library_id>/`: individual library report artifacts.\n- `cross_library_overview.{png,pdf}`: optional overview plot when matplotlib is available.\n", encoding="utf-8")
+    (output_dir / "MANIFEST.md").write_text("# Collection report manifest\n\n- `report.md`: aggregate human-readable report.\n- `report.pdf`: optional combined PDF when ReportLab is available.\n- `library_summary.tsv.gz`: aggregate library table.\n- `pair_summary.tsv.gz`: one row per legacy/current model GMT pair.\n- `pairs/<library_id>/<model_id>/`: individual pair-report artifacts.\n- `cross_library_overview.{png,pdf}`: optional overview plot when matplotlib is available.\n", encoding="utf-8")
     return summary
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Create reports for a collection of completed gene-set libraries.")
-    parser.add_argument("--manifest", type=Path, required=True, help="TSV with library_id and run_root; optional generated_gmt, legacy_gmt, and name_mapping columns.")
+    parser.add_argument("--manifest", type=Path, required=True, help="TSV with library_id, model_id, legacy_gmt, current_gmt; optional name_mapping.")
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
     try:

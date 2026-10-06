@@ -63,12 +63,12 @@ def discover_gmts(run_root: Path) -> list[Path]:
     return sorted({path.resolve() for pattern in ("*.gmt", "*.gmt.gz") for path in run_root.rglob(pattern) if path.is_file()})
 
 
-def _location(path: Path, run_root: Path) -> dict[str, str]:
+def _location(path: Path, run_root: Path | None) -> dict[str, str]:
     try:
-        parts = path.relative_to(run_root).parts
+        parts = path.relative_to(run_root).parts if run_root else path.parts
     except ValueError:
         parts = path.parts
-    result = {"relative_path": str(path.relative_to(run_root)) if path.is_relative_to(run_root) else str(path), "partition": "", "model_id": "", "group": ""}
+    result = {"relative_path": str(path.relative_to(run_root)) if run_root and path.is_relative_to(run_root) else str(path), "partition": "", "model_id": "", "group": ""}
     if "genesets" in parts:
         index = parts.index("genesets")
         if len(parts) > index + 1:
@@ -112,7 +112,7 @@ def _summary(values: list[int]) -> dict[str, float | int]:
     return {"min": min(values), "q1": quantile(.25), "median": quantile(.5), "mean": statistics.mean(values), "q3": quantile(.75), "max": max(values)}
 
 
-def _inventory(path: Path, run_root: Path, gene_sets: dict[str, set[str]], warnings: list[str], min_size: int, max_size: int | None) -> tuple[dict[str, object], list[dict[str, object]]]:
+def _inventory(path: Path, run_root: Path | None, gene_sets: dict[str, set[str]], warnings: list[str], min_size: int, max_size: int | None) -> tuple[dict[str, object], list[dict[str, object]]]:
     location = _location(path, run_root)
     sizes = [len(genes) for genes in gene_sets.values()]
     memberships = sum(sizes)
@@ -251,9 +251,11 @@ def _write_pdf_report(output_dir: Path, summary: dict[str, object], inventories:
     return None
 
 
-def create_report(run_root: Path, output_dir: Path, *, gmts: Iterable[Path] | None = None, legacy_gmts: Iterable[Path] = (), mapping_path: Path | None = None, min_gene_set_size: int = 1, max_gene_set_size: int | None = None, command: str = "") -> dict[str, object]:
+def create_report(run_root: Path | None, output_dir: Path, *, gmts: Iterable[Path] | None = None, legacy_gmts: Iterable[Path] = (), mapping_path: Path | None = None, min_gene_set_size: int = 1, max_gene_set_size: int | None = None, command: str = "") -> dict[str, object]:
     """Write a complete report and return its machine-readable summary."""
-    run_root, output_dir = run_root.resolve(), output_dir.resolve()
+    run_root, output_dir = run_root.resolve() if run_root else None, output_dir.resolve()
+    if gmts is None and run_root is None:
+        raise ValueError("pass --run-root for discovery, or at least one --gmt")
     gmt_paths = [path.resolve() for path in gmts] if gmts else discover_gmts(run_root)
     if not gmt_paths:
         raise ValueError(f"no GMT files found beneath {run_root}")
@@ -295,7 +297,7 @@ def create_report(run_root: Path, output_dir: Path, *, gmts: Iterable[Path] | No
     if mapping:
         _write_tsv_gz(output_dir / "legacy_set_mapping_audit.tsv.gz", [{"legacy_set_name": legacy, "generated_set_name": generated, "status": "declared"} for legacy, generated in sorted(mapping.items())])
     plot_messages = _plots(output_dir, [int(row["gene_set_size"]) for row in gene_set_size_rows], comparison_summaries)
-    summary = {"run_root": str(run_root), "created_at_utc": datetime.now(timezone.utc).isoformat(), "generated_gmt_count": len(gmt_paths), "legacy_gmt_count": len(legacy_paths), "gene_set_count": sum(int(row["gene_set_count"]) for row in inventories), "qc_flag_count": len(flags), "warning_count": len(all_warnings), "plots": "available" if not plot_messages else "skipped", "pdf": "available", "command": command}
+    summary = {"run_root": str(run_root) if run_root else "", "created_at_utc": datetime.now(timezone.utc).isoformat(), "generated_gmt_count": len(gmt_paths), "legacy_gmt_count": len(legacy_paths), "gene_set_count": sum(int(row["gene_set_count"]) for row in inventories), "qc_flag_count": len(flags), "warning_count": len(all_warnings), "plots": "available" if not plot_messages else "skipped", "pdf": "available", "command": command}
     pdf_message = _write_pdf_report(output_dir, summary, inventories, flags, comparison_summaries, all_warnings + plot_messages)
     summary["pdf"] = "available" if pdf_message is None else "skipped"
     _write_tsv_gz(output_dir / "summary.tsv.gz", [summary])
@@ -315,7 +317,7 @@ def create_report(run_root: Path, output_dir: Path, *, gmts: Iterable[Path] | No
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Summarize completed GMT outputs without modifying them.")
-    parser.add_argument("--run-root", type=Path, required=True)
+    parser.add_argument("--run-root", type=Path, help="Run root for automatic GMT discovery; optional with --gmt.")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--gmt", type=Path, action="append", help="Explicit generated GMT; repeatable. Defaults to discovery below --run-root.")
     parser.add_argument("--legacy-gmt", type=Path, action="append", default=[], help="Legacy GMT paired positionally with each generated GMT.")
@@ -325,6 +327,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.min_gene_set_size < 0 or args.max_gene_set_size is not None and args.max_gene_set_size < args.min_gene_set_size:
         parser.error("invalid gene-set size limits")
+    if args.run_root is None and not args.gmt:
+        parser.error("pass --run-root for discovery, or at least one --gmt")
     try:
         summary = create_report(args.run_root, args.output_dir, gmts=args.gmt, legacy_gmts=args.legacy_gmt, mapping_path=args.name_mapping, min_gene_set_size=args.min_gene_set_size, max_gene_set_size=args.max_gene_set_size, command=" ".join(sys.argv))
     except (OSError, ValueError) as exc:

@@ -14,6 +14,9 @@ bash run/summarize_genesets.sh \
   --output-dir GTEx/outputs/postrun_summary/2026-10-06
 ```
 
+`--run-root` is required only for automatic GMT discovery. For an explicit
+targeted report, pass `--gmt` instead; no run root is needed.
+
 To compare legacy outputs, either select one generated GMT or provide one
 `--legacy-gmt` per selected/generated GMT in the same order. Requiring equal
 counts prevents a legacy file from being compared to an arbitrary discovered
