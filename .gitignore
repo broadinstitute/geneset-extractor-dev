@@ -370,3 +370,10 @@ archive/
 !IDG/config/refresh_targets.tsv
 IMPC/**/__pycache__/
 IMPC/**/*.pyc
+
+# Keep generated and ad-hoc legacy/current mapping data local. Some library
+# allowlists above include whole adoption trees, so this explicit final rule
+# prevents mapping artifacts from being staged for publication.
+**/adoption/legacy_reference_mappings/
+**/*legacy_reference_mapping*.tsv
+**/*legacy_reference_mapping*.tsv.gz
