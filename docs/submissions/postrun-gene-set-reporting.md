@@ -36,7 +36,9 @@ tables, the executed command, a log, and a manifest. Tables include GMT and
 gene-set inventory, QC flags, and—when requested—legacy summary/per-set
 comparison statistics. Plots are written as PNG and PDF when the optional
 `matplotlib` module is available; reporting otherwise completes and records
-that plots were skipped.
+that plots were skipped. A combined `report.pdf` containing report tables and
+available plots is written when the optional `reportlab` module is available;
+it likewise never prevents the Markdown/TSV report from completing.
 
 Comparison is by exact gene-set name (or the supplied explicit mapping) and set
 membership. Duplicate names are

@@ -23,6 +23,7 @@ class PostrunReportTests(unittest.TestCase):
             self.write(legacy, "A\tdesc\tG2\tG3\nC\tdesc\tG4\n")
             result = create_report(root / "run", output, legacy_gmts=[legacy], min_gene_set_size=1, command="example")
             self.assertEqual(result["generated_gmt_count"], 1)
+            self.assertEqual(result["pdf"], "skipped")
             self.assertTrue((output / "report.md").is_file())
             self.assertTrue((output / "legacy_comparison_summary.tsv.gz").is_file())
             with gzip.open(output / "qc_flags.tsv.gz", "rt", encoding="utf-8") as handle:

@@ -21,6 +21,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
+from xml.sax.saxutils import escape
 
 
 LOG = logging.getLogger(__name__)
@@ -206,6 +207,50 @@ def _plots(output_dir: Path, gene_set_sizes: list[int], comparisons: list[dict[s
     return messages
 
 
+def _write_pdf_report(output_dir: Path, summary: dict[str, object], inventories: list[dict[str, object]], flags: list[dict[str, object]], comparisons: list[dict[str, object]], warnings: list[str]) -> str | None:
+    """Build the optional combined PDF without making it a runtime requirement."""
+    try:
+        from reportlab.lib import colors  # type: ignore[import-not-found]
+        from reportlab.lib.pagesizes import letter  # type: ignore[import-not-found]
+        from reportlab.lib.styles import getSampleStyleSheet  # type: ignore[import-not-found]
+        from reportlab.lib.units import inch  # type: ignore[import-not-found]
+        from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle  # type: ignore[import-not-found]
+    except ImportError:
+        return "Combined PDF skipped: optional dependency reportlab is unavailable."
+
+    styles = getSampleStyleSheet()
+    story: list[object] = [Paragraph("Post-run gene-set report", styles["Title"])]
+
+    def add_table(title: str, rows: list[dict[str, object]], fields: list[str], limit: int = 20) -> None:
+        story.extend([Spacer(1, 0.15 * inch), Paragraph(title, styles["Heading2"])])
+        if not rows:
+            story.append(Paragraph("No rows.", styles["BodyText"]))
+            return
+        data = [[Paragraph(escape(field.replace("_", " ")), styles["BodyText"]) for field in fields]]
+        for row in rows[:limit]:
+            data.append([Paragraph(escape((f"{row.get(field, ''):.4f}" if isinstance(row.get(field), float) else str(row.get(field, "")))[:100]), styles["BodyText"]) for field in fields])
+        table = Table(data, repeatRows=1, colWidths=[7.0 * inch / len(fields)] * len(fields))
+        table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey), ("GRID", (0, 0), (-1, -1), 0.25, colors.grey), ("VALIGN", (0, 0), (-1, -1), "TOP"), ("FONTSIZE", (0, 0), (-1, -1), 7), ("LEADING", (0, 0), (-1, -1), 8), ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3)]))
+        story.append(table)
+        if len(rows) > limit:
+            story.append(Paragraph(f"Showing {limit} of {len(rows)} rows; full data are in the TSV.GZ artifact.", styles["BodyText"]))
+
+    add_table("Run summary", [summary], ["run_root", "generated_gmt_count", "legacy_gmt_count", "gene_set_count", "qc_flag_count", "warning_count"])
+    add_table("Generated GMT inventory", inventories, ["relative_path", "partition", "model_id", "group", "gene_set_count", "membership_count", "unique_gene_count", "median"])
+    add_table("Quality-control flags", flags, ["gene_set_name", "gene_set_size", "flag"])
+    if comparisons:
+        add_table("Legacy comparison", comparisons, ["comparison", "matched_set_count", "legacy_only_set_count", "generated_only_set_count", "membership_jaccard", "median_set_jaccard", "exact_match_rate"])
+    for image_name in ("set_size_distribution.png", "legacy_jaccard_distribution.png"):
+        image_path = output_dir / image_name
+        if image_path.is_file():
+            story.extend([PageBreak(), Paragraph(image_name.removesuffix(".png").replace("_", " ").title(), styles["Heading2"]), Spacer(1, 0.12 * inch), Image(str(image_path), width=6.5 * inch, height=6.5 * inch * 4 / 7)])
+    if warnings:
+        story.extend([PageBreak(), Paragraph("Warnings", styles["Heading2"])])
+        story.extend(Paragraph(escape(f"• {warning}"), styles["BodyText"]) for warning in warnings)
+    SimpleDocTemplate(str(output_dir / "report.pdf"), pagesize=letter, title="Post-run gene-set report", leftMargin=.75 * inch, rightMargin=.75 * inch, topMargin=.65 * inch, bottomMargin=.65 * inch).build(story)
+    return None
+
+
 def create_report(run_root: Path, output_dir: Path, *, gmts: Iterable[Path] | None = None, legacy_gmts: Iterable[Path] = (), mapping_path: Path | None = None, min_gene_set_size: int = 1, max_gene_set_size: int | None = None, command: str = "") -> dict[str, object]:
     """Write a complete report and return its machine-readable summary."""
     run_root, output_dir = run_root.resolve(), output_dir.resolve()
@@ -250,19 +295,21 @@ def create_report(run_root: Path, output_dir: Path, *, gmts: Iterable[Path] | No
     if mapping:
         _write_tsv_gz(output_dir / "legacy_set_mapping_audit.tsv.gz", [{"legacy_set_name": legacy, "generated_set_name": generated, "status": "declared"} for legacy, generated in sorted(mapping.items())])
     plot_messages = _plots(output_dir, [int(row["gene_set_size"]) for row in gene_set_size_rows], comparison_summaries)
-    summary = {"run_root": str(run_root), "created_at_utc": datetime.now(timezone.utc).isoformat(), "generated_gmt_count": len(gmt_paths), "legacy_gmt_count": len(legacy_paths), "gene_set_count": sum(int(row["gene_set_count"]) for row in inventories), "qc_flag_count": len(flags), "warning_count": len(all_warnings), "plots": "available" if not plot_messages else "skipped", "command": command}
+    summary = {"run_root": str(run_root), "created_at_utc": datetime.now(timezone.utc).isoformat(), "generated_gmt_count": len(gmt_paths), "legacy_gmt_count": len(legacy_paths), "gene_set_count": sum(int(row["gene_set_count"]) for row in inventories), "qc_flag_count": len(flags), "warning_count": len(all_warnings), "plots": "available" if not plot_messages else "skipped", "pdf": "available", "command": command}
+    pdf_message = _write_pdf_report(output_dir, summary, inventories, flags, comparison_summaries, all_warnings + plot_messages)
+    summary["pdf"] = "available" if pdf_message is None else "skipped"
     _write_tsv_gz(output_dir / "summary.tsv.gz", [summary])
     (output_dir / "run_manifest.tsv.gz").write_bytes((output_dir / "gene_set_inventory.tsv.gz").read_bytes())
     (output_dir / "commands.md").write_text("# Command\n\n```bash\n" + (command or "command unavailable") + "\n```\n", encoding="utf-8")
-    report = ["# Post-run gene-set report", "", "## Run summary", "", _markdown_table([summary], ["run_root", "generated_gmt_count", "legacy_gmt_count", "gene_set_count", "qc_flag_count", "warning_count", "plots"]), "## Generated GMT inventory", "", _markdown_table(inventories, ["relative_path", "partition", "model_id", "group", "gene_set_count", "membership_count", "unique_gene_count", "median", "empty_gene_set_count", "warning_count"]), "## Quality-control flags", "", _markdown_table(flags, ["gmt_path", "gene_set_name", "gene_set_size", "flag"]), "## Legacy comparison"]
+    report = ["# Post-run gene-set report", "", "## Run summary", "", _markdown_table([summary], ["run_root", "generated_gmt_count", "legacy_gmt_count", "gene_set_count", "qc_flag_count", "warning_count", "plots", "pdf"]), "## Generated GMT inventory", "", _markdown_table(inventories, ["relative_path", "partition", "model_id", "group", "gene_set_count", "membership_count", "unique_gene_count", "median", "empty_gene_set_count", "warning_count"]), "## Quality-control flags", "", _markdown_table(flags, ["gmt_path", "gene_set_name", "gene_set_size", "flag"]), "## Legacy comparison"]
     if comparison_summaries:
         report.extend(["", _markdown_table(comparison_summaries, ["comparison", "matched_set_count", "legacy_only_set_count", "generated_only_set_count", "membership_jaccard", "median_set_jaccard", "exact_match_rate"]), "", "Per-set results are in `legacy_per_set_comparison.tsv.gz`."])
     else:
         report.extend(["", "No legacy GMTs were supplied; legacy comparison was not run."])
-    if all_warnings or plot_messages:
-        report.extend(["", "## Warnings", ""] + [f"- {message}" for message in all_warnings + plot_messages])
+    if all_warnings or plot_messages or pdf_message:
+        report.extend(["", "## Warnings", ""] + [f"- {message}" for message in all_warnings + plot_messages + ([pdf_message] if pdf_message else [])])
     (output_dir / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
-    (output_dir / "MANIFEST.md").write_text("# Report manifest\n\n- `report.md`: human-readable summary.\n- `*.tsv.gz`: machine-readable tables.\n- `run.log`: execution log.\n- `commands.md`: invocation.\n- PNG/PDF files: optional plots when matplotlib is available.\n", encoding="utf-8")
+    (output_dir / "MANIFEST.md").write_text("# Report manifest\n\n- `report.md`: human-readable summary.\n- `report.pdf`: optional combined PDF when ReportLab is available.\n- `*.tsv.gz`: machine-readable tables.\n- `run.log`: execution log.\n- `commands.md`: invocation.\n- PNG/PDF files: optional plots when matplotlib is available.\n", encoding="utf-8")
     return summary
 
 
