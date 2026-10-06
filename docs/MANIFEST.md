@@ -16,6 +16,7 @@ submission contract.
 | [dev/add_new_library/publishable_library_attributes.md](dev/add_new_library/publishable_library_attributes.md) | Maintainers and reviewers | Defines the characteristics needed for a library to be safely published and maintained. |
 | [submissions/README.md](submissions/README.md) | All submission-system users | Entry point for the current submission contract, local/CI commands, safety model, and links to specialized guides. |
 | [submissions/architecture.md](submissions/architecture.md) | Contributors and maintainers | Defines the DIG-versus-wrapper ownership boundary and the expected submitted-library layout. |
+| [submissions/postrun-gene-set-reporting.md](submissions/postrun-gene-set-reporting.md) | Contributors and maintainers | Documents the wrapper-side, read-only report for completed GMT outputs and optional legacy comparisons. |
 | [submissions/contributor-workflow.md](submissions/contributor-workflow.md) | New-library contributors | Gives the proposal-to-paired-PR sequence for a newly developed library. |
 | [submissions/creating-new-library.md](submissions/creating-new-library.md) | New-library contributors and maintainers | Documents `create-library`, isolated workspaces, source-input protection, verification, and submission. |
 | [submissions/adopting-existing-library.md](submissions/adopting-existing-library.md) | Legacy-library adopters | Explains the general adoption contract, architecture migration, provenance, ignore policy, comparisons, and advanced commands. |
