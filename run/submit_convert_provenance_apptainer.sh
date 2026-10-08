@@ -4,6 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WRAPPER_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+CONVERT_RUNNER="${PROVENANCE_CONVERT_RUNNER:-${SCRIPT_DIR}/convert_provenance_apptainer.sh}"
 DEFAULT_DIG_REPO="$(cd "${WRAPPER_DIR}/.." && pwd)/dig-gene-set-extractors"
 DIG_DIR="${DIG_DIR:-${DIG_REPO:-${DEFAULT_DIG_REPO}}}"
 APPTAINER_BIN="${APPTAINER_BIN:-apptainer}"
@@ -54,7 +55,8 @@ if [[ -n "${TASK_INDEX}" ]]; then
   row="$(awk -F $'\t' -v task_number="${TASK_INDEX}" 'NR > 1 && $1 == task_number { print; exit }' "${WORKLIST}")"
   [[ -n "${row}" ]] || { echo "No worklist row for task ${TASK_INDEX}" >&2; exit 1; }
   IFS=$'\t' read -r _ provenance <<< "${row}"
-  command=(bash "${SCRIPT_DIR}/convert_provenance_apptainer.sh" "${provenance}")
+  [[ -f "${CONVERT_RUNNER}" ]] || { echo "Missing provenance conversion launcher: ${CONVERT_RUNNER}" >&2; exit 1; }
+  command=(bash "${CONVERT_RUNNER}" "${provenance}")
   [[ ${OVERWRITE} -eq 1 ]] && command+=(--overwrite)
   DIG_REPO="${DIG_DIR}" APPTAINER_IMAGE="${APPTAINER_IMAGE}" APPTAINER_BIN="${APPTAINER_BIN}" APPTAINER_EXTRA_ARGS="${APPTAINER_EXTRA_ARGS}" APPTAINER_PYTHON_BIN="${APPTAINER_PYTHON_BIN}" "${command[@]}"
   exit $?
@@ -77,7 +79,7 @@ printf 'task_index\tprovenance_path\n' > "${WORKLIST}"
 for index in "${!paths[@]}"; do printf '%s\t%s\n' "$((index + 1))" "${paths[index]}" >> "${WORKLIST}"; done
 echo "Provenance worklist written: ${WORKLIST} (${#paths[@]} files)"
 [[ ${SUBMIT} -eq 1 ]] || { echo "Set --submit to call qsub."; exit 0; }
-environment="PROVENANCE_WORKLIST=${WORKLIST},DIG_REPO=${DIG_DIR},APPTAINER_IMAGE=${APPTAINER_IMAGE},APPTAINER_BIN=${APPTAINER_BIN},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS},APPTAINER_PYTHON_BIN=${APPTAINER_PYTHON_BIN}"
+environment="PROVENANCE_WORKLIST=${WORKLIST},PROVENANCE_CONVERT_RUNNER=${SCRIPT_DIR}/convert_provenance_apptainer.sh,DIG_REPO=${DIG_DIR},APPTAINER_IMAGE=${APPTAINER_IMAGE},APPTAINER_BIN=${APPTAINER_BIN},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS},APPTAINER_PYTHON_BIN=${APPTAINER_PYTHON_BIN}"
 submit_args=("${INPUT}" --submit)
 [[ ${OVERWRITE} -eq 1 ]] && submit_args+=(--overwrite)
 exec "${QSUB_BIN}" -N provenance_convert -t "1-${#paths[@]}" \
