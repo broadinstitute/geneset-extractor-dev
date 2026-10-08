@@ -31,6 +31,15 @@ python3 -m submission_tools provenance convert path/to/outputs --recursive \
 The batch form discovers sibling metadata and prefers
 `geneset.provenance.legacy.json` when both legacy names occur in a directory.
 
+For an Apptainer environment, use the matching launcher. It bind-mounts the
+output tree, wrapper checkout, and DIG checkout, then invokes the same native
+wrapper command:
+
+```bash
+APPTAINER_IMAGE=/path/to/geneset-extractor.sif \
+  bash run/convert_provenance_apptainer.sh /path/to/outputs --recursive
+```
+
 CI uses the required check named **`validate-new-library-submissions`**. It
 runs the same dependency-free unit and scaffold/integration tests, validates
 the committed synthetic example, discovers changed directories exclusively by
