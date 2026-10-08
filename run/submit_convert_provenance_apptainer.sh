@@ -51,7 +51,7 @@ QSUB_LOG_ROOT="${QSUB_LOG_ROOT:-${INPUT}/qsub_logs_provenance}"
 WORKLIST="${WORKLIST:-${QSUB_LOG_ROOT}/provenance_convert_worklist.tsv}"
 
 if [[ -n "${TASK_INDEX}" ]]; then
-  row="$(awk -F $'\t' -v index="${TASK_INDEX}" 'NR > 1 && $1 == index { print; exit }' "${WORKLIST}")"
+  row="$(awk -F $'\t' -v task_number="${TASK_INDEX}" 'NR > 1 && $1 == task_number { print; exit }' "${WORKLIST}")"
   [[ -n "${row}" ]] || { echo "No worklist row for task ${TASK_INDEX}" >&2; exit 1; }
   IFS=$'\t' read -r _ provenance <<< "${row}"
   command=(bash "${SCRIPT_DIR}/convert_provenance_apptainer.sh" "${provenance}")
