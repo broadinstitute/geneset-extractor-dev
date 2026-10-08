@@ -13,6 +13,7 @@ from .receipt import write_receipt
 from .scaffold import scaffold
 from .validator import validate_submission
 from .external_import import scaffold_external_library
+from .provenance import convert as convert_provenance, deduplicate as deduplicate_provenance, discover as discover_provenance
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -41,6 +42,27 @@ def main(argv: list[str] | None = None) -> int:
     external.add_argument("--gmt-manifest", required=True)
     external.add_argument("--gmt-root", required=True, help="Read-only root containing every source_gmt_path in the GMT manifest.")
     external.add_argument("--output", required=True)
+    provenance = commands.add_parser("provenance", help="Delegate persisted provenance conversion to DIG.")
+    provenance_commands = provenance.add_subparsers(dest="provenance_command", required=True)
+    provenance_convert = provenance_commands.add_parser("convert", help="Convert legacy DIG provenance JSON to DAPPER YAML.")
+    provenance_convert.add_argument("input", help="Legacy provenance JSON file or output directory.")
+    provenance_convert.add_argument("--metadata", help="Forwarded to DIG for a single provenance file.")
+    provenance_convert.add_argument("--out", help="Forwarded to DIG for a single provenance file.")
+    provenance_convert.add_argument("--recursive", action="store_true")
+    provenance_convert.add_argument("--overwrite", action="store_true")
+    provenance_convert.add_argument("--dig-repo", help="DIG checkout; defaults to DIG_REPO or sibling checkout.")
+    provenance_convert.add_argument("--dig-python", help="Python interpreter with DIG dependencies.")
+    provenance_discover = provenance_commands.add_parser("discover", help="List legacy provenance using DIG discovery rules.")
+    provenance_discover.add_argument("input")
+    provenance_discover.add_argument("--recursive", action="store_true")
+    provenance_discover.add_argument("--dig-repo")
+    provenance_discover.add_argument("--dig-python")
+    provenance_deduplicate = provenance_commands.add_parser("deduplicate", help="Back up and remove DAPPER-equivalent legacy File nodes.")
+    provenance_deduplicate.add_argument("input")
+    provenance_deduplicate.add_argument("--recursive", action="store_true")
+    provenance_deduplicate.add_argument("--overwrite", action="store_true")
+    provenance_deduplicate.add_argument("--dig-repo")
+    provenance_deduplicate.add_argument("--dig-python")
     adopt_parser = commands.add_parser("adopt", help="Create an isolated workspace for adopting a legacy library.")
     adopt_parser.add_argument("--existing", required=True, help="Legacy directory; it is never modified.")
     adopt_parser.add_argument("--library-id", required=True)
@@ -122,6 +144,16 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(str(exc))
         print(f"created external precomputed import library {created}")
         return 0
+    if args.command == "provenance" and args.provenance_command == "convert":
+        return convert_provenance(Path(args.input), dig_repo=Path(args.dig_repo) if args.dig_repo else None,
+                                  dig_python=args.dig_python, metadata=Path(args.metadata) if args.metadata else None,
+                                  output=Path(args.out) if args.out else None, recursive=args.recursive, overwrite=args.overwrite)
+    if args.command == "provenance" and args.provenance_command == "discover":
+        return discover_provenance(Path(args.input), dig_repo=Path(args.dig_repo) if args.dig_repo else None,
+                                   dig_python=args.dig_python, recursive=args.recursive)
+    if args.command == "provenance" and args.provenance_command == "deduplicate":
+        return deduplicate_provenance(Path(args.input), dig_repo=Path(args.dig_repo) if args.dig_repo else None,
+                                      dig_python=args.dig_python, recursive=args.recursive, overwrite=args.overwrite)
     if args.command == "discover":
         changed_paths = None
         if args.changed_files:

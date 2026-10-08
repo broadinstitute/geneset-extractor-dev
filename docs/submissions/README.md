@@ -16,6 +16,56 @@ python3 -m submission_tools validate --submission LIBRARY_X/submission.yaml
 bash run/test_submission_tools.sh
 ```
 
+## Convert legacy provenance
+
+This wrapper delegates directly to DIG; it does not rerun models or rebuild
+the graph:
+
+```bash
+python3 -m submission_tools provenance convert path/to/geneset.provenance.json \
+  --metadata path/to/geneset.meta.json --dig-repo ../dig-gene-set-extractors
+python3 -m submission_tools provenance convert path/to/outputs --recursive \
+  --dig-repo ../dig-gene-set-extractors
+```
+
+The batch form discovers sibling metadata and prefers
+`geneset.provenance.legacy.json` when both legacy names occur in a directory.
+
+For an Apptainer environment, use the matching launcher. It bind-mounts the
+output tree, wrapper checkout, and DIG checkout, then invokes the same native
+wrapper command:
+
+```bash
+APPTAINER_IMAGE=/path/to/geneset-extractor.sif \
+  DIG_REPO=/path/to/dig-gene-set-extractors \
+  bash run/convert_provenance_apptainer.sh /path/to/outputs --recursive
+```
+
+This is a foreground conversion, not a scheduler array job: `QSUB_BIN`,
+`SUBMISSION_ARRAY_MEMORY`, and `SUBMISSION_ARRAY_WALLTIME` intentionally do
+not apply. `APPTAINER_BIN`, `APPTAINER_EXTRA_ARGS`, and
+`APPTAINER_PYTHON_BIN` are supported. The wrapper location is derived from
+the launcher itself, so `REPO_ROOT` is unnecessary.
+
+For large output trees, create and review an array worklist, then submit it:
+
+```bash
+APPTAINER_IMAGE=/path/to/geneset-extractor.sif DIG_REPO=/path/to/dig-gene-set-extractors \
+  bash run/submit_convert_provenance_apptainer.sh /path/to/outputs
+APPTAINER_IMAGE=/path/to/geneset-extractor.sif DIG_REPO=/path/to/dig-gene-set-extractors \
+  bash run/submit_convert_provenance_apptainer.sh /path/to/outputs --submit
+```
+
+The analogous deduplication launchers back up each changed legacy graph as
+`geneset.provenance.duplicates.json` before rewriting it:
+
+```bash
+APPTAINER_IMAGE=/path/to/geneset-extractor.sif DIG_REPO=/path/to/dig-gene-set-extractors \
+  bash run/deduplicate_provenance_apptainer.sh /path/to/outputs --recursive
+APPTAINER_IMAGE=/path/to/geneset-extractor.sif DIG_REPO=/path/to/dig-gene-set-extractors \
+  bash run/submit_deduplicate_provenance_apptainer.sh /path/to/outputs --submit
+```
+
 CI uses the required check named **`validate-new-library-submissions`**. It
 runs the same dependency-free unit and scaffold/integration tests, validates
 the committed synthetic example, discovers changed directories exclusively by
