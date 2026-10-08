@@ -13,7 +13,7 @@ from .receipt import write_receipt
 from .scaffold import scaffold
 from .validator import validate_submission
 from .external_import import scaffold_external_library
-from .provenance import convert as convert_provenance, discover as discover_provenance
+from .provenance import convert as convert_provenance, deduplicate as deduplicate_provenance, discover as discover_provenance
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -57,6 +57,12 @@ def main(argv: list[str] | None = None) -> int:
     provenance_discover.add_argument("--recursive", action="store_true")
     provenance_discover.add_argument("--dig-repo")
     provenance_discover.add_argument("--dig-python")
+    provenance_deduplicate = provenance_commands.add_parser("deduplicate", help="Back up and remove DAPPER-equivalent legacy File nodes.")
+    provenance_deduplicate.add_argument("input")
+    provenance_deduplicate.add_argument("--recursive", action="store_true")
+    provenance_deduplicate.add_argument("--overwrite", action="store_true")
+    provenance_deduplicate.add_argument("--dig-repo")
+    provenance_deduplicate.add_argument("--dig-python")
     adopt_parser = commands.add_parser("adopt", help="Create an isolated workspace for adopting a legacy library.")
     adopt_parser.add_argument("--existing", required=True, help="Legacy directory; it is never modified.")
     adopt_parser.add_argument("--library-id", required=True)
@@ -145,6 +151,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "provenance" and args.provenance_command == "discover":
         return discover_provenance(Path(args.input), dig_repo=Path(args.dig_repo) if args.dig_repo else None,
                                    dig_python=args.dig_python, recursive=args.recursive)
+    if args.command == "provenance" and args.provenance_command == "deduplicate":
+        return deduplicate_provenance(Path(args.input), dig_repo=Path(args.dig_repo) if args.dig_repo else None,
+                                      dig_python=args.dig_python, recursive=args.recursive, overwrite=args.overwrite)
     if args.command == "discover":
         changed_paths = None
         if args.changed_files:

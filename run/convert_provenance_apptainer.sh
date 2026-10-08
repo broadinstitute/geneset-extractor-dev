@@ -11,11 +11,13 @@ APPTAINER_BIN="${APPTAINER_BIN:-apptainer}"
 APPTAINER_IMAGE="${APPTAINER_IMAGE:-}"
 APPTAINER_EXTRA_ARGS="${APPTAINER_EXTRA_ARGS:-}"
 APPTAINER_PYTHON_BIN="${APPTAINER_PYTHON_BIN:-python}"
+PROVENANCE_OPERATION="${PROVENANCE_OPERATION:-convert}"
+[[ "${PROVENANCE_OPERATION}" == "convert" || "${PROVENANCE_OPERATION}" == "deduplicate" ]] || { echo "PROVENANCE_OPERATION must be convert or deduplicate" >&2; exit 2; }
 
 usage() {
   cat <<'EOF'
 Usage:
-  ./geneset-extractor-dev/run/convert_provenance_apptainer.sh <provenance.json-or-directory> [convert options]
+  ./geneset-extractor-dev/run/convert_provenance_apptainer.sh <provenance.json-or-directory> [options]
 
 Required environment variables:
   APPTAINER_IMAGE
@@ -24,10 +26,10 @@ Optional environment variables:
   DIG_REPO (or DIG_DIR), APPTAINER_BIN, APPTAINER_EXTRA_ARGS,
   APPTAINER_PYTHON_BIN
 
-Supported convert options:
+Supported options:
   --metadata PATH  --out PATH  --recursive  --overwrite
 
-The command delegates to `python -m submission_tools provenance convert` in
+The command delegates to `python -m submission_tools provenance ${PROVENANCE_OPERATION}` in
 the container. It converts persisted provenance only; it does not extract
 gene sets or rewrite the legacy JSON, metadata, or source GMT.
 EOF
@@ -71,7 +73,7 @@ done
 
 mapfile -t UNIQUE_BIND_DIRS < <(printf '%s\n' "${BIND_DIRS[@]}" | awk 'NF && !seen[$0]++')
 BIND_ARG="$(IFS=,; printf '%s' "${UNIQUE_BIND_DIRS[*]}")"
-COMMAND="cd $(printf '%q' "${WRAPPER_DIR}") && exec $(printf '%q' "${APPTAINER_PYTHON_BIN}") -m submission_tools provenance convert$(printf ' %q' "${FORWARDED_ARGS[@]}") --dig-python $(printf '%q' "${APPTAINER_PYTHON_BIN}")"
+COMMAND="cd $(printf '%q' "${WRAPPER_DIR}") && exec $(printf '%q' "${APPTAINER_PYTHON_BIN}") -m submission_tools provenance $(printf '%q' "${PROVENANCE_OPERATION}")$(printf ' %q' "${FORWARDED_ARGS[@]}") --dig-python $(printf '%q' "${APPTAINER_PYTHON_BIN}")"
 
 EXEC_CMD=(env "APPTAINERENV_DIG_REPO=${DIG_DIR}" "${APPTAINER_BIN}" exec --bind "${BIND_ARG}")
 if [[ -n "${APPTAINER_EXTRA_ARGS}" ]]; then

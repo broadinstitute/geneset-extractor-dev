@@ -56,6 +56,16 @@ APPTAINER_IMAGE=/path/to/geneset-extractor.sif DIG_REPO=/path/to/dig-gene-set-ex
   bash run/submit_convert_provenance_apptainer.sh /path/to/outputs --submit
 ```
 
+The analogous deduplication launchers back up each changed legacy graph as
+`geneset.provenance.duplicates.json` before rewriting it:
+
+```bash
+APPTAINER_IMAGE=/path/to/geneset-extractor.sif DIG_REPO=/path/to/dig-gene-set-extractors \
+  bash run/deduplicate_provenance_apptainer.sh /path/to/outputs --recursive
+APPTAINER_IMAGE=/path/to/geneset-extractor.sif DIG_REPO=/path/to/dig-gene-set-extractors \
+  bash run/submit_deduplicate_provenance_apptainer.sh /path/to/outputs --submit
+```
+
 CI uses the required check named **`validate-new-library-submissions`**. It
 runs the same dependency-free unit and scaffold/integration tests, validates
 the committed synthetic example, discovers changed directories exclusively by

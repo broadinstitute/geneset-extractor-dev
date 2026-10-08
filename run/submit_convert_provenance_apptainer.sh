@@ -18,6 +18,8 @@ TASK_INDEX="${SGE_TASK_ID:-${PBS_ARRAYID:-}}"
 SUBMIT=0
 OVERWRITE=0
 INPUT=""
+PROVENANCE_OPERATION="${PROVENANCE_OPERATION:-convert}"
+[[ "${PROVENANCE_OPERATION}" == "convert" || "${PROVENANCE_OPERATION}" == "deduplicate" ]] || { echo "PROVENANCE_OPERATION must be convert or deduplicate" >&2; exit 2; }
 
 usage() {
   cat <<'EOF'
@@ -58,7 +60,7 @@ if [[ -n "${TASK_INDEX}" ]]; then
   [[ -f "${CONVERT_RUNNER}" ]] || { echo "Missing provenance conversion launcher: ${CONVERT_RUNNER}" >&2; exit 1; }
   command=(bash "${CONVERT_RUNNER}" "${provenance}")
   [[ ${OVERWRITE} -eq 1 ]] && command+=(--overwrite)
-  DIG_REPO="${DIG_DIR}" APPTAINER_IMAGE="${APPTAINER_IMAGE}" APPTAINER_BIN="${APPTAINER_BIN}" APPTAINER_EXTRA_ARGS="${APPTAINER_EXTRA_ARGS}" APPTAINER_PYTHON_BIN="${APPTAINER_PYTHON_BIN}" "${command[@]}"
+  PROVENANCE_OPERATION="${PROVENANCE_OPERATION}" DIG_REPO="${DIG_DIR}" APPTAINER_IMAGE="${APPTAINER_IMAGE}" APPTAINER_BIN="${APPTAINER_BIN}" APPTAINER_EXTRA_ARGS="${APPTAINER_EXTRA_ARGS}" APPTAINER_PYTHON_BIN="${APPTAINER_PYTHON_BIN}" "${command[@]}"
   exit $?
 fi
 
@@ -79,7 +81,7 @@ printf 'task_index\tprovenance_path\n' > "${WORKLIST}"
 for index in "${!paths[@]}"; do printf '%s\t%s\n' "$((index + 1))" "${paths[index]}" >> "${WORKLIST}"; done
 echo "Provenance worklist written: ${WORKLIST} (${#paths[@]} files)"
 [[ ${SUBMIT} -eq 1 ]] || { echo "Set --submit to call qsub."; exit 0; }
-environment="PROVENANCE_WORKLIST=${WORKLIST},PROVENANCE_CONVERT_RUNNER=${SCRIPT_DIR}/convert_provenance_apptainer.sh,DIG_REPO=${DIG_DIR},APPTAINER_IMAGE=${APPTAINER_IMAGE},APPTAINER_BIN=${APPTAINER_BIN},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS},APPTAINER_PYTHON_BIN=${APPTAINER_PYTHON_BIN}"
+environment="PROVENANCE_WORKLIST=${WORKLIST},PROVENANCE_CONVERT_RUNNER=${SCRIPT_DIR}/convert_provenance_apptainer.sh,PROVENANCE_OPERATION=${PROVENANCE_OPERATION},DIG_REPO=${DIG_DIR},APPTAINER_IMAGE=${APPTAINER_IMAGE},APPTAINER_BIN=${APPTAINER_BIN},APPTAINER_EXTRA_ARGS=${APPTAINER_EXTRA_ARGS},APPTAINER_PYTHON_BIN=${APPTAINER_PYTHON_BIN}"
 submit_args=("${INPUT}" --submit)
 [[ ${OVERWRITE} -eq 1 ]] && submit_args+=(--overwrite)
 exec "${QSUB_BIN}" -N provenance_convert -t "1-${#paths[@]}" \

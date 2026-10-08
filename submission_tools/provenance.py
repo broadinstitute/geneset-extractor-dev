@@ -43,3 +43,18 @@ def discover(input_path: Path, *, dig_repo: Path | None, dig_python: str | None,
     if recursive:
         command.append("--recursive")
     return subprocess.run(command, cwd=dig, env=env, check=False).returncode
+
+
+def deduplicate(input_path: Path, *, dig_repo: Path | None, dig_python: str | None, recursive: bool, overwrite: bool) -> int:
+    """Delegate legacy graph correction to DIG without handling graph data here."""
+    root = Path(__file__).resolve().parents[1]
+    dig = (dig_repo or Path(os.environ.get("DIG_REPO", root.parent / "dig-gene-set-extractors"))).resolve()
+    if not (dig / "src" / "geneset_extractors").is_dir():
+        print("ERROR: --dig-repo (or DIG_REPO) must identify a dig-gene-set-extractors checkout.", file=sys.stderr)
+        return 2
+    python = dig_python or sys.executable
+    env = {**os.environ, "PYTHONPATH": str(dig / "src") + os.pathsep + os.environ.get("PYTHONPATH", "")}
+    command = [python, "-m", "geneset_extractors.cli", "provenance", "deduplicate", str(input_path)]
+    if recursive: command.append("--recursive")
+    if overwrite: command.append("--overwrite")
+    return subprocess.run(command, cwd=dig, env=env, check=False).returncode
