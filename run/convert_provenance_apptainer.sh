@@ -2,10 +2,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEFAULT_REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-REPO_ROOT="${REPO_ROOT:-${DEFAULT_REPO_ROOT}}"
-WORK_ROOT="${WORK_ROOT:-$(pwd)}"
-DIG_DIR="${DIG_DIR:-${REPO_ROOT}/dig-gene-set-extractors}"
+WRAPPER_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+DEFAULT_DIG_REPO="$(cd "${WRAPPER_DIR}/.." && pwd)/dig-gene-set-extractors"
+# DIG_REPO is the established wrapper convention. DIG_DIR remains an explicit
+# compatibility override for the cluster/refresh launchers.
+DIG_DIR="${DIG_DIR:-${DIG_REPO:-${DEFAULT_DIG_REPO}}}"
 APPTAINER_BIN="${APPTAINER_BIN:-apptainer}"
 APPTAINER_IMAGE="${APPTAINER_IMAGE:-}"
 APPTAINER_EXTRA_ARGS="${APPTAINER_EXTRA_ARGS:-}"
@@ -18,6 +19,10 @@ Usage:
 
 Required environment variables:
   APPTAINER_IMAGE
+
+Optional environment variables:
+  DIG_REPO (or DIG_DIR), APPTAINER_BIN, APPTAINER_EXTRA_ARGS,
+  APPTAINER_PYTHON_BIN
 
 Supported convert options:
   --metadata PATH  --out PATH  --recursive  --overwrite
@@ -42,7 +47,7 @@ if [[ ! -d "${DIG_DIR}/src/geneset_extractors" ]]; then echo "DIG_DIR is not a D
 if [[ -z "${APPTAINER_IMAGE}" || ! -f "${APPTAINER_IMAGE}" ]]; then echo "APPTAINER_IMAGE must name an existing image" >&2; exit 1; fi
 
 declare -a BIND_DIRS FORWARDED_ARGS
-BIND_DIRS=("${REPO_ROOT}" "${WORK_ROOT}" "${DIG_DIR}" "$(append_bind_path "${INPUT_PATH}")")
+BIND_DIRS=("${WRAPPER_DIR}" "${DIG_DIR}" "$(append_bind_path "${INPUT_PATH}")")
 FORWARDED_ARGS=("${INPUT_PATH}")
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -66,9 +71,9 @@ done
 
 mapfile -t UNIQUE_BIND_DIRS < <(printf '%s\n' "${BIND_DIRS[@]}" | awk 'NF && !seen[$0]++')
 BIND_ARG="$(IFS=,; printf '%s' "${UNIQUE_BIND_DIRS[*]}")"
-COMMAND="cd $(printf '%q' "${REPO_ROOT}/geneset-extractor-dev") && exec $(printf '%q' "${APPTAINER_PYTHON_BIN}") -m submission_tools provenance convert$(printf ' %q' "${FORWARDED_ARGS[@]}") --dig-repo $(printf '%q' "${DIG_DIR}") --dig-python $(printf '%q' "${APPTAINER_PYTHON_BIN}")"
+COMMAND="cd $(printf '%q' "${WRAPPER_DIR}") && exec $(printf '%q' "${APPTAINER_PYTHON_BIN}") -m submission_tools provenance convert$(printf ' %q' "${FORWARDED_ARGS[@]}") --dig-python $(printf '%q' "${APPTAINER_PYTHON_BIN}")"
 
-EXEC_CMD=("${APPTAINER_BIN}" exec --bind "${BIND_ARG}")
+EXEC_CMD=(env "APPTAINERENV_DIG_REPO=${DIG_DIR}" "${APPTAINER_BIN}" exec --bind "${BIND_ARG}")
 if [[ -n "${APPTAINER_EXTRA_ARGS}" ]]; then
   # shellcheck disable=SC2206
   EXTRA_ARGS=( ${APPTAINER_EXTRA_ARGS} )

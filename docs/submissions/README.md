@@ -37,7 +37,23 @@ wrapper command:
 
 ```bash
 APPTAINER_IMAGE=/path/to/geneset-extractor.sif \
+  DIG_REPO=/path/to/dig-gene-set-extractors \
   bash run/convert_provenance_apptainer.sh /path/to/outputs --recursive
+```
+
+This is a foreground conversion, not a scheduler array job: `QSUB_BIN`,
+`SUBMISSION_ARRAY_MEMORY`, and `SUBMISSION_ARRAY_WALLTIME` intentionally do
+not apply. `APPTAINER_BIN`, `APPTAINER_EXTRA_ARGS`, and
+`APPTAINER_PYTHON_BIN` are supported. The wrapper location is derived from
+the launcher itself, so `REPO_ROOT` is unnecessary.
+
+For large output trees, create and review an array worklist, then submit it:
+
+```bash
+APPTAINER_IMAGE=/path/to/geneset-extractor.sif DIG_REPO=/path/to/dig-gene-set-extractors \
+  bash run/submit_convert_provenance_apptainer.sh /path/to/outputs
+APPTAINER_IMAGE=/path/to/geneset-extractor.sif DIG_REPO=/path/to/dig-gene-set-extractors \
+  bash run/submit_convert_provenance_apptainer.sh /path/to/outputs --submit
 ```
 
 CI uses the required check named **`validate-new-library-submissions`**. It

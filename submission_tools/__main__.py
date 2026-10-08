@@ -13,7 +13,7 @@ from .receipt import write_receipt
 from .scaffold import scaffold
 from .validator import validate_submission
 from .external_import import scaffold_external_library
-from .provenance import convert as convert_provenance
+from .provenance import convert as convert_provenance, discover as discover_provenance
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -52,6 +52,11 @@ def main(argv: list[str] | None = None) -> int:
     provenance_convert.add_argument("--overwrite", action="store_true")
     provenance_convert.add_argument("--dig-repo", help="DIG checkout; defaults to DIG_REPO or sibling checkout.")
     provenance_convert.add_argument("--dig-python", help="Python interpreter with DIG dependencies.")
+    provenance_discover = provenance_commands.add_parser("discover", help="List legacy provenance using DIG discovery rules.")
+    provenance_discover.add_argument("input")
+    provenance_discover.add_argument("--recursive", action="store_true")
+    provenance_discover.add_argument("--dig-repo")
+    provenance_discover.add_argument("--dig-python")
     adopt_parser = commands.add_parser("adopt", help="Create an isolated workspace for adopting a legacy library.")
     adopt_parser.add_argument("--existing", required=True, help="Legacy directory; it is never modified.")
     adopt_parser.add_argument("--library-id", required=True)
@@ -137,6 +142,9 @@ def main(argv: list[str] | None = None) -> int:
         return convert_provenance(Path(args.input), dig_repo=Path(args.dig_repo) if args.dig_repo else None,
                                   dig_python=args.dig_python, metadata=Path(args.metadata) if args.metadata else None,
                                   output=Path(args.out) if args.out else None, recursive=args.recursive, overwrite=args.overwrite)
+    if args.command == "provenance" and args.provenance_command == "discover":
+        return discover_provenance(Path(args.input), dig_repo=Path(args.dig_repo) if args.dig_repo else None,
+                                   dig_python=args.dig_python, recursive=args.recursive)
     if args.command == "discover":
         changed_paths = None
         if args.changed_files:

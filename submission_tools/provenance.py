@@ -28,3 +28,18 @@ def convert(input_path: Path, *, dig_repo: Path | None, dig_python: str | None,
         return 2
     # No capture: DIG owns per-file progress, final summary, stderr, and exit status.
     return subprocess.run(command, cwd=dig, env=env, check=False).returncode
+
+
+def discover(input_path: Path, *, dig_repo: Path | None, dig_python: str | None, recursive: bool) -> int:
+    """Delegate provenance selection to DIG so batch launchers share its rules."""
+    root = Path(__file__).resolve().parents[1]
+    dig = (dig_repo or Path(os.environ.get("DIG_REPO", root.parent / "dig-gene-set-extractors"))).resolve()
+    if not (dig / "src" / "geneset_extractors").is_dir():
+        print("ERROR: --dig-repo (or DIG_REPO) must identify a dig-gene-set-extractors checkout.", file=sys.stderr)
+        return 2
+    python = dig_python or sys.executable
+    env = {**os.environ, "PYTHONPATH": str(dig / "src") + os.pathsep + os.environ.get("PYTHONPATH", "")}
+    command = [python, "-m", "geneset_extractors.cli", "provenance", "discover", str(input_path)]
+    if recursive:
+        command.append("--recursive")
+    return subprocess.run(command, cwd=dig, env=env, check=False).returncode
