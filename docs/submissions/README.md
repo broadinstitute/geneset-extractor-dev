@@ -16,6 +16,21 @@ python3 -m submission_tools validate --submission LIBRARY_X/submission.yaml
 bash run/test_submission_tools.sh
 ```
 
+## Convert legacy provenance
+
+This wrapper delegates directly to DIG; it does not rerun models or rebuild
+the graph:
+
+```bash
+python3 -m submission_tools provenance convert path/to/geneset.provenance.json \
+  --metadata path/to/geneset.meta.json --dig-repo ../dig-gene-set-extractors
+python3 -m submission_tools provenance convert path/to/outputs --recursive \
+  --dig-repo ../dig-gene-set-extractors
+```
+
+The batch form discovers sibling metadata and prefers
+`geneset.provenance.legacy.json` when both legacy names occur in a directory.
+
 CI uses the required check named **`validate-new-library-submissions`**. It
 runs the same dependency-free unit and scaffold/integration tests, validates
 the committed synthetic example, discovers changed directories exclusively by
