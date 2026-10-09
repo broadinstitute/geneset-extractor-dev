@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -31,6 +32,7 @@ from .postrun_report import read_gmt
 
 
 SCHEMA_VERSION = "1.0"
+STREAMING_MIN_BYTES = 128 * 1024 * 1024
 LOG = logging.getLogger(__name__)
 
 
@@ -367,6 +369,140 @@ def _compare(legacy: dict[str, set[str]], generated: dict[str, set[str]], mappin
     }, details
 
 
+def _scan_gmt_to_sqlite(database: sqlite3.Connection, table: str, path: Path, *, collect_genes: bool) -> int:
+    """Index GMT term offsets and sizes using disk, not Python term objects."""
+    database.execute(f"CREATE TABLE {table} (name TEXT PRIMARY KEY, offset INTEGER NOT NULL, size INTEGER NOT NULL)")
+    if collect_genes:
+        database.execute("CREATE TABLE generated_genes (gene TEXT PRIMARY KEY)")
+    malformed = 0
+    entries: list[tuple[str, int, int]] = []
+    genes_batch: list[tuple[str]] = []
+    with path.open("rb") as handle:
+        while True:
+            offset = handle.tell()
+            line = handle.readline()
+            if not line:
+                break
+            if not line.strip():
+                continue
+            fields = line.decode("utf-8").rstrip("\r\n").split("\t")
+            if len(fields) < 3 or not fields[0].strip():
+                malformed += 1
+                continue
+            members = {gene.strip() for gene in fields[2:] if gene.strip()}
+            entries.append((fields[0].strip(), offset, len(members)))
+            if collect_genes:
+                genes_batch.extend((gene,) for gene in members)
+            if len(entries) >= 10_000:
+                database.executemany(f"INSERT OR IGNORE INTO {table} VALUES (?, ?, ?)", entries); entries.clear()
+                if genes_batch:
+                    database.executemany("INSERT OR IGNORE INTO generated_genes VALUES (?)", genes_batch); genes_batch.clear()
+                database.commit()
+    if entries:
+        database.executemany(f"INSERT OR IGNORE INTO {table} VALUES (?, ?, ?)", entries)
+    if genes_batch:
+        database.executemany("INSERT OR IGNORE INTO generated_genes VALUES (?)", genes_batch)
+    database.commit()
+    return malformed
+
+
+def _sqlite_inventory(database: sqlite3.Connection, table: str, malformed: int, *, generated: bool) -> dict[str, Any]:
+    count, memberships, empty, minimum, maximum = database.execute(f"SELECT COUNT(*), COALESCE(SUM(size), 0), COALESCE(SUM(size = 0), 0), MIN(size), MAX(size) FROM {table}").fetchone()
+    median_size: float | None = None
+    if count:
+        middle = (count - 1) // 2
+        values = [row[0] for row in database.execute(f"SELECT size FROM {table} ORDER BY size LIMIT ? OFFSET ?", (2 if count % 2 == 0 else 1, middle))]
+        median_size = sum(values) / len(values)
+    unique_gene_count = database.execute("SELECT COUNT(*) FROM generated_genes").fetchone()[0] if generated else None
+    return {"gene_set_count": count, "membership_count": memberships, "unique_gene_count": unique_gene_count, "empty_set_count": empty, "min_set_size": minimum, "median_set_size": median_size, "max_set_size": maximum, "warning_count": malformed + (database.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] - count)}
+
+
+def _read_record_at(handle: Any, offset: int) -> tuple[str, set[str]]:
+    handle.seek(offset)
+    fields = handle.readline().decode("utf-8").rstrip("\r\n").split("\t")
+    return fields[0].strip(), {gene.strip() for gene in fields[2:] if gene.strip()}
+
+
+def _streaming_comparison(legacy_path: Path, generated_path: Path, mapping_path: Path | None, metrics_dir: Path, task_id: str) -> tuple[dict[str, Any], dict[str, Any], int]:
+    """Compute a large GMT comparison with SQLite indexes and streamed rows."""
+    with tempfile.TemporaryDirectory(prefix="comprehensive_report_") as temporary:
+        database = sqlite3.connect(Path(temporary) / "comparison.sqlite")
+        database.execute("PRAGMA journal_mode=OFF"); database.execute("PRAGMA synchronous=OFF")
+        legacy_malformed = _scan_gmt_to_sqlite(database, "legacy", legacy_path, collect_genes=False)
+        generated_malformed = _scan_gmt_to_sqlite(database, "generated", generated_path, collect_genes=True)
+        legacy_inventory = _sqlite_inventory(database, "legacy", legacy_malformed, generated=False)
+        generated_inventory = _sqlite_inventory(database, "generated", generated_malformed, generated=True)
+        with gzip.open(metrics_dir / f"{task_id}.genes.txt.gz", "wt", encoding="utf-8") as handle:
+            for (gene,) in database.execute("SELECT gene FROM generated_genes ORDER BY gene"):
+                handle.write(gene + "\n")
+        database.execute("CREATE TABLE mapping (legacy_name TEXT PRIMARY KEY, generated_name TEXT UNIQUE)")
+        unmapped_mapping_rows = 0
+        if mapping_path is not None:
+            with mapping_path.open("r", encoding="utf-8", newline="") as handle:
+                reader = csv.DictReader(handle, delimiter="\t")
+                fields = set(reader.fieldnames or [])
+                target = "regenerated_set_name" if "regenerated_set_name" in fields else "generated_set_name"
+                if not {"legacy_set_name", target} <= fields:
+                    raise ValueError(f"mapping {mapping_path} must contain legacy_set_name and regenerated_set_name (or generated_set_name)")
+                batch: list[tuple[str, str]] = []
+                for row in reader:
+                    legacy_name, generated_name = str(row["legacy_set_name"] or "").strip(), str(row[target] or "").strip()
+                    if not legacy_name or not generated_name:
+                        unmapped_mapping_rows += 1; continue
+                    batch.append((legacy_name, generated_name))
+                    if len(batch) >= 10_000:
+                        try: database.executemany("INSERT INTO mapping VALUES (?, ?)", batch)
+                        except sqlite3.IntegrityError as exc: raise ValueError(f"mapping {mapping_path} must be one-to-one among nonblank names") from exc
+                        batch.clear(); database.commit()
+                if batch:
+                    try: database.executemany("INSERT INTO mapping VALUES (?, ?)", batch)
+                    except sqlite3.IntegrityError as exc: raise ValueError(f"mapping {mapping_path} must be one-to-one among nonblank names") from exc
+        mapped_count = database.execute("SELECT COUNT(*) FROM mapping").fetchone()[0]
+        database.execute("CREATE TABLE pairs (legacy_name TEXT PRIMARY KEY, generated_name TEXT UNIQUE)")
+        if mapped_count:
+            unknown_legacy, unknown_generated = database.execute("SELECT SUM(l.name IS NULL), SUM(g.name IS NULL) FROM mapping m LEFT JOIN legacy l ON l.name = m.legacy_name LEFT JOIN generated g ON g.name = m.generated_name").fetchone()
+            if unknown_legacy or unknown_generated:
+                raise ValueError(f"mapping {mapping_path} contains names absent from the compared GMTs: legacy={unknown_legacy or 0}, generated={unknown_generated or 0}")
+            database.execute("INSERT INTO pairs SELECT m.legacy_name, m.generated_name FROM mapping m")
+            method = "name_mapping"
+        else:
+            database.execute("INSERT INTO pairs SELECT l.name, l.name FROM legacy l INNER JOIN generated g ON g.name = l.name")
+            method = "direct_set_name"
+        database.execute("CREATE TABLE jaccards (value REAL)")
+        per_term_path = metrics_dir / f"{task_id}.per_term.tsv.gz"
+        fields = ["legacy_set_name", "generated_set_name", "status", "legacy_size", "generated_size", "intersection", "legacy_only", "generated_only", "recall", "precision", "jaccard", "exact_match"]
+        matched = exact = legacy_memberships = generated_memberships = intersection_total = 0
+        jaccard_sum = 0.0; valid_jaccards = 0; jaccard_batch: list[tuple[float]] = []
+        with gzip.open(per_term_path, "wt", encoding="utf-8", newline="") as output, legacy_path.open("rb") as legacy_handle, generated_path.open("rb") as generated_handle:
+            writer = csv.DictWriter(output, fieldnames=fields, delimiter="\t", lineterminator="\n"); writer.writeheader()
+            query = "SELECT p.legacy_name, p.generated_name, l.offset, g.offset FROM pairs p JOIN legacy l ON l.name=p.legacy_name JOIN generated g ON g.name=p.generated_name ORDER BY p.legacy_name"
+            for legacy_name, generated_name, legacy_offset, generated_offset in database.execute(query):
+                _, left = _read_record_at(legacy_handle, legacy_offset); _, right = _read_record_at(generated_handle, generated_offset)
+                shared, union = left & right, left | right
+                recall, precision, jaccard = _ratio(len(shared), len(left)), _ratio(len(shared), len(right)), _ratio(len(shared), len(union))
+                writer.writerow({"legacy_set_name": legacy_name, "generated_set_name": generated_name, "status": "matched", "legacy_size": len(left), "generated_size": len(right), "intersection": len(shared), "legacy_only": len(left - right), "generated_only": len(right - left), "recall": recall, "precision": precision, "jaccard": jaccard, "exact_match": left == right})
+                matched += 1; exact += int(left == right); legacy_memberships += len(left); generated_memberships += len(right); intersection_total += len(shared)
+                if jaccard is not None:
+                    jaccard_sum += jaccard; valid_jaccards += 1; jaccard_batch.append((jaccard,))
+                if len(jaccard_batch) >= 10_000:
+                    database.executemany("INSERT INTO jaccards VALUES (?)", jaccard_batch); jaccard_batch.clear(); database.commit()
+            if jaccard_batch: database.executemany("INSERT INTO jaccards VALUES (?)", jaccard_batch); database.commit()
+            for name, size in database.execute("SELECT l.name, l.size FROM legacy l LEFT JOIN pairs p ON p.legacy_name=l.name WHERE p.legacy_name IS NULL ORDER BY l.name"):
+                writer.writerow({"legacy_set_name": name, "generated_set_name": "", "status": "legacy_only", "legacy_size": size, "generated_size": None, "intersection": 0, "legacy_only": size, "generated_only": None, "recall": None, "precision": None, "jaccard": None, "exact_match": None})
+            for name, size in database.execute("SELECT g.name, g.size FROM generated g LEFT JOIN pairs p ON p.generated_name=g.name WHERE p.generated_name IS NULL ORDER BY g.name"):
+                writer.writerow({"legacy_set_name": "", "generated_set_name": name, "status": "generated_only", "legacy_size": None, "generated_size": size, "intersection": 0, "legacy_only": None, "generated_only": size, "recall": None, "precision": None, "jaccard": None, "exact_match": None})
+        direct_name_matches = database.execute("SELECT COUNT(*) FROM legacy l INNER JOIN generated g ON g.name=l.name").fetchone()[0]
+        if valid_jaccards:
+            offset = (valid_jaccards - 1) // 2
+            values = [row[0] for row in database.execute("SELECT value FROM jaccards ORDER BY value LIMIT ? OFFSET ?", (2 if valid_jaccards % 2 == 0 else 1, offset))]
+            median_jaccard: float | None = sum(values) / len(values)
+        else:
+            median_jaccard = None
+        comparison = {"comparison_status": "available", "comparison_method": method, "legacy_set_count": legacy_inventory["gene_set_count"], "generated_set_count": generated_inventory["gene_set_count"], "matched_set_count": matched, "legacy_only_set_count": legacy_inventory["gene_set_count"] - matched, "generated_only_set_count": generated_inventory["gene_set_count"] - matched, "direct_name_match_count": direct_name_matches, "set_name_recall": _ratio(direct_name_matches, legacy_inventory["gene_set_count"]), "set_name_precision": _ratio(direct_name_matches, generated_inventory["gene_set_count"]), "legacy_membership_count": legacy_memberships, "generated_membership_count": generated_memberships, "membership_intersection": intersection_total, "membership_recall": _ratio(intersection_total, legacy_memberships), "membership_precision": _ratio(intersection_total, generated_memberships), "membership_jaccard": _ratio(intersection_total, legacy_memberships + generated_memberships - intersection_total), "mean_set_jaccard": jaccard_sum / valid_jaccards if valid_jaccards else None, "median_set_jaccard": median_jaccard, "exact_match_count": exact, "exact_match_rate": _ratio(exact, matched), "valid_jaccard_count": valid_jaccards, "unmapped_mapping_row_count": unmapped_mapping_rows}
+        database.close()
+    return generated_inventory, comparison, legacy_malformed
+
+
 def _provenance(path_text: str | None, validator: str | None) -> dict[str, Any]:
     if not path_text:
         return {"provenance_status": "NOT_RUN", "provenance_present": False, "provenance_path": "", "provenance_message": "no sidecar declared"}
@@ -391,31 +527,43 @@ def _compute(task: dict[str, Any], metrics_dir: Path, validator: str | None) -> 
         generated_path = Path(str(task["generated_gmt"]))
     if not generated_path.is_file():
         raise ValueError(f"generated GMT does not exist: {generated_path}")
-    generated, warnings = read_gmt(generated_path)
+    legacy_path = Path(str(task["legacy_gmt"])) if task.get("legacy_gmt") else None
+    if legacy_path is not None and not legacy_path.is_file():
+        raise ValueError(f"legacy GMT does not exist: {legacy_path}")
+    streaming = generated_path.stat().st_size >= STREAMING_MIN_BYTES or (legacy_path is not None and legacy_path.stat().st_size >= STREAMING_MIN_BYTES)
+    if streaming and legacy_path is not None:
+        generated_inventory, comparison, legacy_warning_count = _streaming_comparison(legacy_path, generated_path, Path(str(task["name_mapping"])) if task.get("name_mapping") else None, metrics_dir, str(task["task_id"]))
+        warnings = ["large-GMT streaming mode used"]
+        comparison.update({"legacy_gmt": str(legacy_path), "legacy_sha256": _sha256(legacy_path), "legacy_bytes": legacy_path.stat().st_size, "legacy_warning_count": legacy_warning_count, "name_mapping": str(task.get("name_mapping") or "")})
+    elif streaming:
+        generated_inventory, generated_warning_count = _streaming_generated_inventory(generated_path, metrics_dir, str(task["task_id"]))
+        warnings = ["large-GMT streaming mode used"]
+        comparison = {"comparison_status": "not_applicable", "comparison_method": "none"}
+    else:
+        generated, warnings = read_gmt(generated_path)
+        generated_inventory = _inventory(generated, len(warnings))
+        if legacy_path is not None:
+            legacy, legacy_warnings = read_gmt(legacy_path)
+            mapping_path = Path(str(task["name_mapping"])) if task.get("name_mapping") else None
+            mapping, unmapped_mapping_row_count = _mapping(mapping_path)
+            comparison, details = _compare(legacy, generated, mapping)
+            comparison.update({"legacy_gmt": str(legacy_path), "legacy_sha256": _sha256(legacy_path), "legacy_bytes": legacy_path.stat().st_size, "legacy_warning_count": len(legacy_warnings), "name_mapping": str(mapping_path or ""), "unmapped_mapping_row_count": unmapped_mapping_row_count})
+            _write_tsv_gz(metrics_dir / f"{task['task_id']}.per_term.tsv.gz", details)
+        else:
+            comparison = {"comparison_status": "not_applicable", "comparison_method": "none"}
     result: dict[str, Any] = {"schema_version": SCHEMA_VERSION, "status": "success", "completed_at_utc": _now(), **task,
         "generated_sha256": _sha256(generated_path), "generated_bytes": generated_path.stat().st_size,
-        "generated_inventory": _inventory(generated, len(warnings)), "warnings": warnings,
+        "generated_inventory": generated_inventory, "warnings": warnings,
         "provenance": _provenance(task.get("provenance"), validator)}
     result["generated_gmt"] = str(generated_path)
     if compile_manifest is not None:
         result["compile_source_manifest"] = compile_manifest
-    genes_path = metrics_dir / f"{task['task_id']}.genes.txt.gz"
-    with gzip.open(genes_path, "wt", encoding="utf-8") as handle:
-        for gene in sorted(set().union(*generated.values()) if generated else set()):
-            handle.write(gene + "\n")
-    if task.get("legacy_gmt"):
-        legacy_path = Path(str(task["legacy_gmt"]))
-        if not legacy_path.is_file():
-            raise ValueError(f"legacy GMT does not exist: {legacy_path}")
-        legacy, legacy_warnings = read_gmt(legacy_path)
-        mapping_path = Path(str(task["name_mapping"])) if task.get("name_mapping") else None
-        mapping, unmapped_mapping_row_count = _mapping(mapping_path)
-        comparison, details = _compare(legacy, generated, mapping)
-        comparison.update({"legacy_gmt": str(legacy_path), "legacy_sha256": _sha256(legacy_path), "legacy_bytes": legacy_path.stat().st_size, "legacy_warning_count": len(legacy_warnings), "name_mapping": str(mapping_path or ""), "unmapped_mapping_row_count": unmapped_mapping_row_count})
-        result["comparison"] = comparison
-        _write_tsv_gz(metrics_dir / f"{task['task_id']}.per_term.tsv.gz", details)
-    else:
-        result["comparison"] = {"comparison_status": "not_applicable", "comparison_method": "none"}
+    if not streaming:
+        genes_path = metrics_dir / f"{task['task_id']}.genes.txt.gz"
+        with gzip.open(genes_path, "wt", encoding="utf-8") as handle:
+            for gene in sorted(set().union(*generated.values()) if generated else set()):
+                handle.write(gene + "\n")
+    result["comparison"] = comparison
     return result
 
 

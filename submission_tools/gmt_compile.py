@@ -15,6 +15,14 @@ from pathlib import Path
 LOG = logging.getLogger(__name__)
 
 
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def _model_from_path(path: Path) -> str | None:
     parts = path.parts
     for index, part in enumerate(parts[:-1]):
@@ -52,8 +60,8 @@ def discover_model_gmts(run_root: Path, model_id: str) -> list[Path]:
     return selected
 
 
-def _read_records(path: Path) -> list[tuple[str, str, list[str], int]]:
-    records: list[tuple[str, str, list[str], int]] = []
+def _iter_records(path: Path):
+    """Yield GMT records without retaining an entire source file in memory."""
     with path.open("r", encoding="utf-8", newline="") as handle:
         for line_number, line in enumerate(handle, 1):
             if not line.strip():
@@ -61,8 +69,7 @@ def _read_records(path: Path) -> list[tuple[str, str, list[str], int]]:
             fields = line.rstrip("\r\n").split("\t")
             if len(fields) < 3 or not fields[0].strip():
                 raise ValueError(f"malformed GMT record at {path}:{line_number}")
-            records.append((fields[0].strip(), fields[1], [gene for gene in fields[2:] if gene], line_number))
-    return records
+            yield fields[0].strip(), fields[1], [gene for gene in fields[2:] if gene], line_number
 
 
 def _source_label(path: Path, run_root: Path) -> str:
@@ -86,9 +93,10 @@ def compile_gmts(run_root: Path, model_id: str, output: Path, *, duplicate_polic
     try:
         with temporary as handle:
             for source in sources:
-                records = _read_records(source)
                 emitted = 0
-                for name, description, genes, line_number in records:
+                source_record_count = 0
+                for name, description, genes, line_number in _iter_records(source):
+                    source_record_count += 1
                     compiled_name = name
                     if compiled_name in names:
                         if duplicate_policy == "fail":
@@ -100,7 +108,7 @@ def compile_gmts(run_root: Path, model_id: str, output: Path, *, duplicate_polic
                     handle.write("\t".join([compiled_name, description, *genes]) + "\n")
                     emitted += 1
                     record_count += 1
-                manifest.append({"model_id": model_id, "source_gmt": str(source), "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(), "source_record_count": len(records), "compiled_record_count": emitted, "included": True})
+                manifest.append({"model_id": model_id, "source_gmt": str(source), "source_sha256": _sha256(source), "source_record_count": source_record_count, "compiled_record_count": emitted, "included": True})
         temporary_path.replace(output)
     except Exception:
         temporary_path.unlink(missing_ok=True)

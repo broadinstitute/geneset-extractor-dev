@@ -145,6 +145,11 @@ in JSON/TSV and `N/A` in reports; they are never silently converted to zero.
 sidecar path and records `PASS`, `FAIL`, or `ERROR`; without one, provenance is
 reported as `NOT_RUN` rather than inferred as valid.
 
+Large GMTs (128 MiB or larger) use a streaming comparison mode. The reporter
+indexes term offsets and mappings in a temporary SQLite database, writes
+per-term results incrementally, and calculates pooled/median metrics without
+holding every term, membership pair, or comparison row in Python memory.
+
 ## Apptainer and SGE
 
 The local command works in an existing image when the wrapper and inputs are

@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from submission_tools import comprehensive_report
 from submission_tools.comprehensive_report import combine, convert_legacy_current_tsv, discover_run_root_manifest, render, run, submit
 
 
@@ -139,6 +140,24 @@ class ComprehensiveReportTests(unittest.TestCase):
             self.assertTrue((combined / "rendered/report.html").is_file())
             self.assertTrue((combined / "metrics/GTEx.HZ1.main.old.json").is_file())
             self.assertTrue((combined / "metrics/LINCS.HZ1.main.none.json").is_file())
+
+    def test_streaming_comparison_matches_small_fixture_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write(root / "new.gmt", "A\td\tG1\tG2\nB\td\tG3\n")
+            self.write(root / "old.gmt", "A\td\tG1\tG2\nB\td\tG4\n")
+            manifest = root / "reporting.json"
+            manifest.write_text(json.dumps({"libraries": [{"library_id": "LIB", "models": [{"model_id": "M1", "outputs": [{"gmt": "new.gmt", "legacy_references": [{"gmt": "old.gmt"}]}]}]}]}), encoding="utf-8")
+            previous = comprehensive_report.STREAMING_MIN_BYTES
+            comprehensive_report.STREAMING_MIN_BYTES = 1
+            try:
+                run(manifest, root / "run", {"LIB"}, None, None)
+            finally:
+                comprehensive_report.STREAMING_MIN_BYTES = previous
+            metric = json.loads(next((root / "run/metrics").glob("*.json")).read_text(encoding="utf-8"))
+            self.assertEqual(metric["comparison"]["matched_set_count"], 2)
+            self.assertAlmostEqual(metric["comparison"]["membership_jaccard"], 0.5)
+            self.assertTrue((root / "run/metrics/LIB.M1.output1.reference1.genes.txt.gz").is_file())
 
 
 if __name__ == "__main__":
