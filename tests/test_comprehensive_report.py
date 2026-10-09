@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from submission_tools.comprehensive_report import convert_legacy_current_tsv, render, run, submit
+from submission_tools.comprehensive_report import convert_legacy_current_tsv, discover_run_root_manifest, render, run, submit
 
 
 class ComprehensiveReportTests(unittest.TestCase):
@@ -79,6 +79,29 @@ class ComprehensiveReportTests(unittest.TestCase):
             output = payload["libraries"][0]["models"][0]["outputs"][0]
             self.assertEqual(output["gmt"], "current_gmts/LIB.M1.gmt")
             self.assertEqual(output["legacy_references"][0]["gmt"], "legacy_gmts/LIB/old.gmt")
+
+    def test_discovers_and_compiles_model_outputs_from_run_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run_root = root / "completed-run"
+            self.write(run_root / "genesets/partition/models/HZ1/workflow/selection/genesets.gmt", "selection\td\tWRONG\n")
+            self.write(run_root / "genesets/partition/models/HZ1/extractor/genesets.gmt", "A\td\tG1\n")
+            self.write(run_root / "genesets/partition/models/HZ1/extractor/geneset.provenance.dapper.yaml", "id: example\n")
+            self.write(root / "legacy_gmts/old.gmt", "A\td\tG1\n")
+            legacy_tsv = root / "legacy_current_mapping.tsv"
+            self.write(legacy_tsv, "library_id\tmodel_id\tlegacy_gmt\tname_mapping\nLIB\tHZ1\t/retired/old.gmt\t\n")
+            manifest = root / "discovered.json"
+            discovered = discover_run_root_manifest(run_root, legacy_tsv, manifest, library_id="LIB")
+            self.assertEqual(discovered["model_count"], 1)
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+            output = payload["libraries"][0]["models"][0]["outputs"][0]
+            self.assertEqual(output["output_id"], "LIB.HZ1.compiled")
+            self.assertIn("run_root", output)
+            report_root = root / "report"; run(manifest, report_root, {"LIB"}, None, None)
+            metric = json.loads(next((report_root / "metrics").glob("*.json")).read_text(encoding="utf-8"))
+            self.assertTrue(metric["compile_source_manifest"])
+            self.assertTrue(Path(metric["generated_gmt"]).is_file())
+            self.assertNotIn("WRONG", Path(metric["generated_gmt"]).read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

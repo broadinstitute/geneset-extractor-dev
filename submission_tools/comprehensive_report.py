@@ -26,6 +26,7 @@ from pathlib import Path
 from statistics import mean, median
 from typing import Any
 
+from .gmt_compile import compile_gmts, discover_model_gmts
 from .postrun_report import read_gmt
 
 
@@ -89,6 +90,87 @@ def _portable_path(path: Path, manifest_dir: Path) -> str:
         return str(path)
 
 
+def _filename_id(path: Path, fallback: str) -> str:
+    """Make a stable human-readable identifier from a filename."""
+    candidate = path.name
+    for suffix in (".gmt.gz", ".gmt", ".tsv.gz", ".tsv", ".txt"):
+        if candidate.endswith(suffix):
+            candidate = candidate[: -len(suffix)]
+            break
+    normalized = "".join(character if character.isalnum() or character in "_.-" else "_" for character in candidate).strip("_.-")
+    return normalized or fallback
+
+
+def _discover_model_ids(run_root: Path) -> list[str]:
+    models: set[str] = set()
+    for path in run_root.rglob("genesets.gmt"):
+        if not path.is_file() or not any(part in {"extractor", "tissue_extractor"} for part in path.parts):
+            continue
+        parts = path.parts
+        for index, part in enumerate(parts[:-1]):
+            if part in {"models", "tissue_models"} and index + 1 < len(parts):
+                models.add(parts[index + 1])
+    return sorted(models)
+
+
+def _unique_provenance_for_model(run_root: Path, model_id: str) -> str | None:
+    """Return a sidecar only when all selected GMTs identify one candidate."""
+    candidates: set[Path] = set()
+    for source in discover_model_gmts(run_root, model_id):
+        for name in ("geneset.provenance.dapper.yaml", "geneset.provenance.yaml"):
+            candidate = source.parent / name
+            if candidate.is_file():
+                candidates.add(candidate.resolve())
+    return str(next(iter(candidates))) if len(candidates) == 1 else None
+
+
+def discover_run_root_manifest(run_root: Path, legacy_tsv: Path, output_path: Path, *, library_id: str, legacy_root: Path | None = None, mapping_root: Path | None = None, duplicate_policy: str = "fail") -> dict[str, Any]:
+    """Build a report manifest whose outputs compile from one completed run root.
+
+    ``current_gmt`` is intentionally not part of this contract: the current
+    comparison artifact is compiled from the selected model's final GMTs.
+    """
+    run_root, legacy_tsv, output_path = run_root.resolve(), legacy_tsv.resolve(), output_path.resolve()
+    if not run_root.is_dir():
+        raise ValueError(f"run root is not a directory: {run_root}")
+    root = legacy_tsv.parent
+    legacy_root = (legacy_root or root / "legacy_gmts").resolve()
+    mapping_root = (mapping_root or root / "reference_mappings").resolve()
+    selected_library = _safe_id(library_id, "library_id")
+    references_by_model: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    with legacy_tsv.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        required = {"library_id", "model_id", "legacy_gmt"}
+        if not reader.fieldnames or not required <= set(reader.fieldnames):
+            raise ValueError("legacy TSV must contain library_id, model_id, and legacy_gmt columns; current_gmt is not needed")
+        for line_number, row in enumerate(reader, 2):
+            if str(row.get("library_id") or "").strip() != selected_library:
+                continue
+            model_id = _safe_id(row.get("model_id"), "model_id")
+            legacy = _resolve_tsv_path(str(row.get("legacy_gmt") or ""), legacy_root, f"legacy_gmt at line {line_number}")
+            mapping_text = str(row.get("name_mapping") or "").strip()
+            mapping = _resolve_tsv_path(mapping_text, mapping_root, f"name_mapping at line {line_number}") if mapping_text else None
+            reference = {"reference_id": _filename_id(legacy, f"legacy{len(references_by_model[model_id]) + 1}"), "gmt": _portable_path(legacy, output_path.parent)}
+            if mapping:
+                reference["name_mapping"] = _portable_path(mapping, output_path.parent)
+            if any(item["reference_id"] == reference["reference_id"] for item in references_by_model[model_id]):
+                raise ValueError(f"duplicate legacy reference ID for {selected_library}/{model_id}: {reference['reference_id']}")
+            references_by_model[model_id].append(reference)
+    discovered_models = _discover_model_ids(run_root)
+    if not discovered_models:
+        raise ValueError(f"no final genesets.gmt files found beneath {run_root}")
+    models: list[dict[str, Any]] = []
+    for model_id in discovered_models:
+        output: dict[str, Any] = {"output_id": f"{selected_library}.{model_id}.compiled", "run_root": _portable_path(run_root, output_path.parent), "compile": {"duplicate_policy": duplicate_policy}, "legacy_references": references_by_model.get(model_id, [])}
+        provenance = _unique_provenance_for_model(run_root, model_id)
+        if provenance:
+            output["provenance"] = _portable_path(Path(provenance), output_path.parent)
+        models.append({"model_id": model_id, "outputs": [output]})
+    manifest = {"schema_version": SCHEMA_VERSION, "generated_from": str(legacy_tsv), "run_root": str(run_root), "libraries": [{"library_id": selected_library, "models": models}]}
+    _json_dump(output_path, manifest)
+    return {"manifest": str(output_path), "library_id": selected_library, "model_count": len(models), "legacy_reference_count": sum(len(item["legacy_references"]) for model in models for item in model["outputs"])}
+
+
 def convert_legacy_current_tsv(input_path: Path, output_path: Path, *, legacy_root: Path | None = None, current_root: Path | None = None, mapping_root: Path | None = None) -> dict[str, Any]:
     """Convert the established legacy/current TSV into a report JSON manifest."""
     input_path, output_path = input_path.resolve(), output_path.resolve()
@@ -120,9 +202,9 @@ def convert_legacy_current_tsv(input_path: Path, output_path: Path, *, legacy_ro
     for index, group in enumerate(sorted(groups.values(), key=lambda item: (item["library_id"], item["model_id"], str(item["gmt"]))), 1):
         library = libraries.setdefault(group["library_id"], {"library_id": group["library_id"], "models": {}})
         model = library["models"].setdefault(group["model_id"], {"model_id": group["model_id"], "outputs": []})
-        output = {"output_id": f"output{len(model['outputs']) + 1}", "gmt": _portable_path(group["gmt"], output_path.parent), "legacy_references": []}
+        output = {"output_id": _filename_id(group["gmt"], f"output{len(model['outputs']) + 1}"), "gmt": _portable_path(group["gmt"], output_path.parent), "legacy_references": []}
         for reference in group["references"]:
-            item = {"reference_id": reference["reference_id"], "gmt": _portable_path(reference["gmt"], output_path.parent)}
+            item = {"reference_id": _filename_id(reference["gmt"], reference["reference_id"]), "gmt": _portable_path(reference["gmt"], output_path.parent)}
             if reference.get("name_mapping"):
                 item["name_mapping"] = _portable_path(reference["name_mapping"], output_path.parent)
             output["legacy_references"].append(item)
@@ -191,10 +273,14 @@ def _tasks(manifest_path: Path, libraries: set[str] | None, models: set[str] | N
             if not outputs:
                 raise ValueError(f"{library_id}/{model_id} has no outputs")
             for output_index, output in enumerate(outputs, 1):
-                if not isinstance(output, dict) or not output.get("gmt"):
-                    raise ValueError(f"{library_id}/{model_id}: each output requires gmt")
+                if not isinstance(output, dict) or (not output.get("gmt") and not output.get("run_root")):
+                    raise ValueError(f"{library_id}/{model_id}: each output requires gmt or run_root")
                 output_id = _safe_id(output.get("output_id", f"output{output_index}"), "output_id")
-                current = _path(str(output["gmt"]), root)
+                current = _path(str(output["gmt"]), root) if output.get("gmt") else None
+                compile_root = _path(str(output["run_root"]), root) if output.get("run_root") else None
+                compile_options = output.get("compile", {}) if compile_root else {}
+                if compile_root and not isinstance(compile_options, dict):
+                    raise ValueError(f"{library_id}/{model_id}/{output_id}: compile must be an object")
                 provenance_value = output.get("provenance", model.get("provenance"))
                 provenance = _path(str(provenance_value), root) if provenance_value else None
                 references = output.get("legacy_references", model.get("legacy_references", []))
@@ -214,7 +300,10 @@ def _tasks(manifest_path: Path, libraries: set[str] | None, models: set[str] | N
                     seen.add(task_id)
                     tasks.append({
                         "task_id": task_id, "library_id": library_id, "model_id": model_id, "output_id": output_id,
-                        "generated_gmt": str(current), "legacy_gmt": str(_path(str(reference["gmt"]), root)) if reference else None,
+                        "generated_gmt": str(current) if current else None,
+                        "compile_run_root": str(compile_root) if compile_root else None,
+                        "compile_duplicate_policy": str(compile_options.get("duplicate_policy", "fail")),
+                        "legacy_gmt": str(_path(str(reference["gmt"]), root)) if reference else None,
                         "name_mapping": str(_path(str(reference["name_mapping"]), root)) if reference and reference.get("name_mapping") else None,
                         "provenance": str(provenance) if provenance else None,
                     })
@@ -285,7 +374,12 @@ def _provenance(path_text: str | None, validator: str | None) -> dict[str, Any]:
 
 
 def _compute(task: dict[str, Any], metrics_dir: Path, validator: str | None) -> dict[str, Any]:
-    generated_path = Path(task["generated_gmt"])
+    compile_manifest: list[dict[str, object]] | None = None
+    if task.get("compile_run_root"):
+        generated_path = metrics_dir / f"{task['task_id']}.compiled.gmt"
+        compile_manifest, _ = compile_gmts(Path(str(task["compile_run_root"])), str(task["model_id"]), generated_path, duplicate_policy=str(task.get("compile_duplicate_policy", "fail")))
+    else:
+        generated_path = Path(str(task["generated_gmt"]))
     if not generated_path.is_file():
         raise ValueError(f"generated GMT does not exist: {generated_path}")
     generated, warnings = read_gmt(generated_path)
@@ -293,6 +387,9 @@ def _compute(task: dict[str, Any], metrics_dir: Path, validator: str | None) -> 
         "generated_sha256": _sha256(generated_path), "generated_bytes": generated_path.stat().st_size,
         "generated_inventory": _inventory(generated, len(warnings)), "warnings": warnings,
         "provenance": _provenance(task.get("provenance"), validator)}
+    result["generated_gmt"] = str(generated_path)
+    if compile_manifest is not None:
+        result["compile_source_manifest"] = compile_manifest
     genes_path = metrics_dir / f"{task['task_id']}.genes.txt.gz"
     with gzip.open(genes_path, "wt", encoding="utf-8") as handle:
         for gene in sorted(set().union(*generated.values()) if generated else set()):
@@ -490,10 +587,20 @@ def main(argv: list[str] | None = None) -> int:
     convert_parser.add_argument("--legacy-root", type=Path)
     convert_parser.add_argument("--current-root", type=Path)
     convert_parser.add_argument("--mapping-root", type=Path)
+    discover_parser = subparsers.add_parser("discover-run-root", help="Create a manifest that compiles model GMTs from a completed run root.")
+    discover_parser.add_argument("--run-root", type=Path, required=True)
+    discover_parser.add_argument("--legacy-current-tsv", type=Path, required=True)
+    discover_parser.add_argument("--library", required=True)
+    discover_parser.add_argument("--output", type=Path, required=True)
+    discover_parser.add_argument("--legacy-root", type=Path)
+    discover_parser.add_argument("--mapping-root", type=Path)
+    discover_parser.add_argument("--duplicate-policy", choices=["fail", "prefix_source"], default="fail")
     task_parser = subparsers.add_parser("task"); task_parser.add_argument("--output-dir", type=Path, required=True); task_parser.add_argument("--task-index", type=int, required=True); task_parser.add_argument("--dapper-validator")
     args = parser.parse_args(argv)
     try:
-        if args.command == "convert-tsv":
+        if args.command == "discover-run-root":
+            result = discover_run_root_manifest(args.run_root, args.legacy_current_tsv, args.output, library_id=args.library, legacy_root=args.legacy_root, mapping_root=args.mapping_root, duplicate_policy=args.duplicate_policy)
+        elif args.command == "convert-tsv":
             result = convert_legacy_current_tsv(args.input, args.output, legacy_root=args.legacy_root, current_root=args.current_root, mapping_root=args.mapping_root)
         elif args.command == "task":
             task = json.loads((args.output_dir / "tasks" / f"{args.task_index:05d}.json").read_text(encoding="utf-8"))

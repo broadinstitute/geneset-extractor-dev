@@ -39,6 +39,17 @@ class GmtCompileTests(unittest.TestCase):
             compile_gmts(root, "M1", Path(temporary) / "prefixed.gmt", duplicate_policy="prefix_source")
             self.assertIn("__same", (Path(temporary) / "prefixed.gmt").read_text(encoding="utf-8"))
 
+    def test_excludes_workflow_selection_gmts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "run"
+            self.write(root / "genesets/a/models/M1/workflow/selection/genesets.gmt", "selection\td\tWRONG\n")
+            self.write(root / "genesets/a/models/M1/extractor/genesets.gmt", "final\td\tRIGHT\n")
+            output = Path(temporary) / "compiled.gmt"
+            manifest, count = compile_gmts(root, "M1", output)
+            self.assertEqual(count, 1)
+            self.assertEqual(len(manifest), 1)
+            self.assertEqual(output.read_text(encoding="utf-8"), "final\td\tRIGHT\n")
+
 
 if __name__ == "__main__":
     unittest.main()

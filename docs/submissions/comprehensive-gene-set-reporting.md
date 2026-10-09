@@ -77,6 +77,40 @@ When the three file collections are elsewhere, pass `--legacy-root`,
 `--current-root`, and `--mapping-root`. The generated JSON keeps paths
 relative where possible and is ready for `plan`, `run`, or `submit`.
 
+### Build current GMTs from a completed run root
+
+For a completed library run, prefer run-root discovery over copied compiled
+GMTs. The legacy TSV needs only `library_id`, `model_id`, `legacy_gmt`, and
+optional `name_mapping`; its `current_gmt` column is ignored by this mode and
+may be removed. Discovery finds final `genesets.gmt` files under `--run-root`,
+creates one compiled output per discovered model, and records the selected
+source GMTs in each task artifact.
+
+```bash
+bash run/summarize_comprehensive_reports.sh discover-run-root \
+  --run-root /path/to/GTEx/outputs \
+  --legacy-current-tsv legacy_current_mapping/legacy_current_mapping.tsv \
+  --library GTEx \
+  --output reports/GTEx/discovered-reporting.json
+
+bash run/summarize_comprehensive_reports.sh run \
+  --manifest reports/GTEx/discovered-reporting.json \
+  --library GTEx \
+  --output-dir reports/GTEx
+```
+
+Compilation is isolated per report task under `metrics/`; it never changes the
+completed run directory. Duplicate term names fail by default. Use
+`--duplicate-policy prefix_source` during discovery only when source-prefixed
+duplicates are the intended representation. A DAPPER sidecar is associated
+only when the selected model sources have exactly one adjacent DAPPER sidecar;
+otherwise provenance is marked `NOT_RUN` rather than guessed.
+
+Only `genesets.gmt` files beneath `extractor/` or `tissue_extractor/` are
+considered generated outputs. Files under `workflow/selection/` and other
+intermediate workflow directories are excluded, even when they have the same
+filename.
+
 ## Metrics
 
 GMT records are terms with unique nonblank genes. Reported coverage includes

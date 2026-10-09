@@ -24,10 +24,22 @@ def _model_from_path(path: Path) -> str | None:
 
 
 def discover_model_gmts(run_root: Path, model_id: str) -> list[Path]:
-    """Discover final GMTs for a model and omit redundant aggregate parents."""
-    paths = sorted(path.resolve() for path in run_root.rglob("*.gmt") if path.is_file() and path.name == "genesets.gmt" and _model_from_path(path) == model_id)
+    """Discover extractor GMTs for a model and omit redundant aggregates.
+
+    A model directory may also contain workflow/selection intermediates and
+    their provenance.  Only paths rooted below an ``extractor`` or
+    ``tissue_extractor`` directory are final generated gene-set outputs.
+    """
+    paths = sorted(
+        path.resolve()
+        for path in run_root.rglob("*.gmt")
+        if path.is_file()
+        and path.name == "genesets.gmt"
+        and _model_from_path(path) == model_id
+        and any(part in {"extractor", "tissue_extractor"} for part in path.parts)
+    )
     if not paths:
-        raise ValueError(f"no genesets.gmt files for model {model_id!r} beneath {run_root}")
+        raise ValueError(f"no extractor genesets.gmt files for model {model_id!r} beneath {run_root}")
     selected: list[Path] = []
     for path in paths:
         # A direct extractor-level GMT is commonly an aggregate of the child
