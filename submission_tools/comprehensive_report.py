@@ -1,0 +1,445 @@
+#!/usr/bin/env python3
+"""Selection-aware, wrapper-side gene-set reporting contract and renderer.
+
+This module deliberately consumes final GMTs and optional DAPPER sidecars.  It
+does not construct gene sets or mutate DIG.  Its on-disk metric artifacts are
+versioned so ``render`` can combine completed library runs without rereading
+the GMT inputs.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import gzip
+import hashlib
+import html
+import json
+import logging
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from collections import defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
+from statistics import mean, median
+from typing import Any
+
+from .postrun_report import read_gmt
+
+
+SCHEMA_VERSION = "1.0"
+LOG = logging.getLogger(__name__)
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _ratio(numerator: int, denominator: int) -> float | None:
+    return numerator / denominator if denominator else None
+
+
+def _json_dump(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.replace(path)
+
+
+def _write_tsv_gz(path: Path, rows: list[dict[str, Any]]) -> None:
+    fields = list(rows[0]) if rows else []
+    with gzip.open(path, "wt", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _path(value: str, manifest_dir: Path) -> Path:
+    candidate = Path(value)
+    return (candidate if candidate.is_absolute() else manifest_dir / candidate).resolve()
+
+
+def _load_manifest(path: Path) -> dict[str, Any]:
+    """Load JSON, with YAML available only when PyYAML is already installed."""
+    text = path.read_text(encoding="utf-8")
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        try:
+            import yaml  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise ValueError("manifest must be JSON; install PyYAML to use YAML") from exc
+        payload = yaml.safe_load(text)
+    if not isinstance(payload, dict) or not isinstance(payload.get("libraries"), list):
+        raise ValueError("manifest must be an object with a libraries list")
+    return payload
+
+
+def _safe_id(value: object, label: str) -> str:
+    text = str(value or "").strip()
+    if not text or any(character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-" for character in text):
+        raise ValueError(f"{label} must contain only letters, digits, dot, underscore, or hyphen")
+    return text
+
+
+def _mapping(path: Path | None) -> dict[str, str]:
+    if path is None:
+        return {}
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        fields = set(reader.fieldnames or [])
+        target = "regenerated_set_name" if "regenerated_set_name" in fields else "generated_set_name"
+        if not {"legacy_set_name", target} <= fields:
+            raise ValueError(f"mapping {path} must contain legacy_set_name and regenerated_set_name (or generated_set_name)")
+        pairs = {str(row["legacy_set_name"] or "").strip(): str(row[target] or "").strip() for row in reader}
+    if any(not legacy or not generated for legacy, generated in pairs.items()) or len(pairs) != len(set(pairs.values())):
+        raise ValueError(f"mapping {path} must be one-to-one and contain no blank names")
+    return pairs
+
+
+def _tasks(manifest_path: Path, libraries: set[str] | None, models: set[str] | None) -> list[dict[str, Any]]:
+    manifest = _load_manifest(manifest_path)
+    root = manifest_path.parent.resolve()
+    tasks: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for library in manifest["libraries"]:
+        if not isinstance(library, dict):
+            raise ValueError("each library must be an object")
+        library_id = _safe_id(library.get("library_id", library.get("id")), "library_id")
+        if libraries is not None and library_id not in libraries:
+            continue
+        for model in library.get("models", []):
+            if not isinstance(model, dict):
+                raise ValueError(f"{library_id}: each model must be an object")
+            model_id = _safe_id(model.get("model_id", model.get("id")), "model_id")
+            if models is not None and model_id not in models:
+                continue
+            outputs = model.get("outputs", [])
+            if not outputs:
+                raise ValueError(f"{library_id}/{model_id} has no outputs")
+            for output_index, output in enumerate(outputs, 1):
+                if not isinstance(output, dict) or not output.get("gmt"):
+                    raise ValueError(f"{library_id}/{model_id}: each output requires gmt")
+                output_id = _safe_id(output.get("output_id", f"output{output_index}"), "output_id")
+                current = _path(str(output["gmt"]), root)
+                provenance_value = output.get("provenance", model.get("provenance"))
+                provenance = _path(str(provenance_value), root) if provenance_value else None
+                references = output.get("legacy_references", model.get("legacy_references", []))
+                if references is None:
+                    references = []
+                if not isinstance(references, list):
+                    raise ValueError(f"{library_id}/{model_id}/{output_id}: legacy_references must be a list")
+                # A model without a legacy reference still needs one inventory task.
+                references = references or [None]
+                for reference_index, reference in enumerate(references, 1):
+                    if reference is not None and (not isinstance(reference, dict) or not reference.get("gmt")):
+                        raise ValueError(f"{library_id}/{model_id}/{output_id}: each legacy reference requires gmt")
+                    reference_id = "none" if reference is None else _safe_id(reference.get("reference_id", f"reference{reference_index}"), "reference_id")
+                    task_id = f"{library_id}.{model_id}.{output_id}.{reference_id}"
+                    if task_id in seen:
+                        raise ValueError(f"duplicate task identity {task_id}")
+                    seen.add(task_id)
+                    tasks.append({
+                        "task_id": task_id, "library_id": library_id, "model_id": model_id, "output_id": output_id,
+                        "generated_gmt": str(current), "legacy_gmt": str(_path(str(reference["gmt"]), root)) if reference else None,
+                        "name_mapping": str(_path(str(reference["name_mapping"]), root)) if reference and reference.get("name_mapping") else None,
+                        "provenance": str(provenance) if provenance else None,
+                    })
+    if not tasks:
+        raise ValueError("selection contains no outputs")
+    return sorted(tasks, key=lambda item: item["task_id"])
+
+
+def _inventory(sets: dict[str, set[str]], warning_count: int) -> dict[str, Any]:
+    sizes = sorted(len(genes) for genes in sets.values())
+    return {
+        "gene_set_count": len(sets), "membership_count": sum(sizes), "unique_gene_count": len(set().union(*sets.values())) if sets else 0,
+        "empty_set_count": sum(size == 0 for size in sizes), "min_set_size": min(sizes) if sizes else None,
+        "median_set_size": median(sizes) if sizes else None, "max_set_size": max(sizes) if sizes else None,
+        "warning_count": warning_count,
+    }
+
+
+def _compare(legacy: dict[str, set[str]], generated: dict[str, set[str]], mapping: dict[str, str]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    direct_names = set(legacy) & set(generated)
+    pairs = mapping if mapping else {name: name for name in direct_names}
+    unknown_legacy = set(pairs) - set(legacy)
+    unknown_generated = set(pairs.values()) - set(generated)
+    if unknown_legacy or unknown_generated:
+        raise ValueError(f"mapping names do not match GMTs: legacy={sorted(unknown_legacy)[:3]}, generated={sorted(unknown_generated)[:3]}")
+    details: list[dict[str, Any]] = []
+    compared: list[dict[str, Any]] = []
+    for legacy_name, generated_name in sorted(pairs.items()):
+        left, right = legacy[legacy_name], generated[generated_name]
+        shared, union = left & right, left | right
+        row = {"legacy_set_name": legacy_name, "generated_set_name": generated_name, "status": "matched", "legacy_size": len(left), "generated_size": len(right), "intersection": len(shared), "legacy_only": len(left - right), "generated_only": len(right - left), "recall": _ratio(len(shared), len(left)), "precision": _ratio(len(shared), len(right)), "jaccard": _ratio(len(shared), len(union)), "exact_match": left == right}
+        details.append(row); compared.append(row)
+    mapped_legacy, mapped_generated = set(pairs), set(pairs.values())
+    for name in sorted(set(legacy) - mapped_legacy):
+        details.append({"legacy_set_name": name, "generated_set_name": "", "status": "legacy_only", "legacy_size": len(legacy[name]), "generated_size": None, "intersection": 0, "legacy_only": len(legacy[name]), "generated_only": None, "recall": None, "precision": None, "jaccard": None, "exact_match": None})
+    for name in sorted(set(generated) - mapped_generated):
+        details.append({"legacy_set_name": "", "generated_set_name": name, "status": "generated_only", "legacy_size": None, "generated_size": len(generated[name]), "intersection": 0, "legacy_only": None, "generated_only": len(generated[name]), "recall": None, "precision": None, "jaccard": None, "exact_match": None})
+    legacy_pairs = {(legacy_name, gene) for legacy_name, generated_name in pairs.items() for gene in legacy[legacy_name]}
+    generated_pairs = {(legacy_name, gene) for legacy_name, generated_name in pairs.items() for gene in generated[generated_name]}
+    overlap = legacy_pairs & generated_pairs
+    jaccards = [float(row["jaccard"]) for row in compared if row["jaccard"] is not None]
+    exact_count = sum(bool(row["exact_match"]) for row in compared)
+    return {
+        "comparison_status": "available", "comparison_method": "name_mapping" if mapping else "direct_set_name",
+        "legacy_set_count": len(legacy), "generated_set_count": len(generated), "matched_set_count": len(compared),
+        "legacy_only_set_count": len(set(legacy) - mapped_legacy), "generated_only_set_count": len(set(generated) - mapped_generated),
+        "direct_name_match_count": len(direct_names), "set_name_recall": _ratio(len(direct_names), len(legacy)), "set_name_precision": _ratio(len(direct_names), len(generated)),
+        "legacy_membership_count": len(legacy_pairs), "generated_membership_count": len(generated_pairs), "membership_intersection": len(overlap),
+        "membership_recall": _ratio(len(overlap), len(legacy_pairs)), "membership_precision": _ratio(len(overlap), len(generated_pairs)), "membership_jaccard": _ratio(len(overlap), len(legacy_pairs | generated_pairs)),
+        "mean_set_jaccard": mean(jaccards) if jaccards else None, "median_set_jaccard": median(jaccards) if jaccards else None,
+        "exact_match_count": exact_count, "exact_match_rate": _ratio(exact_count, len(compared)), "valid_jaccard_count": len(jaccards),
+    }, details
+
+
+def _provenance(path_text: str | None, validator: str | None) -> dict[str, Any]:
+    if not path_text:
+        return {"provenance_status": "NOT_RUN", "provenance_present": False, "provenance_path": "", "provenance_message": "no sidecar declared"}
+    path = Path(path_text)
+    if not path.is_file():
+        return {"provenance_status": "ERROR", "provenance_present": False, "provenance_path": str(path), "provenance_message": "declared sidecar is missing"}
+    if not validator:
+        return {"provenance_status": "NOT_RUN", "provenance_present": True, "provenance_path": str(path), "provenance_message": "no DAPPER validator configured"}
+    try:
+        completed = subprocess.run([validator, str(path)], check=False, capture_output=True, text=True, timeout=300)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"provenance_status": "ERROR", "provenance_present": True, "provenance_path": str(path), "provenance_message": str(exc)}
+    return {"provenance_status": "PASS" if completed.returncode == 0 else "FAIL", "provenance_present": True, "provenance_path": str(path), "provenance_message": (completed.stdout + completed.stderr).strip()[:2000]}
+
+
+def _compute(task: dict[str, Any], metrics_dir: Path, validator: str | None) -> dict[str, Any]:
+    generated_path = Path(task["generated_gmt"])
+    if not generated_path.is_file():
+        raise ValueError(f"generated GMT does not exist: {generated_path}")
+    generated, warnings = read_gmt(generated_path)
+    result: dict[str, Any] = {"schema_version": SCHEMA_VERSION, "status": "success", "completed_at_utc": _now(), **task,
+        "generated_sha256": _sha256(generated_path), "generated_bytes": generated_path.stat().st_size,
+        "generated_inventory": _inventory(generated, len(warnings)), "warnings": warnings,
+        "provenance": _provenance(task.get("provenance"), validator)}
+    genes_path = metrics_dir / f"{task['task_id']}.genes.txt.gz"
+    with gzip.open(genes_path, "wt", encoding="utf-8") as handle:
+        for gene in sorted(set().union(*generated.values()) if generated else set()):
+            handle.write(gene + "\n")
+    if task.get("legacy_gmt"):
+        legacy_path = Path(str(task["legacy_gmt"]))
+        if not legacy_path.is_file():
+            raise ValueError(f"legacy GMT does not exist: {legacy_path}")
+        legacy, legacy_warnings = read_gmt(legacy_path)
+        mapping_path = Path(str(task["name_mapping"])) if task.get("name_mapping") else None
+        comparison, details = _compare(legacy, generated, _mapping(mapping_path))
+        comparison.update({"legacy_gmt": str(legacy_path), "legacy_sha256": _sha256(legacy_path), "legacy_bytes": legacy_path.stat().st_size, "legacy_warning_count": len(legacy_warnings), "name_mapping": str(mapping_path or "")})
+        result["comparison"] = comparison
+        _write_tsv_gz(metrics_dir / f"{task['task_id']}.per_term.tsv.gz", details)
+    else:
+        result["comparison"] = {"comparison_status": "not_applicable", "comparison_method": "none"}
+    return result
+
+
+def _write_status(path: Path, task: dict[str, Any], status: str, message: str = "") -> None:
+    _json_dump(path, {"schema_version": SCHEMA_VERSION, "task_id": task["task_id"], "status": status, "updated_at_utc": _now(), "message": message})
+
+
+def plan(manifest: Path, output_dir: Path, libraries: set[str] | None, models: set[str] | None) -> list[dict[str, Any]]:
+    tasks = _tasks(manifest.resolve(), libraries, models)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _json_dump(output_dir / "manifest.json", {"schema_version": SCHEMA_VERSION, "created_at_utc": _now(), "source_manifest": str(manifest.resolve()), "tasks": tasks})
+    tasks_dir = output_dir / "tasks"; tasks_dir.mkdir(exist_ok=True)
+    for index, task in enumerate(tasks, 1):
+        _json_dump(tasks_dir / f"{index:05d}.json", task)
+    return tasks
+
+
+def run(manifest: Path, output_dir: Path, libraries: set[str] | None, models: set[str] | None, validator: str | None, *, resume: bool = False) -> list[dict[str, Any]]:
+    tasks = plan(manifest, output_dir, libraries, models)
+    metrics_dir, status_dir = output_dir / "metrics", output_dir / "status"
+    metrics_dir.mkdir(exist_ok=True); status_dir.mkdir(exist_ok=True)
+    results: list[dict[str, Any]] = []
+    for task in tasks:
+        metric_path = metrics_dir / f"{task['task_id']}.json"
+        if resume and metric_path.is_file():
+            existing = json.loads(metric_path.read_text(encoding="utf-8"))
+            if existing.get("schema_version") == SCHEMA_VERSION and existing.get("status") == "success":
+                results.append(existing); continue
+        _write_status(status_dir / f"{task['task_id']}.json", task, "running")
+        try:
+            result = _compute(task, metrics_dir, validator)
+            _json_dump(metric_path, result)
+            _write_status(status_dir / f"{task['task_id']}.json", task, "success")
+            results.append(result)
+        except (OSError, ValueError) as exc:
+            _write_status(status_dir / f"{task['task_id']}.json", task, "failed", str(exc))
+            raise
+    render(output_dir, libraries, models, allow_partial=False)
+    return results
+
+
+def _load_results(results_root: Path, libraries: set[str] | None, models: set[str] | None, allow_partial: bool) -> list[dict[str, Any]]:
+    manifest_path = results_root / "manifest.json"
+    if not manifest_path.is_file():
+        raise ValueError(f"missing run manifest: {manifest_path}")
+    run_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    tasks = [task for task in run_manifest.get("tasks", []) if (libraries is None or task["library_id"] in libraries) and (models is None or task["model_id"] in models)]
+    results: list[dict[str, Any]] = []
+    missing: list[str] = []
+    for task in tasks:
+        path = results_root / "metrics" / f"{task['task_id']}.json"
+        if not path.is_file():
+            missing.append(task["task_id"]); continue
+        result = json.loads(path.read_text(encoding="utf-8"))
+        if result.get("schema_version") != SCHEMA_VERSION or result.get("status") != "success":
+            missing.append(task["task_id"]); continue
+        results.append(result)
+    if missing and not allow_partial:
+        raise ValueError(f"missing or incompatible metric artifacts: {', '.join(missing[:8])}")
+    return results
+
+
+def _format(value: Any) -> str:
+    if value is None:
+        return "N/A"
+    if isinstance(value, float):
+        return f"{value:.4f}"
+    return str(value)
+
+
+def _table(rows: list[dict[str, Any]], fields: list[str]) -> str:
+    head = "".join(f"<th>{html.escape(field.replace('_', ' '))}</th>" for field in fields)
+    body = "".join("<tr>" + "".join(f"<td>{html.escape(_format(row.get(field)))}</td>" for field in fields) + "</tr>" for row in rows)
+    return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
+
+
+def render(results_root: Path, libraries: set[str] | None, models: set[str] | None, allow_partial: bool) -> dict[str, Any]:
+    results_root = results_root.resolve()
+    results = _load_results(results_root, libraries, models, allow_partial)
+    rendered = results_root / "rendered"; rendered.mkdir(exist_ok=True)
+    rows: list[dict[str, Any]] = []
+    union_genes: set[str] = set()
+    for result in results:
+        with gzip.open(results_root / "metrics" / f"{result['task_id']}.genes.txt.gz", "rt", encoding="utf-8") as handle:
+            union_genes.update(line.rstrip("\n") for line in handle)
+        inventory, comparison, provenance = result["generated_inventory"], result["comparison"], result["provenance"]
+        rows.append({"library_id": result["library_id"], "model_id": result["model_id"], "output_id": result["output_id"], "reference_id": result["task_id"].rsplit(".", 1)[1], "gene_set_count": inventory["gene_set_count"], "membership_count": inventory["membership_count"], "unique_gene_count": inventory["unique_gene_count"], "comparison_status": comparison["comparison_status"], "set_name_recall": comparison.get("set_name_recall"), "membership_jaccard": comparison.get("membership_jaccard"), "median_set_jaccard": comparison.get("median_set_jaccard"), "exact_match_rate": comparison.get("exact_match_rate"), "provenance_status": provenance["provenance_status"]})
+    rows.sort(key=lambda row: (str(row["library_id"]), str(row["model_id"]), str(row["output_id"]), str(row["reference_id"])))
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows: grouped[str(row["library_id"])].append(row)
+    library_rows = [{"library_id": library, "model_output_reference_count": len(values), "gene_set_count_sum": sum(int(value["gene_set_count"]) for value in values), "membership_count_sum": sum(int(value["membership_count"]) for value in values), "legacy_comparison_count": sum(value["comparison_status"] == "available" for value in values)} for library, values in sorted(grouped.items())]
+    summary = {"schema_version": SCHEMA_VERSION, "rendered_at_utc": _now(), "library_count": len(library_rows), "model_output_reference_count": len(rows), "gene_set_count_sum": sum(int(row["gene_set_count"]) for row in rows), "membership_count_sum": sum(int(row["membership_count"]) for row in rows), "unique_gene_union_count": len(union_genes), "legacy_comparison_count": sum(row["comparison_status"] == "available" for row in rows), "provenance_present_count": sum(row["provenance_status"] != "NOT_RUN" for row in rows), "allow_partial": allow_partial}
+    _json_dump(rendered / "summary.json", summary); _write_tsv_gz(rendered / "model_output_summary.tsv.gz", rows); _write_tsv_gz(rendered / "library_summary.tsv.gz", library_rows)
+    fields = ["library_id", "model_id", "output_id", "reference_id", "gene_set_count", "membership_count", "unique_gene_count", "comparison_status", "set_name_recall", "membership_jaccard", "median_set_jaccard", "exact_match_rate", "provenance_status"]
+    markdown = ["# Gene-set comprehensive report", "", "## Executive summary", "", *[f"- {key}: {_format(value)}" for key, value in summary.items() if key not in {"schema_version", "rendered_at_utc"}], "", "## Cross-library inventory", "", "| " + " | ".join(fields) + " |", "| " + " | ".join("---" for _ in fields) + " |"]
+    markdown.extend("| " + " | ".join(_format(row.get(field)) for field in fields) + " |" for row in rows)
+    markdown.extend(["", "## Method", "", "Gene-set counts and memberships are summed across output/reference task rows; `unique_gene_union_count` is deduplicated across generated outputs. Name agreement is based on exact names. Membership metrics use only explicitly mapped terms, or exact shared names when no mapping is supplied. Undefined ratios are `N/A`."])
+    (rendered / "report.md").write_text("\n".join(markdown) + "\n", encoding="utf-8")
+    html_document = "<!doctype html><html><head><meta charset=\"utf-8\"><title>Gene-set comprehensive report</title><style>body{font:14px system-ui,sans-serif;max-width:1400px;margin:2rem auto;padding:0 1rem}table{border-collapse:collapse;width:100%;margin:1rem 0}th,td{border:1px solid #bbb;padding:.35rem;text-align:left}th{background:#eef}tr:nth-child(even){background:#fafafa}</style></head><body><h1>Gene-set comprehensive report</h1><h2>Executive summary</h2>" + _table([summary], ["library_count", "model_output_reference_count", "gene_set_count_sum", "membership_count_sum", "unique_gene_union_count", "legacy_comparison_count", "provenance_present_count"]) + "<h2>Cross-library inventory</h2>" + _table(rows, fields) + "<h2>Method</h2><p>Name agreement uses exact names. Membership agreement uses explicitly mapped names when supplied, otherwise exact shared names. Undefined ratios are shown as N/A.</p></body></html>"
+    (rendered / "report.html").write_text(html_document, encoding="utf-8")
+    for library_id, values in grouped.items():
+        library_dir = rendered / "libraries" / library_id
+        library_dir.mkdir(parents=True, exist_ok=True)
+        library_summary = {"schema_version": SCHEMA_VERSION, "library_id": library_id, "model_output_reference_count": len(values), "gene_set_count_sum": sum(int(value["gene_set_count"]) for value in values), "membership_count_sum": sum(int(value["membership_count"]) for value in values), "legacy_comparison_count": sum(value["comparison_status"] == "available" for value in values)}
+        _json_dump(library_dir / "summary.json", library_summary)
+        _write_tsv_gz(library_dir / "model_output_summary.tsv.gz", values)
+        library_markdown = "# " + library_id + " gene-set report\n\n" + "## Summary\n\n" + "\n".join(f"- {key}: {_format(value)}" for key, value in library_summary.items() if key != "schema_version") + "\n\n## Model/output inventory\n\n| " + " | ".join(fields) + " |\n| " + " | ".join("---" for _ in fields) + " |\n" + "\n".join("| " + " | ".join(_format(row.get(field)) for field in fields) + " |" for row in values) + "\n"
+        (library_dir / "report.md").write_text(library_markdown, encoding="utf-8")
+        library_html = "<!doctype html><meta charset=\"utf-8\"><title>" + html.escape(library_id) + " report</title><style>body{font:14px system-ui,sans-serif;margin:2rem}table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:.35rem;text-align:left}th{background:#eef}</style><h1>" + html.escape(library_id) + "</h1>" + _table([library_summary], ["model_output_reference_count", "gene_set_count_sum", "membership_count_sum", "legacy_comparison_count"]) + _table(values, fields)
+        (library_dir / "report.html").write_text(library_html, encoding="utf-8")
+        # Compatibility link for readers opening a library report from rendered/.
+        (rendered / f"{library_id}.html").write_text(library_html, encoding="utf-8")
+    return summary
+
+
+def _task_command(output_dir: Path, index: int, validator: str | None) -> list[str]:
+    command = [sys.executable, "-m", "submission_tools.comprehensive_report", "task", "--output-dir", str(output_dir), "--task-index", str(index)]
+    if validator: command.extend(["--dapper-validator", validator])
+    return command
+
+
+def submit(manifest: Path, output_dir: Path, libraries: set[str] | None, models: set[str] | None, args: argparse.Namespace) -> dict[str, Any]:
+    tasks = plan(manifest, output_dir, libraries, models)
+    script = output_dir / "run_task.sh"
+    wrapper_root = Path(__file__).resolve().parents[1]
+    # The worker reads SGE_TASK_ID at runtime; the script itself is a real executable qsub target.
+    task_args = ["-m", "submission_tools.comprehensive_report", "task", "--output-dir", str(output_dir.resolve()), "--task-index", "${SGE_TASK_ID}"] + (["--dapper-validator", args.dapper_validator] if args.dapper_validator else [])
+    if args.apptainer_image:
+        binds = [f"{wrapper_root}:/wrapper:ro", *args.bind]
+        worker = [args.apptainer_bin, "exec", "--cleanenv"] + [item for bind in binds for item in ("--bind", bind)] + [args.apptainer_image, args.python_bin, *task_args]
+        prefix = "export PYTHONPATH=/wrapper${PYTHONPATH:+:${PYTHONPATH}}\n"
+    else:
+        worker = [args.python_bin, *task_args]
+        prefix = f"export PYTHONPATH={shlex_quote(str(wrapper_root))}${{PYTHONPATH:+:${{PYTHONPATH}}}}\n"
+    script.write_text("#!/usr/bin/env bash\nset -euo pipefail\n: \"${SGE_TASK_ID:?SGE_TASK_ID is required}\"\n" + prefix + "exec " + " ".join(shlex_quote(part) for part in worker) + "\n", encoding="utf-8")
+    script.chmod(0o755)
+    qsub = [args.qsub_bin, "-cwd", "-t", f"1-{len(tasks)}", "-o", str((output_dir / "logs").resolve()), "-e", str((output_dir / "logs").resolve())]
+    if args.memory: qsub.extend(["-l", f"h_vmem={args.memory}"])
+    if args.walltime: qsub.extend(["-l", f"h_rt={args.walltime}"])
+    if args.queue: qsub.extend(["-q", args.queue])
+    if args.project: qsub.extend(["-P", args.project])
+    qsub.append(str(script.resolve()))
+    (output_dir / "logs").mkdir(exist_ok=True)
+    payload = {"tasks": len(tasks), "qsub_command": qsub, "script": str(script.resolve()), "dry_run": args.dry_run}
+    if not args.dry_run:
+        completed = subprocess.run(qsub, check=True, capture_output=True, text=True)
+        payload["qsub_output"] = completed.stdout.strip()
+    _json_dump(output_dir / "submission.json", payload)
+    return payload
+
+
+def shlex_quote(value: str) -> str:
+    # ``${SGE_TASK_ID}`` must expand in the generated worker shell.
+    return value if value == "${SGE_TASK_ID}" else __import__("shlex").quote(value)
+
+
+def _select(args: argparse.Namespace) -> tuple[set[str] | None, set[str] | None]:
+    if bool(args.library) == bool(args.all_libraries):
+        raise ValueError("select one or more --library values, or pass --all-libraries")
+    return (set(args.library) if args.library else None), (set(args.model) if args.model else None)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Plan, compute, render, and submit comprehensive wrapper-side GMT reports.")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    def selection(command: argparse.ArgumentParser, manifest: bool = True) -> None:
+        if manifest: command.add_argument("--manifest", type=Path, required=True)
+        command.add_argument("--output-dir", type=Path, required=True)
+        command.add_argument("--library", action="append", default=[])
+        command.add_argument("--all-libraries", action="store_true")
+        command.add_argument("--model", action="append", default=[])
+    plan_parser = subparsers.add_parser("plan"); selection(plan_parser)
+    run_parser = subparsers.add_parser("run"); selection(run_parser); run_parser.add_argument("--dapper-validator"); run_parser.add_argument("--resume", action="store_true")
+    render_parser = subparsers.add_parser("render"); selection(render_parser, manifest=False); render_parser.add_argument("--allow-partial", action="store_true")
+    submit_parser = subparsers.add_parser("submit"); selection(submit_parser); submit_parser.add_argument("--dapper-validator"); submit_parser.add_argument("--qsub-bin", default="qsub"); submit_parser.add_argument("--memory"); submit_parser.add_argument("--walltime"); submit_parser.add_argument("--queue"); submit_parser.add_argument("--project"); submit_parser.add_argument("--apptainer-image"); submit_parser.add_argument("--apptainer-bin", default="apptainer"); submit_parser.add_argument("--python-bin", default=sys.executable); submit_parser.add_argument("--bind", action="append", default=[]); submit_parser.add_argument("--dry-run", action="store_true")
+    task_parser = subparsers.add_parser("task"); task_parser.add_argument("--output-dir", type=Path, required=True); task_parser.add_argument("--task-index", type=int, required=True); task_parser.add_argument("--dapper-validator")
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "task":
+            task = json.loads((args.output_dir / "tasks" / f"{args.task_index:05d}.json").read_text(encoding="utf-8"))
+            metrics, statuses = args.output_dir / "metrics", args.output_dir / "status"; metrics.mkdir(exist_ok=True); statuses.mkdir(exist_ok=True)
+            _write_status(statuses / f"{task['task_id']}.json", task, "running")
+            result = _compute(task, metrics, args.dapper_validator); _json_dump(metrics / f"{task['task_id']}.json", result); _write_status(statuses / f"{task['task_id']}.json", task, "success")
+        else:
+            libraries, models = _select(args)
+            if args.command == "plan": result = {"task_count": len(plan(args.manifest, args.output_dir, libraries, models))}
+            elif args.command == "run": result = {"task_count": len(run(args.manifest, args.output_dir, libraries, models, args.dapper_validator, resume=args.resume))}
+            elif args.command == "render": result = render(args.output_dir, libraries, models, args.allow_partial)
+            else: result = submit(args.manifest, args.output_dir, libraries, models, args)
+        print(json.dumps(result, sort_keys=True))
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        parser.error(str(exc))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
