@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from submission_tools.comprehensive_report import render, run, submit
+from submission_tools.comprehensive_report import convert_legacy_current_tsv, render, run, submit
 
 
 class ComprehensiveReportTests(unittest.TestCase):
@@ -64,6 +64,21 @@ class ComprehensiveReportTests(unittest.TestCase):
             self.assertTrue(Path(payload["script"]).is_absolute())
             self.assertTrue(Path(payload["script"]).stat().st_mode & 0o111)
             self.assertNotIn("bash", payload["qsub_command"])
+
+    def test_converts_legacy_current_tsv_with_stale_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write(root / "legacy_gmts/LIB/old.gmt", "A\td\tG1\n")
+            self.write(root / "current_gmts/LIB.M1.gmt", "A\td\tG1\n")
+            self.write(root / "reference_mappings/LIB.M1.tsv", "legacy_set_name\tregenerated_set_name\nA\tA\n")
+            tsv = root / "legacy_current_mapping.tsv"
+            self.write(tsv, "library_id\tmodel_id\tlegacy_gmt\tcurrent_gmt\tname_mapping\nLIB\tM1\t/retired/old.gmt\t/retired/LIB.M1.gmt\t/retired/LIB.M1.tsv\n")
+            result = convert_legacy_current_tsv(tsv, root / "reporting.json")
+            self.assertEqual(result["library_count"], 1)
+            payload = json.loads((root / "reporting.json").read_text(encoding="utf-8"))
+            output = payload["libraries"][0]["models"][0]["outputs"][0]
+            self.assertEqual(output["gmt"], "current_gmts/LIB.M1.gmt")
+            self.assertEqual(output["legacy_references"][0]["gmt"], "legacy_gmts/LIB/old.gmt")
 
 
 if __name__ == "__main__":

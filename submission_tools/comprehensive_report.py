@@ -69,6 +69,69 @@ def _path(value: str, manifest_dir: Path) -> Path:
     return (candidate if candidate.is_absolute() else manifest_dir / candidate).resolve()
 
 
+def _resolve_tsv_path(recorded: str, root: Path | None, label: str) -> Path:
+    """Resolve a current path or its unique basename below an explicit root."""
+    candidate = Path(recorded)
+    if candidate.is_file():
+        return candidate.resolve()
+    if root is None:
+        raise ValueError(f"{label} does not exist and no fallback root was provided: {recorded}")
+    matches = sorted(root.rglob(candidate.name))
+    if len(matches) != 1:
+        raise ValueError(f"expected exactly one {candidate.name!r} beneath {root} for {label}, found {len(matches)}")
+    return matches[0].resolve()
+
+
+def _portable_path(path: Path, manifest_dir: Path) -> str:
+    try:
+        return str(path.relative_to(manifest_dir))
+    except ValueError:
+        return str(path)
+
+
+def convert_legacy_current_tsv(input_path: Path, output_path: Path, *, legacy_root: Path | None = None, current_root: Path | None = None, mapping_root: Path | None = None) -> dict[str, Any]:
+    """Convert the established legacy/current TSV into a report JSON manifest."""
+    input_path, output_path = input_path.resolve(), output_path.resolve()
+    root = input_path.parent
+    legacy_root = (legacy_root or root / "legacy_gmts").resolve()
+    current_root = (current_root or root / "current_gmts").resolve()
+    mapping_root = (mapping_root or root / "reference_mappings").resolve()
+    with input_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        required = {"library_id", "model_id", "legacy_gmt", "current_gmt"}
+        if not reader.fieldnames or not required <= set(reader.fieldnames):
+            raise ValueError("TSV must contain library_id, model_id, legacy_gmt, and current_gmt columns")
+        groups: dict[tuple[str, str, str], dict[str, Any]] = {}
+        for line_number, row in enumerate(reader, 2):
+            library_id, model_id = _safe_id(row.get("library_id"), "library_id"), _safe_id(row.get("model_id"), "model_id")
+            legacy = _resolve_tsv_path(str(row.get("legacy_gmt") or ""), legacy_root, f"legacy_gmt at line {line_number}")
+            current = _resolve_tsv_path(str(row.get("current_gmt") or ""), current_root, f"current_gmt at line {line_number}")
+            mapping_text = str(row.get("name_mapping") or "").strip()
+            mapping = _resolve_tsv_path(mapping_text, mapping_root, f"name_mapping at line {line_number}") if mapping_text else None
+            key = (library_id, model_id, str(current))
+            group = groups.setdefault(key, {"library_id": library_id, "model_id": model_id, "gmt": current, "references": []})
+            reference = {"reference_id": f"legacy{len(group['references']) + 1}", "gmt": legacy}
+            if mapping is not None:
+                reference["name_mapping"] = mapping
+            if any(str(existing["gmt"]) == str(legacy) for existing in group["references"]):
+                raise ValueError(f"duplicate legacy/current pairing at {input_path}:{line_number}")
+            group["references"].append(reference)
+    libraries: dict[str, dict[str, Any]] = {}
+    for index, group in enumerate(sorted(groups.values(), key=lambda item: (item["library_id"], item["model_id"], str(item["gmt"]))), 1):
+        library = libraries.setdefault(group["library_id"], {"library_id": group["library_id"], "models": {}})
+        model = library["models"].setdefault(group["model_id"], {"model_id": group["model_id"], "outputs": []})
+        output = {"output_id": f"output{len(model['outputs']) + 1}", "gmt": _portable_path(group["gmt"], output_path.parent), "legacy_references": []}
+        for reference in group["references"]:
+            item = {"reference_id": reference["reference_id"], "gmt": _portable_path(reference["gmt"], output_path.parent)}
+            if reference.get("name_mapping"):
+                item["name_mapping"] = _portable_path(reference["name_mapping"], output_path.parent)
+            output["legacy_references"].append(item)
+        model["outputs"].append(output)
+    manifest = {"schema_version": SCHEMA_VERSION, "generated_from": str(input_path), "libraries": [{"library_id": library["library_id"], "models": list(library["models"].values())} for _, library in sorted(libraries.items())]}
+    _json_dump(output_path, manifest)
+    return {"manifest": str(output_path), "library_count": len(libraries), "model_output_count": len(groups)}
+
+
 def _load_manifest(path: Path) -> dict[str, Any]:
     """Load JSON, with YAML available only when PyYAML is already installed."""
     text = path.read_text(encoding="utf-8")
@@ -421,10 +484,18 @@ def main(argv: list[str] | None = None) -> int:
     run_parser = subparsers.add_parser("run"); selection(run_parser); run_parser.add_argument("--dapper-validator"); run_parser.add_argument("--resume", action="store_true")
     render_parser = subparsers.add_parser("render"); selection(render_parser, manifest=False); render_parser.add_argument("--allow-partial", action="store_true")
     submit_parser = subparsers.add_parser("submit"); selection(submit_parser); submit_parser.add_argument("--dapper-validator"); submit_parser.add_argument("--qsub-bin", default="qsub"); submit_parser.add_argument("--memory"); submit_parser.add_argument("--walltime"); submit_parser.add_argument("--queue"); submit_parser.add_argument("--project"); submit_parser.add_argument("--apptainer-image"); submit_parser.add_argument("--apptainer-bin", default="apptainer"); submit_parser.add_argument("--python-bin", default=sys.executable); submit_parser.add_argument("--bind", action="append", default=[]); submit_parser.add_argument("--dry-run", action="store_true")
+    convert_parser = subparsers.add_parser("convert-tsv", help="Convert a legacy/current mapping TSV into a comprehensive-report JSON manifest.")
+    convert_parser.add_argument("--input", type=Path, required=True)
+    convert_parser.add_argument("--output", type=Path, required=True)
+    convert_parser.add_argument("--legacy-root", type=Path)
+    convert_parser.add_argument("--current-root", type=Path)
+    convert_parser.add_argument("--mapping-root", type=Path)
     task_parser = subparsers.add_parser("task"); task_parser.add_argument("--output-dir", type=Path, required=True); task_parser.add_argument("--task-index", type=int, required=True); task_parser.add_argument("--dapper-validator")
     args = parser.parse_args(argv)
     try:
-        if args.command == "task":
+        if args.command == "convert-tsv":
+            result = convert_legacy_current_tsv(args.input, args.output, legacy_root=args.legacy_root, current_root=args.current_root, mapping_root=args.mapping_root)
+        elif args.command == "task":
             task = json.loads((args.output_dir / "tasks" / f"{args.task_index:05d}.json").read_text(encoding="utf-8"))
             metrics, statuses = args.output_dir / "metrics", args.output_dir / "status"; metrics.mkdir(exist_ok=True); statuses.mkdir(exist_ok=True)
             _write_status(statuses / f"{task['task_id']}.json", task, "running")

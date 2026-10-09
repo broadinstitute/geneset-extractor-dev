@@ -60,6 +60,23 @@ and `rendered/`. The rendered directory contains offline `report.html`,
 `report.md`, gzipped TSVs, JSON summary, and standalone reports under
 `rendered/libraries/<library_id>/`.
 
+### Convert the existing legacy/current TSV
+
+The existing `legacy_current_mapping.tsv` is not itself the comprehensive
+manifest. Convert it once; paths that were recorded on another host are
+resolved by unique basename under the supplied roots (or the TSV's sibling
+`legacy_gmts/`, `current_gmts/`, and `reference_mappings/` directories).
+
+```bash
+bash run/summarize_comprehensive_reports.sh convert-tsv \
+  --input legacy_current_mapping/legacy_current_mapping.tsv \
+  --output legacy_current_mapping/reporting.json
+```
+
+When the three file collections are elsewhere, pass `--legacy-root`,
+`--current-root`, and `--mapping-root`. The generated JSON keeps paths
+relative where possible and is ready for `plan`, `run`, or `submit`.
+
 ## Metrics
 
 GMT records are terms with unique nonblank genes. Reported coverage includes
