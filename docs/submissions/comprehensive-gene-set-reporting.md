@@ -60,6 +60,23 @@ and `rendered/`. The rendered directory contains offline `report.html`,
 `report.md`, gzipped TSVs, JSON summary, and standalone reports under
 `rendered/libraries/<library_id>/`.
 
+### Combine independently completed library runs
+
+Use `combine` when libraries were computed on different days or into separate
+report roots. It validates schema-compatible task metrics, copies only metric
+artifacts (not GMTs), and renders a new aggregate report.
+
+```bash
+bash run/summarize_comprehensive_reports.sh combine \
+  --results-root reports/GTEx \
+  --results-root reports/LINCS_L1000 \
+  --all-libraries \
+  --output-dir reports/GTEx-LINCS-combined
+```
+
+By default a missing or failed selected task aborts the combination. Use
+`--allow-partial` only when an explicitly incomplete report is intended.
+
 ### Convert the existing legacy/current TSV
 
 The existing `legacy_current_mapping.tsv` is not itself the comprehensive

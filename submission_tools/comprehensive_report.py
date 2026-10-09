@@ -531,6 +531,47 @@ def render(results_root: Path, libraries: set[str] | None, models: set[str] | No
     return summary
 
 
+def combine(results_roots: list[Path], output_dir: Path, libraries: set[str] | None, models: set[str] | None, allow_partial: bool) -> dict[str, Any]:
+    """Combine completed run roots without re-reading GMTs or recomputing metrics."""
+    output_dir = output_dir.resolve()
+    if output_dir.exists() and any(output_dir.iterdir()):
+        raise ValueError(f"combined output directory must be empty: {output_dir}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    metrics_dir = output_dir / "metrics"; metrics_dir.mkdir()
+    selected_tasks: list[dict[str, Any]] = []
+    seen_task_ids: set[str] = set()
+    source_roots: list[str] = []
+    for source_root in results_roots:
+        source_root = source_root.resolve()
+        source_manifest_path = source_root / "manifest.json"
+        if not source_manifest_path.is_file():
+            raise ValueError(f"missing run manifest: {source_manifest_path}")
+        source_manifest = json.loads(source_manifest_path.read_text(encoding="utf-8"))
+        tasks = [task for task in source_manifest.get("tasks", []) if (libraries is None or task["library_id"] in libraries) and (models is None or task["model_id"] in models)]
+        # Validate all selected tasks before copying any artifacts.
+        completed = {result["task_id"]: result for result in _load_results(source_root, libraries, models, allow_partial)}
+        for task in tasks:
+            task_id = str(task.get("task_id", ""))
+            if not task_id:
+                raise ValueError(f"invalid task without task_id in {source_manifest_path}")
+            if task_id in seen_task_ids:
+                raise ValueError(f"duplicate task identity across result roots: {task_id}")
+            seen_task_ids.add(task_id)
+            selected_tasks.append(task)
+            result = completed.get(task_id)
+            if result is None:
+                continue
+            for suffix in (".json", ".genes.txt.gz", ".per_term.tsv.gz"):
+                source = source_root / "metrics" / f"{task_id}{suffix}"
+                if source.is_file():
+                    shutil.copy2(source, metrics_dir / source.name)
+        source_roots.append(str(source_root))
+    if not selected_tasks:
+        raise ValueError("selection contains no task artifacts to combine")
+    _json_dump(output_dir / "manifest.json", {"schema_version": SCHEMA_VERSION, "created_at_utc": _now(), "combined_from": source_roots, "tasks": selected_tasks})
+    return render(output_dir, libraries, models, allow_partial)
+
+
 def _task_command(output_dir: Path, index: int, validator: str | None) -> list[str]:
     command = [sys.executable, "-m", "submission_tools.comprehensive_report", "task", "--output-dir", str(output_dir), "--task-index", str(index)]
     if validator: command.extend(["--dapper-validator", validator])
@@ -592,6 +633,10 @@ def main(argv: list[str] | None = None) -> int:
     plan_parser = subparsers.add_parser("plan"); selection(plan_parser)
     run_parser = subparsers.add_parser("run"); selection(run_parser); run_parser.add_argument("--dapper-validator"); run_parser.add_argument("--resume", action="store_true")
     render_parser = subparsers.add_parser("render"); selection(render_parser, manifest=False); render_parser.add_argument("--allow-partial", action="store_true")
+    combine_parser = subparsers.add_parser("combine", help="Render an aggregate report from independently completed report roots.")
+    selection(combine_parser, manifest=False)
+    combine_parser.add_argument("--results-root", type=Path, action="append", required=True, help="Completed report root; repeat for each independent library run.")
+    combine_parser.add_argument("--allow-partial", action="store_true")
     submit_parser = subparsers.add_parser("submit"); selection(submit_parser); submit_parser.add_argument("--dapper-validator"); submit_parser.add_argument("--qsub-bin", default="qsub"); submit_parser.add_argument("--memory"); submit_parser.add_argument("--walltime"); submit_parser.add_argument("--queue"); submit_parser.add_argument("--project"); submit_parser.add_argument("--apptainer-image"); submit_parser.add_argument("--apptainer-bin", default="apptainer"); submit_parser.add_argument("--python-bin", default=sys.executable); submit_parser.add_argument("--bind", action="append", default=[]); submit_parser.add_argument("--dry-run", action="store_true")
     convert_parser = subparsers.add_parser("convert-tsv", help="Convert a legacy/current mapping TSV into a comprehensive-report JSON manifest.")
     convert_parser.add_argument("--input", type=Path, required=True)
@@ -624,6 +669,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "plan": result = {"task_count": len(plan(args.manifest, args.output_dir, libraries, models))}
             elif args.command == "run": result = {"task_count": len(run(args.manifest, args.output_dir, libraries, models, args.dapper_validator, resume=args.resume))}
             elif args.command == "render": result = render(args.output_dir, libraries, models, args.allow_partial)
+            elif args.command == "combine": result = combine(args.results_root, args.output_dir, libraries, models, args.allow_partial)
             else: result = submit(args.manifest, args.output_dir, libraries, models, args)
         print(json.dumps(result, sort_keys=True))
     except (OSError, ValueError, subprocess.SubprocessError) as exc:

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from submission_tools.comprehensive_report import convert_legacy_current_tsv, discover_run_root_manifest, render, run, submit
+from submission_tools.comprehensive_report import combine, convert_legacy_current_tsv, discover_run_root_manifest, render, run, submit
 
 
 class ComprehensiveReportTests(unittest.TestCase):
@@ -126,6 +126,19 @@ class ComprehensiveReportTests(unittest.TestCase):
             self.assertTrue(metric["compile_source_manifest"])
             self.assertTrue(Path(metric["generated_gmt"]).is_file())
             self.assertNotIn("WRONG", Path(metric["generated_gmt"]).read_text(encoding="utf-8"))
+
+    def test_combines_independent_library_runs_without_gmt_recomputation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); manifest = self.manifest(root)
+            gtex_root, lincs_root = root / "gtex", root / "lincs"
+            run(manifest, gtex_root, {"GTEx"}, None, None)
+            run(manifest, lincs_root, {"LINCS"}, None, None)
+            combined = root / "combined"
+            summary = combine([gtex_root, lincs_root], combined, None, None, False)
+            self.assertEqual(summary["library_count"], 2)
+            self.assertTrue((combined / "rendered/report.html").is_file())
+            self.assertTrue((combined / "metrics/GTEx.HZ1.main.old.json").is_file())
+            self.assertTrue((combined / "metrics/LINCS.HZ1.main.none.json").is_file())
 
 
 if __name__ == "__main__":
