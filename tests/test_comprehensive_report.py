@@ -128,6 +128,18 @@ class ComprehensiveReportTests(unittest.TestCase):
             self.assertTrue(Path(metric["generated_gmt"]).is_file())
             self.assertNotIn("WRONG", Path(metric["generated_gmt"]).read_text(encoding="utf-8"))
 
+    def test_discovers_new_library_without_legacy_tsv(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run_root = root / "completed-run"
+            self.write(run_root / "genesets/partition/models/M1/extractor/genesets.gmt", "A\td\tG1\n")
+            manifest = root / "discovered.json"
+            discovered = discover_run_root_manifest(run_root, None, manifest, library_id="NewLibrary")
+            self.assertEqual(discovered["legacy_reference_count"], 0)
+            report_root = root / "report"; run(manifest, report_root, {"NewLibrary"}, None, None)
+            metric = json.loads(next((report_root / "metrics").glob("*.json")).read_text(encoding="utf-8"))
+            self.assertEqual(metric["comparison"]["comparison_status"], "not_applicable")
+
     def test_combines_independent_library_runs_without_gmt_recomputation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary); manifest = self.manifest(root)

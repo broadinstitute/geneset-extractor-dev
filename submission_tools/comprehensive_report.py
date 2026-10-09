@@ -126,38 +126,40 @@ def _unique_provenance_for_model(run_root: Path, model_id: str) -> str | None:
     return str(next(iter(candidates))) if len(candidates) == 1 else None
 
 
-def discover_run_root_manifest(run_root: Path, legacy_tsv: Path, output_path: Path, *, library_id: str, legacy_root: Path | None = None, mapping_root: Path | None = None, duplicate_policy: str = "fail") -> dict[str, Any]:
+def discover_run_root_manifest(run_root: Path, legacy_tsv: Path | None, output_path: Path, *, library_id: str, legacy_root: Path | None = None, mapping_root: Path | None = None, duplicate_policy: str = "fail") -> dict[str, Any]:
     """Build a report manifest whose outputs compile from one completed run root.
 
     ``current_gmt`` is intentionally not part of this contract: the current
     comparison artifact is compiled from the selected model's final GMTs.
     """
-    run_root, legacy_tsv, output_path = run_root.resolve(), legacy_tsv.resolve(), output_path.resolve()
+    run_root, output_path = run_root.resolve(), output_path.resolve()
     if not run_root.is_dir():
         raise ValueError(f"run root is not a directory: {run_root}")
-    root = legacy_tsv.parent
-    legacy_root = (legacy_root or root / "legacy_gmts").resolve()
-    mapping_root = (mapping_root or root / "reference_mappings").resolve()
     selected_library = _safe_id(library_id, "library_id")
     references_by_model: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    with legacy_tsv.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle, delimiter="\t")
-        required = {"library_id", "model_id", "legacy_gmt"}
-        if not reader.fieldnames or not required <= set(reader.fieldnames):
-            raise ValueError("legacy TSV must contain library_id, model_id, and legacy_gmt columns; current_gmt is not needed")
-        for line_number, row in enumerate(reader, 2):
-            if str(row.get("library_id") or "").strip() != selected_library:
-                continue
-            model_id = _safe_id(row.get("model_id"), "model_id")
-            legacy = _resolve_tsv_path(str(row.get("legacy_gmt") or ""), legacy_root, f"legacy_gmt at line {line_number}")
-            mapping_text = str(row.get("name_mapping") or "").strip()
-            mapping = _resolve_tsv_path(mapping_text, mapping_root, f"name_mapping at line {line_number}") if mapping_text else None
-            reference = {"reference_id": _filename_id(legacy, f"legacy{len(references_by_model[model_id]) + 1}"), "gmt": _portable_path(legacy, output_path.parent)}
-            if mapping:
-                reference["name_mapping"] = _portable_path(mapping, output_path.parent)
-            if any(item["reference_id"] == reference["reference_id"] for item in references_by_model[model_id]):
-                raise ValueError(f"duplicate legacy reference ID for {selected_library}/{model_id}: {reference['reference_id']}")
-            references_by_model[model_id].append(reference)
+    if legacy_tsv is not None:
+        legacy_tsv = legacy_tsv.resolve()
+        root = legacy_tsv.parent
+        legacy_root = (legacy_root or root / "legacy_gmts").resolve()
+        mapping_root = (mapping_root or root / "reference_mappings").resolve()
+        with legacy_tsv.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle, delimiter="\t")
+            required = {"library_id", "model_id", "legacy_gmt"}
+            if not reader.fieldnames or not required <= set(reader.fieldnames):
+                raise ValueError("legacy TSV must contain library_id, model_id, and legacy_gmt columns; current_gmt is not needed")
+            for line_number, row in enumerate(reader, 2):
+                if str(row.get("library_id") or "").strip() != selected_library:
+                    continue
+                model_id = _safe_id(row.get("model_id"), "model_id")
+                legacy = _resolve_tsv_path(str(row.get("legacy_gmt") or ""), legacy_root, f"legacy_gmt at line {line_number}")
+                mapping_text = str(row.get("name_mapping") or "").strip()
+                mapping = _resolve_tsv_path(mapping_text, mapping_root, f"name_mapping at line {line_number}") if mapping_text else None
+                reference = {"reference_id": _filename_id(legacy, f"legacy{len(references_by_model[model_id]) + 1}"), "gmt": _portable_path(legacy, output_path.parent)}
+                if mapping:
+                    reference["name_mapping"] = _portable_path(mapping, output_path.parent)
+                if any(item["reference_id"] == reference["reference_id"] for item in references_by_model[model_id]):
+                    raise ValueError(f"duplicate legacy reference ID for {selected_library}/{model_id}: {reference['reference_id']}")
+                references_by_model[model_id].append(reference)
     discovered_models = _discover_model_ids(run_root)
     if not discovered_models:
         raise ValueError(f"no final genesets.gmt files found beneath {run_root}")
@@ -168,7 +170,7 @@ def discover_run_root_manifest(run_root: Path, legacy_tsv: Path, output_path: Pa
         if provenance:
             output["provenance"] = _portable_path(Path(provenance), output_path.parent)
         models.append({"model_id": model_id, "outputs": [output]})
-    manifest = {"schema_version": SCHEMA_VERSION, "generated_from": str(legacy_tsv), "run_root": str(run_root), "libraries": [{"library_id": selected_library, "models": models}]}
+    manifest = {"schema_version": SCHEMA_VERSION, "generated_from": str(legacy_tsv) if legacy_tsv else "", "run_root": str(run_root), "libraries": [{"library_id": selected_library, "models": models}]}
     _json_dump(output_path, manifest)
     return {"manifest": str(output_path), "library_id": selected_library, "model_count": len(models), "legacy_reference_count": sum(len(item["legacy_references"]) for model in models for item in model["outputs"])}
 
@@ -813,7 +815,7 @@ def main(argv: list[str] | None = None) -> int:
     convert_parser.add_argument("--mapping-root", type=Path)
     discover_parser = subparsers.add_parser("discover-run-root", help="Create a manifest that compiles model GMTs from a completed run root.")
     discover_parser.add_argument("--run-root", type=Path, required=True)
-    discover_parser.add_argument("--legacy-current-tsv", type=Path, required=True)
+    discover_parser.add_argument("--legacy-current-tsv", type=Path, help="Optional explicit legacy/reference associations; omit for a new library with no legacy comparison.")
     discover_parser.add_argument("--library", required=True)
     discover_parser.add_argument("--output", type=Path, required=True)
     discover_parser.add_argument("--legacy-root", type=Path)

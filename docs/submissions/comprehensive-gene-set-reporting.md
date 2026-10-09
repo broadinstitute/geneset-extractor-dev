@@ -123,6 +123,18 @@ duplicates are the intended representation. A DAPPER sidecar is associated
 only when the selected model sources have exactly one adjacent DAPPER sidecar;
 otherwise provenance is marked `NOT_RUN` rather than guessed.
 
+For a new library with no historical reference, omit `--legacy-current-tsv`:
+
+```bash
+bash run/summarize_comprehensive_reports.sh discover-run-root \
+  --run-root /path/to/NewLibrary/outputs \
+  --library NewLibrary \
+  --output reports/NewLibrary/discovered-reporting.json
+```
+
+The generated report still includes inventory and provenance sections; legacy
+comparison is explicitly recorded as `not_applicable`.
+
 Only `genesets.gmt` files beneath `extractor/` or `tissue_extractor/` are
 considered generated outputs. Files under `workflow/selection/` and other
 intermediate workflow directories are excluded, even when they have the same
