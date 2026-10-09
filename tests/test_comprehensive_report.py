@@ -55,6 +55,17 @@ class ComprehensiveReportTests(unittest.TestCase):
             rendered = render(output, {"LIB"}, None, False)
             self.assertEqual(rendered["library_count"], 1)
 
+    def test_render_preserves_reference_ids_containing_periods(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write(root / "new.gmt", "A\td\tG1\n")
+            self.write(root / "old.gmt", "A\td\tG1\n")
+            manifest = root / "reporting.json"
+            manifest.write_text(json.dumps({"libraries": [{"library_id": "LIB", "models": [{"model_id": "M1", "outputs": [{"gmt": "new.gmt", "legacy_references": [{"reference_id": "RummaGEO_GenePerturbationSignatures.gmt", "gmt": "old.gmt"}]}]}]}]}), encoding="utf-8")
+            output = root / "run"; run(manifest, output, {"LIB"}, None, None)
+            with gzip.open(output / "rendered/model_output_summary.tsv.gz", "rt", encoding="utf-8") as handle:
+                self.assertIn("RummaGEO_GenePerturbationSignatures.gmt", handle.read())
+
     def test_mapping_blank_endpoints_are_reported_as_unmapped_not_invalid(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

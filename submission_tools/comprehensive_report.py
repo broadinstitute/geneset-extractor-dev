@@ -313,6 +313,9 @@ def _tasks(manifest_path: Path, libraries: set[str] | None, models: set[str] | N
                     seen.add(task_id)
                     tasks.append({
                         "task_id": task_id, "library_id": library_id, "model_id": model_id, "output_id": output_id,
+                        # Keep this separately from task_id: reference identifiers may
+                        # legitimately contain periods (for example a GMT filename).
+                        "reference_id": reference_id,
                         "generated_gmt": str(current) if current else None,
                         "compile_run_root": str(compile_root) if compile_root else None,
                         "compile_duplicate_policy": str(compile_options.get("duplicate_policy", "fail")),
@@ -654,7 +657,7 @@ def render(results_root: Path, libraries: set[str] | None, models: set[str] | No
         with gzip.open(results_root / "metrics" / f"{result['task_id']}.genes.txt.gz", "rt", encoding="utf-8") as handle:
             union_genes.update(line.rstrip("\n") for line in handle)
         inventory, comparison, provenance = result["generated_inventory"], result["comparison"], result["provenance"]
-        rows.append({"library_id": result["library_id"], "model_id": result["model_id"], "output_id": result["output_id"], "reference_id": result["task_id"].rsplit(".", 1)[1], "gene_set_count": inventory["gene_set_count"], "membership_count": inventory["membership_count"], "unique_gene_count": inventory["unique_gene_count"], "compiled_duplicate_term_count": result.get("compiled_duplicate_term_count", 0), "compiled_renamed_term_count": result.get("compiled_renamed_term_count", 0), "comparison_status": comparison["comparison_status"], "unmapped_mapping_row_count": comparison.get("unmapped_mapping_row_count", 0), "set_name_recall": comparison.get("set_name_recall"), "membership_jaccard": comparison.get("membership_jaccard"), "median_set_jaccard": comparison.get("median_set_jaccard"), "exact_match_rate": comparison.get("exact_match_rate"), "provenance_status": provenance["provenance_status"]})
+        rows.append({"library_id": result["library_id"], "model_id": result["model_id"], "output_id": result["output_id"], "reference_id": result.get("reference_id", result["task_id"].rsplit(".", 1)[1]), "gene_set_count": inventory["gene_set_count"], "membership_count": inventory["membership_count"], "unique_gene_count": inventory["unique_gene_count"], "compiled_duplicate_term_count": result.get("compiled_duplicate_term_count", 0), "compiled_renamed_term_count": result.get("compiled_renamed_term_count", 0), "comparison_status": comparison["comparison_status"], "unmapped_mapping_row_count": comparison.get("unmapped_mapping_row_count", 0), "set_name_recall": comparison.get("set_name_recall"), "membership_jaccard": comparison.get("membership_jaccard"), "median_set_jaccard": comparison.get("median_set_jaccard"), "exact_match_rate": comparison.get("exact_match_rate"), "provenance_status": provenance["provenance_status"]})
     rows.sort(key=lambda row: (str(row["library_id"]), str(row["model_id"]), str(row["output_id"]), str(row["reference_id"])))
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows: grouped[str(row["library_id"])].append(row)
