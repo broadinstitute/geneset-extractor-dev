@@ -237,19 +237,28 @@ def _safe_id(value: object, label: str) -> str:
     return text
 
 
-def _mapping(path: Path | None) -> dict[str, str]:
+def _mapping(path: Path | None) -> tuple[dict[str, str], int]:
     if path is None:
-        return {}
+        return {}, 0
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         fields = set(reader.fieldnames or [])
         target = "regenerated_set_name" if "regenerated_set_name" in fields else "generated_set_name"
         if not {"legacy_set_name", target} <= fields:
             raise ValueError(f"mapping {path} must contain legacy_set_name and regenerated_set_name (or generated_set_name)")
-        pairs = {str(row["legacy_set_name"] or "").strip(): str(row[target] or "").strip() for row in reader}
-    if any(not legacy or not generated for legacy, generated in pairs.items()) or len(pairs) != len(set(pairs.values())):
-        raise ValueError(f"mapping {path} must be one-to-one and contain no blank names")
-    return pairs
+        pairs: dict[str, str] = {}
+        generated_names: set[str] = set()
+        unmapped_count = 0
+        for row in reader:
+            legacy, generated = str(row["legacy_set_name"] or "").strip(), str(row[target] or "").strip()
+            if not legacy or not generated:
+                unmapped_count += 1
+                continue
+            if legacy in pairs or generated in generated_names:
+                raise ValueError(f"mapping {path} must be one-to-one among nonblank names")
+            pairs[legacy] = generated
+            generated_names.add(generated)
+    return pairs, unmapped_count
 
 
 def _tasks(manifest_path: Path, libraries: set[str] | None, models: set[str] | None) -> list[dict[str, Any]]:
@@ -400,8 +409,9 @@ def _compute(task: dict[str, Any], metrics_dir: Path, validator: str | None) -> 
             raise ValueError(f"legacy GMT does not exist: {legacy_path}")
         legacy, legacy_warnings = read_gmt(legacy_path)
         mapping_path = Path(str(task["name_mapping"])) if task.get("name_mapping") else None
-        comparison, details = _compare(legacy, generated, _mapping(mapping_path))
-        comparison.update({"legacy_gmt": str(legacy_path), "legacy_sha256": _sha256(legacy_path), "legacy_bytes": legacy_path.stat().st_size, "legacy_warning_count": len(legacy_warnings), "name_mapping": str(mapping_path or "")})
+        mapping, unmapped_mapping_row_count = _mapping(mapping_path)
+        comparison, details = _compare(legacy, generated, mapping)
+        comparison.update({"legacy_gmt": str(legacy_path), "legacy_sha256": _sha256(legacy_path), "legacy_bytes": legacy_path.stat().st_size, "legacy_warning_count": len(legacy_warnings), "name_mapping": str(mapping_path or ""), "unmapped_mapping_row_count": unmapped_mapping_row_count})
         result["comparison"] = comparison
         _write_tsv_gz(metrics_dir / f"{task['task_id']}.per_term.tsv.gz", details)
     else:
@@ -492,14 +502,14 @@ def render(results_root: Path, libraries: set[str] | None, models: set[str] | No
         with gzip.open(results_root / "metrics" / f"{result['task_id']}.genes.txt.gz", "rt", encoding="utf-8") as handle:
             union_genes.update(line.rstrip("\n") for line in handle)
         inventory, comparison, provenance = result["generated_inventory"], result["comparison"], result["provenance"]
-        rows.append({"library_id": result["library_id"], "model_id": result["model_id"], "output_id": result["output_id"], "reference_id": result["task_id"].rsplit(".", 1)[1], "gene_set_count": inventory["gene_set_count"], "membership_count": inventory["membership_count"], "unique_gene_count": inventory["unique_gene_count"], "comparison_status": comparison["comparison_status"], "set_name_recall": comparison.get("set_name_recall"), "membership_jaccard": comparison.get("membership_jaccard"), "median_set_jaccard": comparison.get("median_set_jaccard"), "exact_match_rate": comparison.get("exact_match_rate"), "provenance_status": provenance["provenance_status"]})
+        rows.append({"library_id": result["library_id"], "model_id": result["model_id"], "output_id": result["output_id"], "reference_id": result["task_id"].rsplit(".", 1)[1], "gene_set_count": inventory["gene_set_count"], "membership_count": inventory["membership_count"], "unique_gene_count": inventory["unique_gene_count"], "comparison_status": comparison["comparison_status"], "unmapped_mapping_row_count": comparison.get("unmapped_mapping_row_count", 0), "set_name_recall": comparison.get("set_name_recall"), "membership_jaccard": comparison.get("membership_jaccard"), "median_set_jaccard": comparison.get("median_set_jaccard"), "exact_match_rate": comparison.get("exact_match_rate"), "provenance_status": provenance["provenance_status"]})
     rows.sort(key=lambda row: (str(row["library_id"]), str(row["model_id"]), str(row["output_id"]), str(row["reference_id"])))
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows: grouped[str(row["library_id"])].append(row)
     library_rows = [{"library_id": library, "model_output_reference_count": len(values), "gene_set_count_sum": sum(int(value["gene_set_count"]) for value in values), "membership_count_sum": sum(int(value["membership_count"]) for value in values), "legacy_comparison_count": sum(value["comparison_status"] == "available" for value in values)} for library, values in sorted(grouped.items())]
     summary = {"schema_version": SCHEMA_VERSION, "rendered_at_utc": _now(), "library_count": len(library_rows), "model_output_reference_count": len(rows), "gene_set_count_sum": sum(int(row["gene_set_count"]) for row in rows), "membership_count_sum": sum(int(row["membership_count"]) for row in rows), "unique_gene_union_count": len(union_genes), "legacy_comparison_count": sum(row["comparison_status"] == "available" for row in rows), "provenance_present_count": sum(row["provenance_status"] != "NOT_RUN" for row in rows), "allow_partial": allow_partial}
     _json_dump(rendered / "summary.json", summary); _write_tsv_gz(rendered / "model_output_summary.tsv.gz", rows); _write_tsv_gz(rendered / "library_summary.tsv.gz", library_rows)
-    fields = ["library_id", "model_id", "output_id", "reference_id", "gene_set_count", "membership_count", "unique_gene_count", "comparison_status", "set_name_recall", "membership_jaccard", "median_set_jaccard", "exact_match_rate", "provenance_status"]
+    fields = ["library_id", "model_id", "output_id", "reference_id", "gene_set_count", "membership_count", "unique_gene_count", "comparison_status", "unmapped_mapping_row_count", "set_name_recall", "membership_jaccard", "median_set_jaccard", "exact_match_rate", "provenance_status"]
     markdown = ["# Gene-set comprehensive report", "", "## Executive summary", "", *[f"- {key}: {_format(value)}" for key, value in summary.items() if key not in {"schema_version", "rendered_at_utc"}], "", "## Cross-library inventory", "", "| " + " | ".join(fields) + " |", "| " + " | ".join("---" for _ in fields) + " |"]
     markdown.extend("| " + " | ".join(_format(row.get(field)) for field in fields) + " |" for row in rows)
     markdown.extend(["", "## Method", "", "Gene-set counts and memberships are summed across output/reference task rows; `unique_gene_union_count` is deduplicated across generated outputs. Name agreement is based on exact names. Membership metrics use only explicitly mapped terms, or exact shared names when no mapping is supplied. Undefined ratios are `N/A`."])

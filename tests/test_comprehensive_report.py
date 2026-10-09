@@ -54,6 +54,19 @@ class ComprehensiveReportTests(unittest.TestCase):
             rendered = render(output, {"LIB"}, None, False)
             self.assertEqual(rendered["library_count"], 1)
 
+    def test_mapping_blank_endpoints_are_reported_as_unmapped_not_invalid(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write(root / "new.gmt", "NEW_A\td\tG1\nNEW_B\td\tG2\n")
+            self.write(root / "old.gmt", "OLD_A\td\tG1\nOLD_B\td\tG2\n")
+            self.write(root / "map.tsv", "legacy_set_name\tregenerated_set_name\nOLD_A\tNEW_A\nOLD_B\t\n")
+            manifest = root / "reporting.json"
+            manifest.write_text(json.dumps({"libraries": [{"library_id": "LIB", "models": [{"model_id": "M1", "outputs": [{"gmt": "new.gmt", "legacy_references": [{"gmt": "old.gmt", "name_mapping": "map.tsv"}]}]}]}]}), encoding="utf-8")
+            output = root / "run"; run(manifest, output, {"LIB"}, None, None)
+            metric = json.loads(next((output / "metrics").glob("*.json")).read_text(encoding="utf-8"))
+            self.assertEqual(metric["comparison"]["matched_set_count"], 1)
+            self.assertEqual(metric["comparison"]["unmapped_mapping_row_count"], 1)
+
     def test_submit_dry_run_uses_executable_script_path(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary); manifest = self.manifest(root); output = root / "run"
