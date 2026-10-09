@@ -658,11 +658,30 @@ def render(results_root: Path, libraries: set[str] | None, models: set[str] | No
     summary = {"schema_version": SCHEMA_VERSION, "rendered_at_utc": _now(), "library_count": len(library_rows), "model_output_reference_count": len(rows), "gene_set_count_sum": sum(int(row["gene_set_count"]) for row in rows), "membership_count_sum": sum(int(row["membership_count"]) for row in rows), "unique_gene_union_count": len(union_genes), "legacy_comparison_count": sum(row["comparison_status"] == "available" for row in rows), "provenance_present_count": sum(row["provenance_status"] != "NOT_RUN" for row in rows), "allow_partial": allow_partial}
     _json_dump(rendered / "summary.json", summary); _write_tsv_gz(rendered / "model_output_summary.tsv.gz", rows); _write_tsv_gz(rendered / "library_summary.tsv.gz", library_rows)
     fields = ["library_id", "model_id", "output_id", "reference_id", "gene_set_count", "membership_count", "unique_gene_count", "comparison_status", "unmapped_mapping_row_count", "set_name_recall", "membership_jaccard", "median_set_jaccard", "exact_match_rate", "provenance_status"]
+    column_definitions = {
+        "library_id": "Wrapper library identifier.",
+        "model_id": "Model identifier within the library.",
+        "output_id": "Declared output identity; compiled run-root outputs end in `.compiled`.",
+        "reference_id": "Explicit legacy-reference identity, or `none` when no legacy reference applies.",
+        "gene_set_count": "Number of distinct generated term names; duplicate later records are skipped.",
+        "membership_count": "Sum of unique nonblank genes within each generated gene set; the same gene in different sets is counted repeatedly.",
+        "unique_gene_count": "Distinct nonblank genes across this generated output.",
+        "comparison_status": "`available` for an explicit legacy comparison; `not_applicable` when no legacy reference was declared.",
+        "unmapped_mapping_row_count": "Mapping rows with a blank legacy or generated name; these rows are excluded from mapped-term comparison.",
+        "set_name_recall": "Exact shared term names divided by all legacy term names. This does not use renamed mappings.",
+        "membership_jaccard": "Shared `(mapped legacy term, gene)` memberships divided by their union, considering only compared term pairs.",
+        "median_set_jaccard": "Median per-term gene-membership Jaccard among compared pairs with a defined union.",
+        "exact_match_rate": "Exactly equal gene memberships divided by compared term pairs.",
+        "provenance_status": "DAPPER validation result: `PASS`, `FAIL`, `ERROR`, or `NOT_RUN`; `NOT_RUN` is not a validity claim.",
+    }
+    glossary_rows = [{"column": field, "meaning": column_definitions[field]} for field in fields]
     markdown = ["# Gene-set comprehensive report", "", "## Executive summary", "", *[f"- {key}: {_format(value)}" for key, value in summary.items() if key not in {"schema_version", "rendered_at_utc"}], "", "## Cross-library inventory", "", "| " + " | ".join(fields) + " |", "| " + " | ".join("---" for _ in fields) + " |"]
     markdown.extend("| " + " | ".join(_format(row.get(field)) for field in fields) + " |" for row in rows)
+    markdown.extend(["", "## Column definitions", "", "| column | meaning |", "| --- | --- |"])
+    markdown.extend(f"| {row['column']} | {row['meaning']} |" for row in glossary_rows)
     markdown.extend(["", "## Method", "", "Gene-set counts and memberships are summed across output/reference task rows; `unique_gene_union_count` is deduplicated across generated outputs. Name agreement is based on exact names. Membership metrics use only explicitly mapped terms, or exact shared names when no mapping is supplied. Undefined ratios are `N/A`."])
     (rendered / "report.md").write_text("\n".join(markdown) + "\n", encoding="utf-8")
-    html_document = "<!doctype html><html><head><meta charset=\"utf-8\"><title>Gene-set comprehensive report</title><style>body{font:14px system-ui,sans-serif;max-width:1400px;margin:2rem auto;padding:0 1rem}table{border-collapse:collapse;width:100%;margin:1rem 0}th,td{border:1px solid #bbb;padding:.35rem;text-align:left}th{background:#eef}tr:nth-child(even){background:#fafafa}</style></head><body><h1>Gene-set comprehensive report</h1><h2>Executive summary</h2>" + _table([summary], ["library_count", "model_output_reference_count", "gene_set_count_sum", "membership_count_sum", "unique_gene_union_count", "legacy_comparison_count", "provenance_present_count"]) + "<h2>Cross-library inventory</h2>" + _table(rows, fields) + "<h2>Method</h2><p>Name agreement uses exact names. Membership agreement uses explicitly mapped names when supplied, otherwise exact shared names. Undefined ratios are shown as N/A.</p></body></html>"
+    html_document = "<!doctype html><html><head><meta charset=\"utf-8\"><title>Gene-set comprehensive report</title><style>body{font:14px system-ui,sans-serif;max-width:1400px;margin:2rem auto;padding:0 1rem}table{border-collapse:collapse;width:100%;margin:1rem 0}th,td{border:1px solid #bbb;padding:.35rem;text-align:left}th{background:#eef}tr:nth-child(even){background:#fafafa}</style></head><body><h1>Gene-set comprehensive report</h1><h2>Executive summary</h2>" + _table([summary], ["library_count", "model_output_reference_count", "gene_set_count_sum", "membership_count_sum", "unique_gene_union_count", "legacy_comparison_count", "provenance_present_count"]) + "<h2>Cross-library inventory</h2>" + _table(rows, fields) + "<h2>Column definitions</h2>" + _table(glossary_rows, ["column", "meaning"]) + "<h2>Method</h2><p>Name agreement uses exact names. Membership agreement uses explicitly mapped names when supplied, otherwise exact shared names. Undefined ratios are shown as N/A.</p></body></html>"
     (rendered / "report.html").write_text(html_document, encoding="utf-8")
     for library_id, values in grouped.items():
         library_dir = rendered / "libraries" / library_id

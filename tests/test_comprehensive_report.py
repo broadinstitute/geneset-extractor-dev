@@ -140,6 +140,9 @@ class ComprehensiveReportTests(unittest.TestCase):
             self.assertTrue((combined / "rendered/report.html").is_file())
             self.assertTrue((combined / "metrics/GTEx.HZ1.main.old.json").is_file())
             self.assertTrue((combined / "metrics/LINCS.HZ1.main.none.json").is_file())
+            report = (combined / "rendered/report.md").read_text(encoding="utf-8")
+            self.assertIn("## Column definitions", report)
+            self.assertIn("membership_jaccard", report)
 
     def test_streaming_comparison_matches_small_fixture_metrics(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
