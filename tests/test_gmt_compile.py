@@ -36,8 +36,10 @@ class GmtCompileTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "duplicate gene-set name"):
                 compile_gmts(root, "M1", Path(temporary) / "fail.gmt")
             self.assertFalse((Path(temporary) / "fail.gmt").exists())
-            compile_gmts(root, "M1", Path(temporary) / "prefixed.gmt", duplicate_policy="prefix_source")
+            manifest, _ = compile_gmts(root, "M1", Path(temporary) / "prefixed.gmt", duplicate_policy="prefix_source")
             self.assertIn("__same", (Path(temporary) / "prefixed.gmt").read_text(encoding="utf-8"))
+            self.assertEqual(sum(int(row["duplicate_term_count"]) for row in manifest), 1)
+            self.assertEqual(sum(int(row["renamed_term_count"]) for row in manifest), 1)
 
     def test_excludes_workflow_selection_gmts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

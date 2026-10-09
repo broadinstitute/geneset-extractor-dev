@@ -126,7 +126,7 @@ def _unique_provenance_for_model(run_root: Path, model_id: str) -> str | None:
     return str(next(iter(candidates))) if len(candidates) == 1 else None
 
 
-def discover_run_root_manifest(run_root: Path, legacy_tsv: Path | None, output_path: Path, *, library_id: str, legacy_root: Path | None = None, mapping_root: Path | None = None, duplicate_policy: str = "fail") -> dict[str, Any]:
+def discover_run_root_manifest(run_root: Path, legacy_tsv: Path | None, output_path: Path, *, library_id: str, legacy_root: Path | None = None, mapping_root: Path | None = None, duplicate_policy: str = "prefix_source") -> dict[str, Any]:
     """Build a report manifest whose outputs compile from one completed run root.
 
     ``current_gmt`` is intentionally not part of this contract: the current
@@ -560,6 +560,8 @@ def _compute(task: dict[str, Any], metrics_dir: Path, validator: str | None) -> 
     result["generated_gmt"] = str(generated_path)
     if compile_manifest is not None:
         result["compile_source_manifest"] = compile_manifest
+        result["compiled_duplicate_term_count"] = sum(int(row["duplicate_term_count"]) for row in compile_manifest)
+        result["compiled_renamed_term_count"] = sum(int(row["renamed_term_count"]) for row in compile_manifest)
     if not streaming:
         genes_path = metrics_dir / f"{task['task_id']}.genes.txt.gz"
         with gzip.open(genes_path, "wt", encoding="utf-8") as handle:
@@ -652,14 +654,14 @@ def render(results_root: Path, libraries: set[str] | None, models: set[str] | No
         with gzip.open(results_root / "metrics" / f"{result['task_id']}.genes.txt.gz", "rt", encoding="utf-8") as handle:
             union_genes.update(line.rstrip("\n") for line in handle)
         inventory, comparison, provenance = result["generated_inventory"], result["comparison"], result["provenance"]
-        rows.append({"library_id": result["library_id"], "model_id": result["model_id"], "output_id": result["output_id"], "reference_id": result["task_id"].rsplit(".", 1)[1], "gene_set_count": inventory["gene_set_count"], "membership_count": inventory["membership_count"], "unique_gene_count": inventory["unique_gene_count"], "comparison_status": comparison["comparison_status"], "unmapped_mapping_row_count": comparison.get("unmapped_mapping_row_count", 0), "set_name_recall": comparison.get("set_name_recall"), "membership_jaccard": comparison.get("membership_jaccard"), "median_set_jaccard": comparison.get("median_set_jaccard"), "exact_match_rate": comparison.get("exact_match_rate"), "provenance_status": provenance["provenance_status"]})
+        rows.append({"library_id": result["library_id"], "model_id": result["model_id"], "output_id": result["output_id"], "reference_id": result["task_id"].rsplit(".", 1)[1], "gene_set_count": inventory["gene_set_count"], "membership_count": inventory["membership_count"], "unique_gene_count": inventory["unique_gene_count"], "compiled_duplicate_term_count": result.get("compiled_duplicate_term_count", 0), "compiled_renamed_term_count": result.get("compiled_renamed_term_count", 0), "comparison_status": comparison["comparison_status"], "unmapped_mapping_row_count": comparison.get("unmapped_mapping_row_count", 0), "set_name_recall": comparison.get("set_name_recall"), "membership_jaccard": comparison.get("membership_jaccard"), "median_set_jaccard": comparison.get("median_set_jaccard"), "exact_match_rate": comparison.get("exact_match_rate"), "provenance_status": provenance["provenance_status"]})
     rows.sort(key=lambda row: (str(row["library_id"]), str(row["model_id"]), str(row["output_id"]), str(row["reference_id"])))
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows: grouped[str(row["library_id"])].append(row)
     library_rows = [{"library_id": library, "model_output_reference_count": len(values), "gene_set_count_sum": sum(int(value["gene_set_count"]) for value in values), "membership_count_sum": sum(int(value["membership_count"]) for value in values), "legacy_comparison_count": sum(value["comparison_status"] == "available" for value in values)} for library, values in sorted(grouped.items())]
     summary = {"schema_version": SCHEMA_VERSION, "rendered_at_utc": _now(), "library_count": len(library_rows), "model_output_reference_count": len(rows), "gene_set_count_sum": sum(int(row["gene_set_count"]) for row in rows), "membership_count_sum": sum(int(row["membership_count"]) for row in rows), "unique_gene_union_count": len(union_genes), "legacy_comparison_count": sum(row["comparison_status"] == "available" for row in rows), "provenance_present_count": sum(row["provenance_status"] != "NOT_RUN" for row in rows), "allow_partial": allow_partial}
     _json_dump(rendered / "summary.json", summary); _write_tsv_gz(rendered / "model_output_summary.tsv.gz", rows); _write_tsv_gz(rendered / "library_summary.tsv.gz", library_rows)
-    fields = ["library_id", "model_id", "output_id", "reference_id", "gene_set_count", "membership_count", "unique_gene_count", "comparison_status", "unmapped_mapping_row_count", "set_name_recall", "membership_jaccard", "median_set_jaccard", "exact_match_rate", "provenance_status"]
+    fields = ["library_id", "model_id", "output_id", "reference_id", "gene_set_count", "membership_count", "unique_gene_count", "compiled_duplicate_term_count", "compiled_renamed_term_count", "comparison_status", "unmapped_mapping_row_count", "set_name_recall", "membership_jaccard", "median_set_jaccard", "exact_match_rate", "provenance_status"]
     column_definitions = {
         "library_id": "Wrapper library identifier.",
         "model_id": "Model identifier within the library.",
@@ -668,6 +670,8 @@ def render(results_root: Path, libraries: set[str] | None, models: set[str] | No
         "gene_set_count": "Number of distinct generated term names; duplicate later records are skipped.",
         "membership_count": "Sum of unique nonblank genes within each generated gene set; the same gene in different sets is counted repeatedly.",
         "unique_gene_count": "Distinct nonblank genes across this generated output.",
+        "compiled_duplicate_term_count": "Gene-set names that collided while compiling separate extractor GMTs for this output.",
+        "compiled_renamed_term_count": "Colliding compiled terms renamed with a source-path prefix to preserve all source gene sets.",
         "comparison_status": "`available` for an explicit legacy comparison; `not_applicable` when no legacy reference was declared.",
         "unmapped_mapping_row_count": "Mapping rows with a blank legacy or generated name; these rows are excluded from mapped-term comparison.",
         "set_name_recall": "Exact shared term names divided by all legacy term names. This does not use renamed mappings.",
@@ -820,7 +824,7 @@ def main(argv: list[str] | None = None) -> int:
     discover_parser.add_argument("--output", type=Path, required=True)
     discover_parser.add_argument("--legacy-root", type=Path)
     discover_parser.add_argument("--mapping-root", type=Path)
-    discover_parser.add_argument("--duplicate-policy", choices=["fail", "prefix_source"], default="fail")
+    discover_parser.add_argument("--duplicate-policy", choices=["fail", "prefix_source"], default="prefix_source", help="How run-root compilation handles colliding term names; prefix_source is the default.")
     task_parser = subparsers.add_parser("task"); task_parser.add_argument("--output-dir", type=Path, required=True); task_parser.add_argument("--task-index", type=int, required=True); task_parser.add_argument("--dapper-validator")
     args = parser.parse_args(argv)
     try:

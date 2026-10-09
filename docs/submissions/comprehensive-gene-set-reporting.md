@@ -117,9 +117,11 @@ bash run/summarize_comprehensive_reports.sh run \
 ```
 
 Compilation is isolated per report task under `metrics/`; it never changes the
-completed run directory. Duplicate term names fail by default. Use
-`--duplicate-policy prefix_source` during discovery only when source-prefixed
-duplicates are the intended representation. A DAPPER sidecar is associated
+completed run directory. Duplicate term names are source-prefixed by default,
+so split tissue/source outputs are preserved rather than causing report
+failure. The report records `compiled_duplicate_term_count` and
+`compiled_renamed_term_count`; use `--duplicate-policy fail` during discovery
+when duplicates should instead stop the report. A DAPPER sidecar is associated
 only when the selected model sources have exactly one adjacent DAPPER sidecar;
 otherwise provenance is marked `NOT_RUN` rather than guessed.
 

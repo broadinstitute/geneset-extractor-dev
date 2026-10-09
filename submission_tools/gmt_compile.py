@@ -95,20 +95,24 @@ def compile_gmts(run_root: Path, model_id: str, output: Path, *, duplicate_polic
             for source in sources:
                 emitted = 0
                 source_record_count = 0
+                source_duplicate_count = 0
+                source_renamed_count = 0
                 for name, description, genes, line_number in _iter_records(source):
                     source_record_count += 1
                     compiled_name = name
                     if compiled_name in names:
+                        source_duplicate_count += 1
                         if duplicate_policy == "fail":
                             raise ValueError(f"duplicate gene-set name {name!r} in {source}; first seen in {names[name]}")
                         compiled_name = f"{_source_label(source, run_root)}__{name}"
                         if compiled_name in names:
                             raise ValueError(f"prefixed duplicate gene-set name {compiled_name!r} in {source}")
+                        source_renamed_count += 1
                     names[compiled_name] = source
                     handle.write("\t".join([compiled_name, description, *genes]) + "\n")
                     emitted += 1
                     record_count += 1
-                manifest.append({"model_id": model_id, "source_gmt": str(source), "source_sha256": _sha256(source), "source_record_count": source_record_count, "compiled_record_count": emitted, "included": True})
+                manifest.append({"model_id": model_id, "source_gmt": str(source), "source_sha256": _sha256(source), "source_record_count": source_record_count, "compiled_record_count": emitted, "duplicate_term_count": source_duplicate_count, "renamed_term_count": source_renamed_count, "included": True})
         temporary_path.replace(output)
     except Exception:
         temporary_path.unlink(missing_ok=True)
@@ -118,7 +122,7 @@ def compile_gmts(run_root: Path, model_id: str, output: Path, *, duplicate_polic
 
 def _write_manifest(path: Path, rows: list[dict[str, object]]) -> None:
     with gzip.open(path, "wt", encoding="utf-8", newline="") as handle:
-        fields = ["model_id", "source_gmt", "source_sha256", "source_record_count", "compiled_record_count", "included"]
+        fields = ["model_id", "source_gmt", "source_sha256", "source_record_count", "compiled_record_count", "duplicate_term_count", "renamed_term_count", "included"]
         writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t")
         writer.writeheader(); writer.writerows(rows)
 

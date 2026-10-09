@@ -127,6 +127,7 @@ class ComprehensiveReportTests(unittest.TestCase):
             self.assertTrue(metric["compile_source_manifest"])
             self.assertTrue(Path(metric["generated_gmt"]).is_file())
             self.assertNotIn("WRONG", Path(metric["generated_gmt"]).read_text(encoding="utf-8"))
+            self.assertEqual(metric["compiled_duplicate_term_count"], 0)
 
     def test_discovers_new_library_without_legacy_tsv(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
