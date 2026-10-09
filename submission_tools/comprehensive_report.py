@@ -535,8 +535,10 @@ def submit(manifest: Path, output_dir: Path, libraries: set[str] | None, models:
     task_args = ["-m", "submission_tools.comprehensive_report", "task", "--output-dir", str(output_dir.resolve()), "--task-index", "${SGE_TASK_ID}"] + (["--dapper-validator", args.dapper_validator] if args.dapper_validator else [])
     if args.apptainer_image:
         binds = [f"{wrapper_root}:/wrapper:ro", *args.bind]
-        worker = [args.apptainer_bin, "exec", "--cleanenv"] + [item for bind in binds for item in ("--bind", bind)] + [args.apptainer_image, args.python_bin, *task_args]
-        prefix = "export PYTHONPATH=/wrapper${PYTHONPATH:+:${PYTHONPATH}}\n"
+        # ``--cleanenv`` intentionally removes the host's PYTHONPATH, so set
+        # the wrapper package location *inside* the container instead.
+        worker = [args.apptainer_bin, "exec", "--cleanenv", "--env", "PYTHONPATH=/wrapper"] + [item for bind in binds for item in ("--bind", bind)] + [args.apptainer_image, args.python_bin, *task_args]
+        prefix = ""
     else:
         worker = [args.python_bin, *task_args]
         prefix = f"export PYTHONPATH={shlex_quote(str(wrapper_root))}${{PYTHONPATH:+:${{PYTHONPATH}}}}\n"

@@ -65,6 +65,17 @@ class ComprehensiveReportTests(unittest.TestCase):
             self.assertTrue(Path(payload["script"]).stat().st_mode & 0o111)
             self.assertNotIn("bash", payload["qsub_command"])
 
+    def test_apptainer_worker_sets_wrapper_pythonpath_inside_clean_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); manifest = self.manifest(root); output = root / "run"
+            class Args:
+                dapper_validator = None; qsub_bin = "qsub"; memory = None; walltime = None; queue = None; project = None
+                apptainer_image = "/images/report.sif"; apptainer_bin = "apptainer"; python_bin = "python3"; bind: list[str] = ["/input:/input:ro"]; dry_run = True
+            submit(manifest, output, {"GTEx"}, None, Args())
+            worker = (output / "run_task.sh").read_text(encoding="utf-8")
+            self.assertIn("--cleanenv --env PYTHONPATH=/wrapper", worker)
+            self.assertIn("--bind /input:/input:ro", worker)
+
     def test_converts_legacy_current_tsv_with_stale_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
