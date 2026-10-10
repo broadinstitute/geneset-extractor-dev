@@ -164,7 +164,11 @@ def _validate_schema(data: dict[str, Any], result: ValidationResult) -> None:
                 metrics = item.get("metrics")
                 if not isinstance(metrics, dict) or not all(isinstance(metrics.get(key), (int, float)) and 0 <= float(metrics[key]) <= 1 for key in ("min_named_set_recall", "min_gene_set_jaccard_median", "min_gene_set_jaccard_min")):
                     result.add("error", "comparison_policy", f"adoption.reference_outputs[{index}] scientific_comparability requires 0..1 metrics")
-                if not _safe_relative(item.get("mapping_file")):
+                mapping_file = item.get("mapping_file")
+                # A mapping is optional: without one, comparison uses directly
+                # shared gene-set names.  When declared, it must remain local to
+                # the submitted library and safe to resolve.
+                if mapping_file and not _safe_relative(mapping_file):
                     result.add("error", "comparison_policy", f"adoption.reference_outputs[{index}].mapping_file must be a safe relative path")
 
 
@@ -370,7 +374,7 @@ def validate_submission(submission: Path) -> ValidationResult:
         if not scientific_mappings:
             result.add("error", "comparison_policy", "scientific_reimplementation requires at least one full scientific_comparability mapping")
         for item in adoption.get("reference_outputs", []):
-            if isinstance(item, dict) and item.get("comparison") == "scientific_comparability":
-                _path(root, item.get("mapping_file"), "adoption.reference_outputs.mapping_file", result)
+            if isinstance(item, dict) and item.get("comparison") == "scientific_comparability" and item.get("mapping_file"):
+                _path(root, item["mapping_file"], "adoption.reference_outputs.mapping_file", result)
     _fixture_checks(root, input_rows, result)
     return result

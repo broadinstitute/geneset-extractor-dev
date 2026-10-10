@@ -18,7 +18,6 @@
       {
         "comparison": "scientific_comparability",
         "legacy": "legacy/GTEx_XMT_2023-03-10_GTEx_Tissues_V8_2023.gmt",
-        "mapping_file": "adoption/hz2_legacy_reference_mapping.tsv",
         "metrics": {
           "min_gene_set_jaccard_median": 0.0,
           "min_gene_set_jaccard_min": 0.0,
