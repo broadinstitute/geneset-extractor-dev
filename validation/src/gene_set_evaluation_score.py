@@ -22,7 +22,7 @@ def compute_enrichment(gene_list, gene_sets):
     """
     Compute enrichment p-values using the Hypergeometric Distribution.
     """
-    logger.info("Calculating enrichment p-values")
+    # logger.info("Calculating enrichment p-values")
 
     n_all_genes = gene_sets.shape[0]
     intersections = sparse.csc_matrix(gene_list) @ (gene_sets)
@@ -39,7 +39,7 @@ def compute_enrichment(gene_list, gene_sets):
     #     # Compute the p-value using the survival function (sf)
     #     p_value = hypergeom.sf(K - 1, M, N, n)
     pvalues = hypergeom.sf(intersections-1, n_all_genes, gene_list_size, gene_set_sizes)
-    logger.info("Enrichment p-values calculated for %d gene sets." % len(pvalues))
+    # logger.info("Enrichment p-values calculated for %d gene sets." % len(pvalues))
     return pvalues, gene_set_sizes
 
 
@@ -62,6 +62,26 @@ def read_gmt(gmt_file):
     return gene_sets
 
 
+def expand_gmt_paths(paths):
+    """Expand files and folders into a list of GMT files; a folder contributes all its .gmt files (sorted)."""
+    if isinstance(paths, str):
+        paths = [paths]
+    gmt_files = []
+    for path in paths:
+        if os.path.isdir(path):
+            gmt_files.extend(os.path.join(path, name) for name in sorted(os.listdir(path)) if name.lower().endswith(".gmt"))
+        else:
+            gmt_files.append(path)
+    return gmt_files
+
+
+def _read_named_gene_sets(gmt_files):
+    named_gene_sets = []
+    for gmt_file in gmt_files:
+        named_gene_sets.extend(read_gmt(gmt_file).items())
+    return named_gene_sets
+
+
 def _build_matrix(named_gene_sets, gene_index):
     """Build a genes x gene-sets 0/1 CSC matrix; genes missing from gene_index are dropped."""
     rows, cols = [], []
@@ -80,10 +100,8 @@ def _build_matrix(named_gene_sets, gene_index):
 
 
 def build_reference_matrix(gmt_files):
-    """Build the gene universe, gene index and reference gene set matrix from GMT files."""
-    named_gene_sets = []
-    for gmt_file in gmt_files:
-        named_gene_sets.extend(read_gmt(gmt_file).items())
+    """Build the gene universe, gene index and reference gene set matrix from a list of GMT files."""
+    named_gene_sets = _read_named_gene_sets(gmt_files)
     universe = sorted({gene for _, genes in named_gene_sets for gene in genes})
     gene_index = {gene: i for i, gene in enumerate(universe)}
     matrix = _build_matrix(named_gene_sets, gene_index)
@@ -104,29 +122,41 @@ def generate_negative_controls(matrix, suffix=0, seed=None):
     data = np.ones(len(rows), dtype=np.int64)
     controls = sparse.csc_matrix((data, (rows, cols)), shape=(n_genes, n_sets))
     names = ["%s%d_%s" % (NEGATIVE_CONTROL_PREFIX, i, suffix) for i in range(n_sets)]
+    logger.info("Generated %d negative control gene sets.", len(names))
     return controls, names
 
 
-def load_or_create_negative_controls(reference_matrix, gene_index, path=None, seed=None, suffix=0):
-    """Load negative controls from a GMT file if it exists, otherwise generate them in memory."""
-    if path and os.path.exists(path):
-        named_gene_sets = list(read_gmt(path).items())
+def load_or_create_negative_controls(reference_matrix, gene_index, control_files=None, seed=None, suffix=0):
+    """Load negative controls from a list of GMT files if given, otherwise generate them in memory."""
+    if control_files:
+        named_gene_sets = _read_named_gene_sets(control_files)
         names = [name for name, _ in named_gene_sets]
         if not all(name.startswith(NEGATIVE_CONTROL_PREFIX) for name in names):
-            logger.warning("Some negative control names in %s do not start with '%s'; they will not be counted.",
-                           path, NEGATIVE_CONTROL_PREFIX)
-        logger.info("Loaded %d negative control gene sets from %s.", len(names), path)
+            logger.warning("Some loaded negative control names do not start with '%s'; they will not be counted.",
+                           NEGATIVE_CONTROL_PREFIX)
+        logger.info("Loaded %d negative control gene sets from %d file(s).", len(names), len(control_files))
         return _build_matrix(named_gene_sets, gene_index), names
-    if path:
-        logger.info("Negative controls file %s not found; generating controls.", path)
     return generate_negative_controls(reference_matrix, suffix=suffix, seed=seed)
 
 
-def build_evaluation_context(reference_gmt_files, negative_controls_file=None, seed=None):
-    """Build the reference + negative control gene set matrix used to evaluate input gene lists."""
-    gene_index, reference_matrix, reference_names = build_reference_matrix(reference_gmt_files)
+def build_evaluation_context(reference_paths, negative_controls_path=None, seed=None):
+    """Build the reference + negative control gene set matrix used to evaluate input gene lists.
+
+    reference_paths and negative_controls_path accept GMT files or folders (all .gmt files in the folder are used).
+    Negative controls are generated in memory when the path is None, missing, or has no .gmt files.
+    """
+    reference_files = expand_gmt_paths(reference_paths)
+    if not reference_files:
+        raise ValueError("No GMT files found in reference path(s): %s" % reference_paths)
+    control_files = []
+    if negative_controls_path:
+        if os.path.exists(negative_controls_path):
+            control_files = expand_gmt_paths(negative_controls_path)
+        if not control_files:
+            logger.info("No negative controls GMT found at %s; generating controls.", negative_controls_path)
+    gene_index, reference_matrix, reference_names = build_reference_matrix(reference_files)
     control_matrix, control_names = load_or_create_negative_controls(
-        reference_matrix, gene_index, path=negative_controls_file, seed=seed)
+        reference_matrix, gene_index, control_files=control_files, seed=seed)
     matrix = sparse.hstack([reference_matrix, control_matrix], format="csc")
     return EvaluationContext(gene_index=gene_index, matrix=matrix, gene_set_names=reference_names + control_names)
 
@@ -214,8 +244,8 @@ def score_gmt_file(gmt_file, context, p_value_cutoff=DEFAULT_P_VALUE_CUTOFF,
 def main():
     parser = argparse.ArgumentParser(description="Compute gene set validation scores locally (hypergeometric enrichment)")
     parser.add_argument("-f", "--file", required=True, help="GMT file with the gene sets to score")
-    parser.add_argument("-r", "--reference", action="append", required=True, help="Reference GMT file (can be repeated)")
-    parser.add_argument("-n", "--negative-controls", help="Precomputed negative controls GMT; generated in memory if omitted or missing")
+    parser.add_argument("-r", "--reference", action="append", required=True, help="Reference GMT file or folder of GMT files (can be repeated)")
+    parser.add_argument("-n", "--negative-controls", help="Precomputed negative controls GMT file or folder of GMT files; generated in memory if omitted or missing")
     parser.add_argument("--seed", type=int, help="Random seed for generated negative controls")
     parser.add_argument("--p-value", type=float, default=DEFAULT_P_VALUE_CUTOFF, help="P-value cutoff for enriched gene sets")
     parser.add_argument("--max-gene-sets", type=int, default=DEFAULT_MAX_GENE_SETS, help="Maximum enriched gene sets kept per input gene set")
@@ -234,7 +264,10 @@ def main():
         logger.info("Skipping: %s already exists (use --force-rewrite to overwrite).", results_file)
         return
 
-    context = build_evaluation_context(args.reference, negative_controls_file=args.negative_controls, seed=args.seed)
+    try:
+        context = build_evaluation_context(args.reference, negative_controls_path=args.negative_controls, seed=args.seed)
+    except ValueError as e:
+        parser.error(str(e))
     scores = score_gmt_file(args.file, context, args.p_value, args.max_gene_sets, out_file=results_file)
     write_summary(summary_file, scores)
     logger.info("Saved results to %s and summary to %s", results_file, summary_file)
