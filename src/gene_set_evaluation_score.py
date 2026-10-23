@@ -1,4 +1,39 @@
 
+"""Local validation scoring of gene sets against reference sets and negative controls.
+
+Purpose
+    For each input gene set (one GMT line), run hypergeometric enrichment against reference gene sets plus
+    size-matched random negative controls, keep the top hits, and score how many hits are negative controls.
+    The enrichment math matches the service (dcc/compute_utils.py: compute_enrichment, hypergeometric path only).
+
+Pipeline (all in-process, no files written except the requested outputs)
+    build_evaluation_context(reference_paths, negative_controls_path, seed)
+        reference GMTs -> gene universe (sorted union of reference genes) + genes x sets sparse matrix
+        negative controls: loaded from GMT if given and found, else generated in memory (names start with
+        NEGATIVE_CONTROL_PREFIX; each control has the size of its source set; seed makes them reproducible)
+    score_gmt_file(gmt_file, context, ...) -> score_gene_sets -> per input gene set:
+        evaluate_gene_set: genes_to_vector -> compute_enrichment -> rank_enriched_gene_sets
+            (p < p_value_cutoff, ascending p-value, at most max_gene_sets hits)
+        summarize_hits: negative_control_count, n_hits, evaluation_score = 1 - 2 * controls / hits (0 if no hits)
+
+Outputs
+    Summary TSV (-o): columns in SUMMARY_COLUMNS, one row per input gene set in input order.
+        Never overwritten unless -O/--force-rewrite is given.
+    Optional intermediate file (--intermediate-results): one line per hit, tab-delimited:
+        gene_set_name, gene_set_name, gene_set_size, rank (0 = smallest p), hit name, hit size, p-value. Always overwritten.
+
+CLI example
+    python3 gene_set_evaluation_score.py -f input.gmt -r ref_dir_or_file.gmt [-r more] [-n controls_dir_or_file]
+        --seed 1 -o out/summary.tsv [-O] [--intermediate-results out/hits.txt] [-v | -q]
+    -v also logs per gene set messages (debug level); -q logs warnings/errors only.
+
+Notes
+    - Input and reference paths can be files or folders (a folder contributes all its .gmt files, sorted by name).
+    - Input genes not in the reference universe are dropped (logged only with -v); the universe size affects p-values.
+    - Controls loaded from file are only counted if their names start with NEGATIVE_CONTROL_PREFIX.
+    - Runtime is dominated by one hypergeometric test over all gene sets per input gene set (a run against a
+      reference + controls matrix of ~46k gene sets took about 5 minutes).
+"""
 import argparse
 import csv
 import os
@@ -15,14 +50,13 @@ logging.basicConfig(level=logging.INFO)
 DEFAULT_P_VALUE_CUTOFF = 0.05
 DEFAULT_MAX_GENE_SETS = 50
 NEGATIVE_CONTROL_PREFIX = "negative_control_"
-SUMMARY_COLUMNS = ["gene_set_name_suffix", "gene_set_size", "top_enriched_gene_set", "enriched_gene_set_size",
-                   "enriched_gene_set_p_value", "negative_control_count", "n_hits"]
+SUMMARY_COLUMNS = ["gene_set_name", "negative_control_count", "n_hits", "evaluation_score"]
 
 def compute_enrichment(gene_list, gene_sets):
     """
     Compute enrichment p-values using the Hypergeometric Distribution.
     """
-    # logger.info("Calculating enrichment p-values")
+    logger.debug("Calculating enrichment p-values")
 
     n_all_genes = gene_sets.shape[0]
     intersections = sparse.csc_matrix(gene_list) @ (gene_sets)
@@ -39,7 +73,7 @@ def compute_enrichment(gene_list, gene_sets):
     #     # Compute the p-value using the survival function (sf)
     #     p_value = hypergeom.sf(K - 1, M, N, n)
     pvalues = hypergeom.sf(intersections-1, n_all_genes, gene_list_size, gene_set_sizes)
-    # logger.info("Enrichment p-values calculated for %d gene sets." % len(pvalues))
+    logger.debug("Enrichment p-values calculated for %d gene sets." % len(pvalues))
     return pvalues, gene_set_sizes
 
 
@@ -166,7 +200,7 @@ def genes_to_vector(genes, gene_index):
     unique_genes = set(genes)
     indices = [gene_index[gene] for gene in unique_genes if gene in gene_index]
     if len(indices) < len(unique_genes):
-        logger.warning("%d of %d input genes are not in the gene universe.", len(unique_genes) - len(indices), len(unique_genes))
+        logger.debug("%d of %d input genes are not in the gene universe.", len(unique_genes) - len(indices), len(unique_genes))
     vector = np.zeros((1, len(gene_index)))
     vector[0, indices] = 1
     return vector
@@ -191,36 +225,37 @@ def evaluate_gene_set(genes, context, p_value_cutoff=DEFAULT_P_VALUE_CUTOFF, max
 def summarize_hits(gene_set_name, gene_set_size, hits):
     """Validation score for one input gene set: top hit and number of negative controls among the hits."""
     top = hits[0] if hits else None
+    negative_control_count = sum(hit["gene_set"].startswith(NEGATIVE_CONTROL_PREFIX) for hit in hits)
     return {
-        "gene_set_name_suffix": gene_set_name,
+        "gene_set_name": gene_set_name,
         "gene_set_size": gene_set_size,
         "top_enriched_gene_set": top["gene_set"] if top else "",
         "enriched_gene_set_size": top["gene_set_size"] if top else "",
         "enriched_gene_set_p_value": top["p_value"] if top else "",
-        "negative_control_count": sum(hit["gene_set"].startswith(NEGATIVE_CONTROL_PREFIX) for hit in hits),
+        "negative_control_count": negative_control_count,
         "n_hits": len(hits),
+        "evaluation_score": 1 - 2 * negative_control_count / len(hits) if hits else 0
     }
 
 
 def write_validation_results(out_f, gene_set_name, gene_set_size, hits):
-    """Write hits in the 8-column format produced by run_eaggl.save_results."""
-    model, _, suffix = gene_set_name.partition("__")
+    """Write hits in the 7-column format produced by run_eaggl.save_results."""
     for rank, hit in enumerate(hits):
-        out_f.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(
-            model, suffix, gene_set_name, gene_set_size, rank, hit["gene_set"], hit["gene_set_size"], hit["p_value"]))
+        out_f.write("{}\t{}\t{}\t{}\t{}\t{}\n".format(
+            gene_set_name, gene_set_size, rank, hit["gene_set"], hit["gene_set_size"], hit["p_value"]))
 
 
-def write_summary(summary_file, scores):
-    """Write score dicts to a tab-delimited summary sorted by gene set name."""
-    with open(summary_file, 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=SUMMARY_COLUMNS, delimiter='\t')
+def write_summary(summary_file, scores, overwrite=False):
+    """Write score dicts to a tab-delimited summary in the given order; refuses to overwrite unless asked."""
+    with open(summary_file, 'w' if overwrite else 'x', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=SUMMARY_COLUMNS, delimiter='\t', extrasaction='ignore')
         writer.writeheader()
-        writer.writerows(sorted(scores, key=lambda score: score["gene_set_name_suffix"]))
+        writer.writerows(scores)
 
 
 def score_gene_sets(gene_sets, context, p_value_cutoff=DEFAULT_P_VALUE_CUTOFF,
                     max_gene_sets=DEFAULT_MAX_GENE_SETS, out_f=None):
-    """Score each {name: genes} gene set; optionally write the 8-column results to the open file out_f."""
+    """Score each {name: genes} gene set; optionally write per-hit results to the open file out_f."""
     scores = []
     for gene_set_name, genes in gene_sets.items():
         hits = evaluate_gene_set(genes, context, p_value_cutoff, max_gene_sets)
@@ -232,7 +267,7 @@ def score_gene_sets(gene_sets, context, p_value_cutoff=DEFAULT_P_VALUE_CUTOFF,
 
 def score_gmt_file(gmt_file, context, p_value_cutoff=DEFAULT_P_VALUE_CUTOFF,
                    max_gene_sets=DEFAULT_MAX_GENE_SETS, out_file=None):
-    """Score every gene set in a GMT file; optionally write the 8-column results to out_file."""
+    """Score every gene set in a GMT file; optionally write per-hit results to out_file."""
     gene_sets = read_gmt(gmt_file)
     logger.info("Parsed %d gene sets from %s", len(gene_sets), gmt_file)
     if out_file is None:
@@ -249,28 +284,39 @@ def main():
     parser.add_argument("--seed", type=int, help="Random seed for generated negative controls")
     parser.add_argument("--p-value", type=float, default=DEFAULT_P_VALUE_CUTOFF, help="P-value cutoff for enriched gene sets")
     parser.add_argument("--max-gene-sets", type=int, default=DEFAULT_MAX_GENE_SETS, help="Maximum enriched gene sets kept per input gene set")
-    parser.add_argument("-o", "--output-folder", required=True, help="Output folder for results")
-    parser.add_argument("--force-rewrite", action="store_true", help="Overwrite existing output files")
+    parser.add_argument("-o", "--output", required=True, help="Summary output file (must not already exist unless -O is given)")
+    parser.add_argument("-O", "--force-rewrite", action="store_true", help="Overwrite the summary file if it exists")
+    parser.add_argument("--intermediate-results", help="Optional file for per-hit results; overwritten if it exists")
+    verbosity = parser.add_mutually_exclusive_group()
+    verbosity.add_argument("-v", "--verbose", action="store_true", help="Also log per gene set processing messages")
+    verbosity.add_argument("-q", "--quiet", action="store_true", help="Only log warnings and errors")
     args = parser.parse_args()
+
+    logging.getLogger().setLevel(logging.DEBUG if args.verbose else logging.WARNING if args.quiet else logging.INFO)
 
     for path in [args.file] + args.reference:
         if not os.path.exists(path):
             parser.error("File not found: %s" % path)
 
-    os.makedirs(args.output_folder, exist_ok=True)
-    results_file = os.path.join(args.output_folder, "validation_results_eaggl.txt")
-    summary_file = os.path.join(args.output_folder, "summary_eaggl.tsv")
-    if not args.force_rewrite and os.path.exists(results_file):
-        logger.info("Skipping: %s already exists (use --force-rewrite to overwrite).", results_file)
-        return
+    for path in (args.output, args.intermediate_results):
+        if path and os.path.isdir(path):
+            parser.error("Output path must be a file, but is a folder: %s" % path)
+
+    if os.path.exists(args.output) and not args.force_rewrite:
+        parser.error("Summary file already exists: %s (use -O/--force-rewrite to overwrite)" % args.output)
+    for path in (args.output, args.intermediate_results):
+        if path and os.path.dirname(path):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
 
     try:
         context = build_evaluation_context(args.reference, negative_controls_path=args.negative_controls, seed=args.seed)
     except ValueError as e:
         parser.error(str(e))
-    scores = score_gmt_file(args.file, context, args.p_value, args.max_gene_sets, out_file=results_file)
-    write_summary(summary_file, scores)
-    logger.info("Saved results to %s and summary to %s", results_file, summary_file)
+    scores = score_gmt_file(args.file, context, args.p_value, args.max_gene_sets, out_file=args.intermediate_results)
+    write_summary(args.output, scores, overwrite=args.force_rewrite)
+    logger.info("Saved summary to %s", args.output)
+    if args.intermediate_results:
+        logger.info("Saved intermediate results to %s", args.intermediate_results)
 
 
 if __name__ == "__main__":
