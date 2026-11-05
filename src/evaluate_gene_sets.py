@@ -4,8 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import csv
+from contextlib import nullcontext
 import logging
 from pathlib import Path
+
+
+SUMMARY_COLUMNS = ["source_gmt", "gene_set_name", "negative_control_count", "n_hits", "evaluation_score"]
 
 
 def discover_gmt_files(local_output_root: Path) -> list[Path]:
@@ -16,14 +21,9 @@ def discover_gmt_files(local_output_root: Path) -> list[Path]:
     )
 
 
-def evaluation_output_path(gmt_path: Path) -> Path:
-    """Return the summary TSV paired with *gmt_path*."""
-    return gmt_path.with_suffix(".evaluation.tsv")
-
-
-def intermediate_output_path(gmt_path: Path, local_output_root: Path, intermediate_root: Path) -> Path:
-    """Keep optional hit rows in a tree matching the corresponding GMT path."""
-    return intermediate_root / gmt_path.relative_to(local_output_root).with_suffix(".evaluation.hits.tsv")
+def default_evaluation_output_path(local_output_root: Path) -> Path:
+    """Return the default consolidated evaluation summary location."""
+    return local_output_root / "evaluation" / "evaluation_summary.tsv"
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,12 +43,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--p-value", type=float, default=0.05, help="Strict enrichment p-value cutoff")
     parser.add_argument("--max-gene-sets", type=int, default=50, help="Maximum enriched hits per input gene set")
     parser.add_argument(
+        "-o", "--output",
+        help="Consolidated summary TSV (default: <local_output_root>/evaluation/evaluation_summary.tsv)",
+    )
+    parser.add_argument(
         "--intermediate-results",
-        help="Optional directory for per-hit TSVs, preserving the GMT directory structure",
+        help="Optional consolidated per-hit TSV; it is overwritten if it exists",
     )
     parser.add_argument(
         "-O", "--force-rewrite", "--overwrite", action="store_true",
-        help="Overwrite existing paired summary TSVs",
+        help="Overwrite an existing consolidated summary TSV",
     )
     verbosity = parser.add_mutually_exclusive_group()
     verbosity.add_argument("-v", "--verbose", action="store_true", help="Log per-gene-set scorer messages")
@@ -72,25 +76,37 @@ def main() -> None:
     gmt_files = discover_gmt_files(local_output_root)
     if not gmt_files:
         raise SystemExit(f"No .gmt files found below: {local_output_root}")
-    intermediate_root = Path(args.intermediate_results).expanduser().resolve() if args.intermediate_results else None
+    output_path = Path(args.output).expanduser().resolve() if args.output else default_evaluation_output_path(local_output_root)
+    intermediate_path = Path(args.intermediate_results).expanduser().resolve() if args.intermediate_results else None
+    if output_path.exists() and not args.force_rewrite:
+        raise SystemExit(f"Summary file already exists: {output_path} (use --force-rewrite to overwrite)")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if intermediate_path is not None:
+        intermediate_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        from gene_set_evaluation_score import build_evaluation_context, score_gmt_file
+        from gene_set_evaluation_score import build_evaluation_context, evaluate_gene_set, read_gmt, summarize_hits
         context = build_evaluation_context(args.reference, args.negative_controls, args.seed)
-        for gmt_path in gmt_files:
-            output_path = evaluation_output_path(gmt_path)
-            if output_path.exists() and not args.force_rewrite:
-                raise FileExistsError(f"Summary file already exists: {output_path} (use --force-rewrite to overwrite)")
-            hits_path = None
-            if intermediate_root is not None:
-                hits_path = intermediate_output_path(gmt_path, local_output_root, intermediate_root)
-                hits_path.parent.mkdir(parents=True, exist_ok=True)
-            scores = score_gmt_file(gmt_path, context, args.p_value, args.max_gene_sets, out_file=hits_path)
-            from gene_set_evaluation_score import write_summary
-            write_summary(output_path, scores, overwrite=args.force_rewrite)
-            logging.info("Saved summary to %s", output_path)
-            if hits_path is not None:
-                logging.info("Saved intermediate results to %s", hits_path)
+        with output_path.open("w", newline="", encoding="utf-8") as summary_handle:
+            summary_writer = csv.DictWriter(summary_handle, fieldnames=SUMMARY_COLUMNS, delimiter="\t")
+            summary_writer.writeheader()
+            with (intermediate_path.open("w", newline="", encoding="utf-8") if intermediate_path else nullcontext()) as hits_handle:
+                if hits_handle:
+                    hits_writer = csv.writer(hits_handle, delimiter="\t")
+                    hits_writer.writerow(["source_gmt", "gene_set_name", "gene_set_size", "rank", "hit_gene_set_name", "hit_gene_set_size", "p_value"])
+                for gmt_path in gmt_files:
+                    source_gmt = gmt_path.relative_to(local_output_root).as_posix()
+                    for gene_set_name, genes in read_gmt(gmt_path).items():
+                        hits = evaluate_gene_set(genes, context, args.p_value, args.max_gene_sets)
+                        score = summarize_hits(gene_set_name, len(genes), hits)
+                        summary_writer.writerow({"source_gmt": source_gmt, **score})
+                        if hits_handle:
+                            for rank, hit in enumerate(hits):
+                                hits_writer.writerow([source_gmt, gene_set_name, len(genes), rank,
+                                                      hit["gene_set"], hit["gene_set_size"], hit["p_value"]])
+        logging.info("Saved summary to %s", output_path)
+        if intermediate_path is not None:
+            logging.info("Saved intermediate results to %s", intermediate_path)
     except (ImportError, ValueError, FileExistsError) as error:
         raise SystemExit(str(error)) from error
 

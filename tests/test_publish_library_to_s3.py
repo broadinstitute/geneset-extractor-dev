@@ -71,16 +71,17 @@ class PublishLibraryToS3Tests(unittest.TestCase):
             self.assertEqual(paths, [companion.resolve()])
             self.assertNotIn(unreferenced.resolve(), paths)
 
-    def test_provenance_selected_gmt_includes_its_evaluation_sidecar(self):
+    def test_provenance_selected_gmt_includes_the_evaluation_summary(self):
         publisher = _publisher_module()
         with tempfile.TemporaryDirectory() as temporary_directory:
             output_root = Path(temporary_directory) / "outputs"
             model = output_root / "model_one"
             model.mkdir(parents=True)
             gmt = model / "genesets.gmt"
-            evaluation = model / "genesets.evaluation.tsv"
+            evaluation = output_root / "evaluation" / "evaluation_summary.tsv"
             provenance = model / "geneset.provenance.legacy.json"
             gmt.write_text("set\tdesc\tGENE1\n", encoding="utf-8")
+            evaluation.parent.mkdir()
             evaluation.write_text("gene_set_name\tevaluation_score\nset\t1\n", encoding="utf-8")
             provenance.write_text(json.dumps({
                 "graph": {"nodes": [{

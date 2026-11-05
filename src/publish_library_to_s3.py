@@ -578,14 +578,13 @@ def filter_output_candidates_to_provenance_paths(
         if resolved is not None and is_within_directory(resolved, local_output_root):
             keep_paths.add(resolved)
 
-    # Evaluation is a post-generation sidecar.  Preserve the publisher's
-    # provenance boundary while publishing it whenever its selected GMT is
-    # published, rather than requiring every provenance format to be rewritten.
-    for path in tuple(keep_paths):
-        if path.suffix.lower() == ".gmt":
-            evaluation_sidecar = path.with_suffix(".evaluation.tsv").resolve()
-            if evaluation_sidecar in by_path:
-                keep_paths.add(evaluation_sidecar)
+    # Evaluation is a post-generation aggregate.  Preserve the publisher's
+    # provenance boundary while publishing it whenever a selected GMT exists,
+    # rather than requiring every provenance format to be rewritten.
+    if any(path.suffix.lower() == ".gmt" for path in keep_paths):
+        evaluation_summary = (local_output_root / "evaluation" / "evaluation_summary.tsv").resolve()
+        if evaluation_summary in by_path:
+            keep_paths.add(evaluation_summary)
 
     filtered = []  # type: List[CandidateFile]
     for path in sorted(keep_paths):
