@@ -1,25 +1,11 @@
 #!/usr/bin/env python3
-"""Score every GMT below a completed library output root.
-
-The command is intended to run after GMT generation and before publication.  It
-uses the union of all GMT files below ``--local_output_root`` as the reference
-collection, adds size-matched random negative controls, and writes a summary
-next to every source GMT.  For example, ``model.gmt`` produces
-``model.evaluation.tsv``.
-"""
+"""Run the vd-evaluation scorer for every generated GMT in one output tree."""
 
 from __future__ import annotations
 
 import argparse
-import csv
 import logging
 from pathlib import Path
-from typing import Iterable, Sequence
-
-
-LOGGER = logging.getLogger(__name__)
-NEGATIVE_CONTROL_PREFIX = "negative_control_"
-SUMMARY_COLUMNS = ["gene_set_name", "negative_control_count", "n_hits", "evaluation_score"]
 
 
 def discover_gmt_files(local_output_root: Path) -> list[Path]:
@@ -31,153 +17,80 @@ def discover_gmt_files(local_output_root: Path) -> list[Path]:
 
 
 def evaluation_output_path(gmt_path: Path) -> Path:
-    """Return the sidecar evaluation TSV path for one GMT file."""
+    """Return the summary TSV paired with *gmt_path*."""
     return gmt_path.with_suffix(".evaluation.tsv")
 
 
-def read_gmt(gmt_path: Path) -> list[tuple[str, list[str]]]:
-    """Read the name and genes from each non-empty GMT line."""
-    gene_sets: list[tuple[str, list[str]]] = []
-    with gmt_path.open(encoding="utf-8") as handle:
-        for line_number, line in enumerate(handle, 1):
-            fields = line.rstrip("\r\n").split("\t")
-            if not fields or not fields[0]:
-                continue
-            if len(fields) < 3:
-                raise ValueError(f"{gmt_path}:{line_number}: expected at least three GMT columns")
-            gene_sets.append((fields[0], [gene for gene in fields[2:] if gene]))
-    return gene_sets
-
-
-def _build_matrix(named_gene_sets: Sequence[tuple[str, list[str]]], gene_index: dict[str, int]):
-    import numpy as np
-    import scipy.sparse as sparse
-
-    rows: list[int] = []
-    columns: list[int] = []
-    for column, (_, genes) in enumerate(named_gene_sets):
-        rows.extend(gene_index[gene] for gene in set(genes) if gene in gene_index)
-        columns.extend([column] * sum(gene in gene_index for gene in set(genes)))
-    return sparse.csc_matrix(
-        (np.ones(len(rows), dtype=np.int8), (rows, columns)),
-        shape=(len(gene_index), len(named_gene_sets)),
-    )
-
-
-def build_context(gmt_files: Iterable[Path], seed: int | None):
-    """Build a reference-plus-negative-control matrix from all discovered GMTs."""
-    import numpy as np
-    import scipy.sparse as sparse
-
-    named_gene_sets = [gene_set for gmt_path in gmt_files for gene_set in read_gmt(gmt_path)]
-    if not named_gene_sets:
-        raise ValueError("No gene sets were found in the discovered GMT files")
-    universe = sorted({gene for _, genes in named_gene_sets for gene in genes})
-    if not universe:
-        raise ValueError("The discovered GMT files contain no genes")
-    gene_index = {gene: index for index, gene in enumerate(universe)}
-    reference_matrix = _build_matrix(named_gene_sets, gene_index)
-    sizes = reference_matrix.getnnz(axis=0)
-    rng = np.random.default_rng(seed)
-    control_rows = np.concatenate(
-        [rng.choice(len(gene_index), size=int(size), replace=False) for size in sizes]
-    )
-    control_columns = np.repeat(np.arange(len(sizes)), sizes)
-    control_matrix = sparse.csc_matrix(
-        (np.ones(len(control_rows), dtype=np.int8), (control_rows, control_columns)),
-        shape=reference_matrix.shape,
-    )
-    names = [name for name, _ in named_gene_sets]
-    control_names = [f"{NEGATIVE_CONTROL_PREFIX}{index}" for index in range(len(names))]
-    return gene_index, sparse.hstack([reference_matrix, control_matrix], format="csc"), names + control_names
-
-
-def score_gene_set(
-    genes: Sequence[str],
-    gene_index: dict[str, int],
-    reference_matrix,
-    reference_names: Sequence[str],
-    p_value_cutoff: float,
-    max_gene_sets: int,
-) -> tuple[int, int, float]:
-    import numpy as np
-    import scipy.sparse as sparse
-    from scipy.stats import hypergeom
-
-    indices = [gene_index[gene] for gene in set(genes) if gene in gene_index]
-    if not indices:
-        return 0, 0, 0.0
-    query = sparse.csc_matrix((np.ones(len(indices), dtype=np.int8), ([0] * len(indices), indices)),
-                              shape=(1, len(gene_index)))
-    overlaps = (query @ reference_matrix).toarray()[0]
-    sizes = reference_matrix.getnnz(axis=0)
-    p_values = hypergeom.sf(overlaps - 1, len(gene_index), len(indices), sizes)
-    passing = np.flatnonzero(p_values < p_value_cutoff)
-    selected = passing[np.lexsort((passing, p_values[passing]))][:max_gene_sets]
-    negative_control_count = sum(reference_names[index].startswith(NEGATIVE_CONTROL_PREFIX) for index in selected)
-    n_hits = len(selected)
-    return negative_control_count, n_hits, 1 - 2 * negative_control_count / n_hits if n_hits else 0.0
-
-
-def evaluate_gmt(
-    gmt_path: Path,
-    output_path: Path,
-    gene_index: dict[str, int],
-    reference_matrix,
-    reference_names: Sequence[str],
-    p_value_cutoff: float,
-    max_gene_sets: int,
-    overwrite: bool,
-) -> None:
-    if output_path.exists() and not overwrite:
-        raise FileExistsError(f"Evaluation output already exists: {output_path} (use --overwrite)")
-    rows = []
-    for gene_set_name, genes in read_gmt(gmt_path):
-        negative_control_count, n_hits, evaluation_score = score_gene_set(
-            genes, gene_index, reference_matrix, reference_names, p_value_cutoff, max_gene_sets
-        )
-        rows.append({
-            "gene_set_name": gene_set_name,
-            "negative_control_count": negative_control_count,
-            "n_hits": n_hits,
-            "evaluation_score": evaluation_score,
-        })
-    with output_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=SUMMARY_COLUMNS, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(rows)
+def intermediate_output_path(gmt_path: Path, local_output_root: Path, intermediate_root: Path) -> Path:
+    """Keep optional hit rows in a tree matching the corresponding GMT path."""
+    return intermediate_root / gmt_path.relative_to(local_output_root).with_suffix(".evaluation.hits.tsv")
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Evaluate every GMT below a library output root")
-    parser.add_argument("--local_output_root", required=True, help="Completed library output directory")
+    parser = argparse.ArgumentParser(
+        description="Evaluate every GMT below a library output root using the vd-evaluation scorer"
+    )
+    parser.add_argument("--local_output_root", required=True, help="Completed library output directory to evaluate")
+    parser.add_argument(
+        "-r", "--reference", action="append", required=True,
+        help="Reference GMT file or directory of GMT files (can be repeated)",
+    )
+    parser.add_argument(
+        "-n", "--negative-controls",
+        help="Precomputed negative-controls GMT file or directory; controls are generated if omitted or missing",
+    )
     parser.add_argument("--seed", type=int, help="Random seed for generated negative controls")
-    parser.add_argument("--p_value", type=float, default=0.05, help="Strict enrichment p-value cutoff")
-    parser.add_argument("--max_gene_sets", type=int, default=50, help="Maximum retained hits per input gene set")
-    parser.add_argument("--overwrite", action="store_true", help="Replace existing *.evaluation.tsv sidecars")
+    parser.add_argument("--p-value", type=float, default=0.05, help="Strict enrichment p-value cutoff")
+    parser.add_argument("--max-gene-sets", type=int, default=50, help="Maximum enriched hits per input gene set")
+    parser.add_argument(
+        "--intermediate-results",
+        help="Optional directory for per-hit TSVs, preserving the GMT directory structure",
+    )
+    parser.add_argument(
+        "-O", "--force-rewrite", "--overwrite", action="store_true",
+        help="Overwrite existing paired summary TSVs",
+    )
+    verbosity = parser.add_mutually_exclusive_group()
+    verbosity.add_argument("-v", "--verbose", action="store_true", help="Log per-gene-set scorer messages")
+    verbosity.add_argument("-q", "--quiet", action="store_true", help="Only log warnings and errors")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    root = Path(args.local_output_root).expanduser().resolve()
-    if not root.is_dir():
-        raise SystemExit(f"Missing local output root: {root}")
+    logging.getLogger().setLevel(logging.DEBUG if args.verbose else logging.WARNING if args.quiet else logging.INFO)
+    local_output_root = Path(args.local_output_root).expanduser().resolve()
+    if not local_output_root.is_dir():
+        raise SystemExit(f"Missing local output root: {local_output_root}")
+    for reference in args.reference:
+        if not Path(reference).exists():
+            raise SystemExit(f"Reference path not found: {reference}")
     if not 0 < args.p_value <= 1:
-        raise SystemExit("--p_value must be greater than 0 and at most 1")
+        raise SystemExit("--p-value must be greater than 0 and at most 1")
     if args.max_gene_sets < 1:
-        raise SystemExit("--max_gene_sets must be at least 1")
-    gmt_files = discover_gmt_files(root)
+        raise SystemExit("--max-gene-sets must be at least 1")
+    gmt_files = discover_gmt_files(local_output_root)
     if not gmt_files:
-        raise SystemExit(f"No .gmt files found below: {root}")
+        raise SystemExit(f"No .gmt files found below: {local_output_root}")
+    intermediate_root = Path(args.intermediate_results).expanduser().resolve() if args.intermediate_results else None
+
     try:
-        gene_index, reference_matrix, reference_names = build_context(gmt_files, args.seed)
+        from gene_set_evaluation_score import build_evaluation_context, score_gmt_file
+        context = build_evaluation_context(args.reference, args.negative_controls, args.seed)
         for gmt_path in gmt_files:
             output_path = evaluation_output_path(gmt_path)
-            evaluate_gmt(gmt_path, output_path, gene_index, reference_matrix, reference_names,
-                         args.p_value, args.max_gene_sets, args.overwrite)
-            LOGGER.info("wrote %s", output_path)
+            if output_path.exists() and not args.force_rewrite:
+                raise FileExistsError(f"Summary file already exists: {output_path} (use --force-rewrite to overwrite)")
+            hits_path = None
+            if intermediate_root is not None:
+                hits_path = intermediate_output_path(gmt_path, local_output_root, intermediate_root)
+                hits_path.parent.mkdir(parents=True, exist_ok=True)
+            scores = score_gmt_file(gmt_path, context, args.p_value, args.max_gene_sets, out_file=hits_path)
+            from gene_set_evaluation_score import write_summary
+            write_summary(output_path, scores, overwrite=args.force_rewrite)
+            logging.info("Saved summary to %s", output_path)
+            if hits_path is not None:
+                logging.info("Saved intermediate results to %s", hits_path)
     except (ImportError, ValueError, FileExistsError) as error:
         raise SystemExit(str(error)) from error
 
