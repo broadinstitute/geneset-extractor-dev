@@ -76,7 +76,10 @@ class EvaluateGeneSetsTests(unittest.TestCase):
             gmt.write_text("set\tdesc\tGENE1\n", encoding="utf-8")
             reference.write_text("reference\tdesc\tGENE1\n", encoding="utf-8")
             with mock.patch.dict(sys.modules, {"gene_set_evaluation_score": fake_scorer}), mock.patch.object(
-                sys, "argv", ["evaluate_gene_sets.py", "--local_output_root", str(root), "-r", str(reference)]
+                sys, "argv", [
+                    "evaluate_gene_sets.py", "--local_output_root", str(root), "-r", str(reference),
+                    "--progress-every", "1",
+                ]
             ):
                 evaluation.main()
 

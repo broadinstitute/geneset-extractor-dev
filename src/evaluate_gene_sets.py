@@ -8,6 +8,7 @@ import csv
 from contextlib import nullcontext
 import logging
 from pathlib import Path
+import time
 
 
 SUMMARY_COLUMNS = ["source_gmt", "gene_set_name", "negative_control_count", "n_hits", "evaluation_score"]
@@ -43,6 +44,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--p-value", type=float, default=0.05, help="Strict enrichment p-value cutoff")
     parser.add_argument("--max-gene-sets", type=int, default=50, help="Maximum enriched hits per input gene set")
     parser.add_argument(
+        "--progress-every", type=int, default=100,
+        help="Log gene-set progress every N gene sets (default: 100)",
+    )
+    parser.add_argument(
         "-o", "--output",
         help="Consolidated summary TSV (default: <local_output_root>/evaluation/evaluation_summary.tsv)",
     )
@@ -62,7 +67,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    logging.getLogger().setLevel(logging.DEBUG if args.verbose else logging.WARNING if args.quiet else logging.INFO)
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.WARNING if args.quiet else logging.INFO,
+        format="%(levelname)s %(message)s",
+    )
     local_output_root = Path(args.local_output_root).expanduser().resolve()
     if not local_output_root.is_dir():
         raise SystemExit(f"Missing local output root: {local_output_root}")
@@ -73,6 +81,8 @@ def main() -> None:
         raise SystemExit("--p-value must be greater than 0 and at most 1")
     if args.max_gene_sets < 1:
         raise SystemExit("--max-gene-sets must be at least 1")
+    if args.progress_every < 1:
+        raise SystemExit("--progress-every must be at least 1")
     gmt_files = discover_gmt_files(local_output_root)
     if not gmt_files:
         raise SystemExit(f"No .gmt files found below: {local_output_root}")
@@ -87,6 +97,11 @@ def main() -> None:
     try:
         from gene_set_evaluation_score import build_evaluation_context, evaluate_gene_set, read_gmt, summarize_hits
         context = build_evaluation_context(args.reference, args.negative_controls, args.seed)
+        gmt_gene_sets = [(gmt_path, read_gmt(gmt_path)) for gmt_path in gmt_files]
+        total_gene_sets = sum(len(gene_sets) for _, gene_sets in gmt_gene_sets)
+        logging.info("Evaluating %d gene sets across %d GMT files", total_gene_sets, len(gmt_gene_sets))
+        started = time.monotonic()
+        completed_gene_sets = 0
         with output_path.open("w", newline="", encoding="utf-8") as summary_handle:
             summary_writer = csv.DictWriter(
                 summary_handle,
@@ -99,9 +114,10 @@ def main() -> None:
                 if hits_handle:
                     hits_writer = csv.writer(hits_handle, delimiter="\t")
                     hits_writer.writerow(["source_gmt", "gene_set_name", "gene_set_size", "rank", "hit_gene_set_name", "hit_gene_set_size", "p_value"])
-                for gmt_path in gmt_files:
+                for gmt_index, (gmt_path, gene_sets) in enumerate(gmt_gene_sets, 1):
                     source_gmt = gmt_path.relative_to(local_output_root).as_posix()
-                    for gene_set_name, genes in read_gmt(gmt_path).items():
+                    logging.info("Evaluating GMT %d/%d: %s", gmt_index, len(gmt_gene_sets), source_gmt)
+                    for gene_set_name, genes in gene_sets.items():
                         hits = evaluate_gene_set(genes, context, args.p_value, args.max_gene_sets)
                         score = summarize_hits(gene_set_name, len(genes), hits)
                         summary_writer.writerow({"source_gmt": source_gmt, **score})
@@ -109,6 +125,14 @@ def main() -> None:
                             for rank, hit in enumerate(hits):
                                 hits_writer.writerow([source_gmt, gene_set_name, len(genes), rank,
                                                       hit["gene_set"], hit["gene_set_size"], hit["p_value"]])
+                        completed_gene_sets += 1
+                        if completed_gene_sets % args.progress_every == 0 or completed_gene_sets == total_gene_sets:
+                            logging.info(
+                                "Evaluated gene sets %d/%d (elapsed %.1f seconds)",
+                                completed_gene_sets,
+                                total_gene_sets,
+                                time.monotonic() - started,
+                            )
         logging.info("Saved summary to %s", output_path)
         if intermediate_path is not None:
             logging.info("Saved intermediate results to %s", intermediate_path)
