@@ -57,10 +57,12 @@ class EvaluateGeneSetsTests(unittest.TestCase):
         fake_scorer = types.ModuleType("gene_set_evaluation_score")
         fake_scorer.build_evaluation_context = lambda *args: object()
         fake_scorer.read_gmt = lambda path: {"set": ["GENE1"]}
-        fake_scorer.evaluate_gene_sets = lambda gene_lists, *args: [
-            [{"gene_set": "reference", "gene_set_size": 1, "p_value": 0.01}]
-            for _ in gene_lists
-        ]
+        def fake_evaluate_gene_sets(gene_lists, *args, progress_callback=None):
+            if progress_callback is not None:
+                progress_callback(len(gene_lists), len(gene_lists))
+            return [[{"gene_set": "reference", "gene_set_size": 1, "p_value": 0.01}] for _ in gene_lists]
+
+        fake_scorer.evaluate_gene_sets = fake_evaluate_gene_sets
         fake_scorer.summarize_hits = lambda name, size, hits: {
             "gene_set_name": name,
             "gene_set_size": size,

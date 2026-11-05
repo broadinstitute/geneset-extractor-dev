@@ -105,6 +105,28 @@ def main() -> None:
         logging.info("Evaluating %d gene sets across %d GMT files", total_gene_sets, len(gmt_gene_sets))
         started = time.monotonic()
         completed_gene_sets = 0
+        last_reported_gene_sets = 0
+        next_progress_report = args.progress_every
+
+        def report_progress(current_gene_sets):
+            nonlocal last_reported_gene_sets, next_progress_report
+            if current_gene_sets == last_reported_gene_sets:
+                return
+            if current_gene_sets < total_gene_sets and current_gene_sets < next_progress_report:
+                return
+            elapsed_seconds = time.monotonic() - started
+            remaining_seconds = elapsed_seconds * (total_gene_sets - current_gene_sets) / current_gene_sets
+            logging.info(
+                "Evaluated gene sets %d/%d (elapsed %.1f seconds; estimated remaining %.1f seconds)",
+                current_gene_sets,
+                total_gene_sets,
+                elapsed_seconds,
+                remaining_seconds,
+            )
+            last_reported_gene_sets = current_gene_sets
+            while next_progress_report <= current_gene_sets:
+                next_progress_report += args.progress_every
+
         with output_path.open("w", newline="", encoding="utf-8") as summary_handle:
             summary_writer = csv.DictWriter(
                 summary_handle,
@@ -120,8 +142,10 @@ def main() -> None:
                 for gmt_index, (gmt_path, gene_sets) in enumerate(gmt_gene_sets, 1):
                     source_gmt = gmt_path.relative_to(local_output_root).as_posix()
                     logging.info("Evaluating GMT %d/%d: %s", gmt_index, len(gmt_gene_sets), source_gmt)
+                    gmt_start_gene_sets = completed_gene_sets
                     batch_hits = evaluate_gene_sets(
-                        list(gene_sets.values()), context, args.p_value, args.max_gene_sets, args.batch_size
+                        list(gene_sets.values()), context, args.p_value, args.max_gene_sets, args.batch_size,
+                        progress_callback=lambda completed, total: report_progress(gmt_start_gene_sets + completed),
                     )
                     for (gene_set_name, genes), hits in zip(gene_sets.items(), batch_hits):
                         score = summarize_hits(gene_set_name, len(genes), hits)
@@ -131,16 +155,7 @@ def main() -> None:
                                 hits_writer.writerow([source_gmt, gene_set_name, len(genes), rank,
                                                       hit["gene_set"], hit["gene_set_size"], hit["p_value"]])
                         completed_gene_sets += 1
-                        if completed_gene_sets % args.progress_every == 0 or completed_gene_sets == total_gene_sets:
-                            elapsed_seconds = time.monotonic() - started
-                            remaining_seconds = elapsed_seconds * (total_gene_sets - completed_gene_sets) / completed_gene_sets
-                            logging.info(
-                                "Evaluated gene sets %d/%d (elapsed %.1f seconds; estimated remaining %.1f seconds)",
-                                completed_gene_sets,
-                                total_gene_sets,
-                                elapsed_seconds,
-                                remaining_seconds,
-                            )
+                    report_progress(completed_gene_sets)
         logging.info("Saved summary to %s", output_path)
         if intermediate_path is not None:
             logging.info("Saved intermediate results to %s", intermediate_path)

@@ -236,7 +236,8 @@ def evaluate_gene_set(genes, context, p_value_cutoff=DEFAULT_P_VALUE_CUTOFF, max
 
 
 def evaluate_gene_sets(gene_lists, context, p_value_cutoff=DEFAULT_P_VALUE_CUTOFF,
-                       max_gene_sets=DEFAULT_MAX_GENE_SETS, batch_size=DEFAULT_BATCH_SIZE):
+                       max_gene_sets=DEFAULT_MAX_GENE_SETS, batch_size=DEFAULT_BATCH_SIZE,
+                       progress_callback=None):
     """Evaluate gene lists in sparse batches while preserving single-list scoring semantics."""
     if batch_size < 1:
         raise ValueError("batch_size must be at least 1")
@@ -267,6 +268,8 @@ def evaluate_gene_sets(gene_lists, context, p_value_cutoff=DEFAULT_P_VALUE_CUTOF
                  "p_value": float(values[position])}
                 for position, index in zip(order, indices[order])
             ])
+        if progress_callback is not None:
+            progress_callback(min(start + batch_size, query_matrix.shape[0]), query_matrix.shape[0])
     return all_hits
 
 
