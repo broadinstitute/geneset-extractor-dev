@@ -60,6 +60,10 @@ class EvaluateGeneSetsTests(unittest.TestCase):
         fake_scorer.evaluate_gene_set = lambda *args: [{"gene_set": "reference", "gene_set_size": 1, "p_value": 0.01}]
         fake_scorer.summarize_hits = lambda name, size, hits: {
             "gene_set_name": name,
+            "gene_set_size": size,
+            "top_enriched_gene_set": "reference",
+            "enriched_gene_set_size": 1,
+            "enriched_gene_set_p_value": 0.01,
             "negative_control_count": 0,
             "n_hits": len(hits),
             "evaluation_score": 1.0,

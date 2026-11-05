@@ -88,7 +88,12 @@ def main() -> None:
         from gene_set_evaluation_score import build_evaluation_context, evaluate_gene_set, read_gmt, summarize_hits
         context = build_evaluation_context(args.reference, args.negative_controls, args.seed)
         with output_path.open("w", newline="", encoding="utf-8") as summary_handle:
-            summary_writer = csv.DictWriter(summary_handle, fieldnames=SUMMARY_COLUMNS, delimiter="\t")
+            summary_writer = csv.DictWriter(
+                summary_handle,
+                fieldnames=SUMMARY_COLUMNS,
+                delimiter="\t",
+                extrasaction="ignore",
+            )
             summary_writer.writeheader()
             with (intermediate_path.open("w", newline="", encoding="utf-8") if intermediate_path else nullcontext()) as hits_handle:
                 if hits_handle:
