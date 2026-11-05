@@ -49,6 +49,7 @@ logging.basicConfig(level=logging.INFO)
 
 DEFAULT_P_VALUE_CUTOFF = 0.05
 DEFAULT_MAX_GENE_SETS = 50
+DEFAULT_BATCH_SIZE = 128
 NEGATIVE_CONTROL_PREFIX = "negative_control_"
 SUMMARY_COLUMNS = ["gene_set_name", "negative_control_count", "n_hits", "evaluation_score"]
 
@@ -206,6 +207,20 @@ def genes_to_vector(genes, gene_index):
     return vector
 
 
+def genes_to_sparse_matrix(gene_lists, gene_index):
+    """Convert gene lists to a sparse query-by-gene 0/1 matrix."""
+    rows, cols = [], []
+    for row, genes in enumerate(gene_lists):
+        unique_genes = set(genes)
+        indices = [gene_index[gene] for gene in unique_genes if gene in gene_index]
+        if len(indices) < len(unique_genes):
+            logger.debug("%d of %d input genes are not in the gene universe.", len(unique_genes) - len(indices), len(unique_genes))
+        rows.extend([row] * len(indices))
+        cols.extend(indices)
+    data = np.ones(len(rows), dtype=np.int64)
+    return sparse.csr_matrix((data, (rows, cols)), shape=(len(gene_lists), len(gene_index)))
+
+
 def rank_enriched_gene_sets(pvalues, gene_set_sizes, gene_set_names,
                             p_value_cutoff=DEFAULT_P_VALUE_CUTOFF, max_gene_sets=DEFAULT_MAX_GENE_SETS):
     """Return up to max_gene_sets hits with p < cutoff, sorted by ascending p-value."""
@@ -217,9 +232,42 @@ def rank_enriched_gene_sets(pvalues, gene_set_sizes, gene_set_names,
 
 def evaluate_gene_set(genes, context, p_value_cutoff=DEFAULT_P_VALUE_CUTOFF, max_gene_sets=DEFAULT_MAX_GENE_SETS):
     """Local replacement for run_eaggl(): enriched gene sets for a gene list."""
-    vector = genes_to_vector(genes, context.gene_index)
-    pvalues, gene_set_sizes = compute_enrichment(vector, context.matrix)
-    return rank_enriched_gene_sets(pvalues, gene_set_sizes, context.gene_set_names, p_value_cutoff, max_gene_sets)
+    return evaluate_gene_sets([genes], context, p_value_cutoff, max_gene_sets)[0]
+
+
+def evaluate_gene_sets(gene_lists, context, p_value_cutoff=DEFAULT_P_VALUE_CUTOFF,
+                       max_gene_sets=DEFAULT_MAX_GENE_SETS, batch_size=DEFAULT_BATCH_SIZE):
+    """Evaluate gene lists in sparse batches while preserving single-list scoring semantics."""
+    if batch_size < 1:
+        raise ValueError("batch_size must be at least 1")
+    query_matrix = genes_to_sparse_matrix(gene_lists, context.gene_index)
+    query_sizes = query_matrix.getnnz(axis=1)
+    gene_set_sizes = context.matrix.getnnz(axis=0)
+    n_all_genes = context.matrix.shape[0]
+    all_hits = []
+    for start in range(0, query_matrix.shape[0], batch_size):
+        intersections = (query_matrix[start:start + batch_size] @ context.matrix).tocsr()
+        for row_index in range(intersections.shape[0]):
+            row = intersections.getrow(row_index)
+            if not row.nnz:
+                all_hits.append([])
+                continue
+            pvalues = hypergeom.sf(
+                row.data - 1,
+                n_all_genes,
+                int(query_sizes[start + row_index]),
+                gene_set_sizes[row.indices],
+            )
+            passing = pvalues < p_value_cutoff
+            indices = row.indices[passing]
+            values = pvalues[passing]
+            order = np.lexsort((indices, values))[:max_gene_sets]
+            all_hits.append([
+                {"gene_set": context.gene_set_names[index], "gene_set_size": int(gene_set_sizes[index]),
+                 "p_value": float(values[position])}
+                for position, index in zip(order, indices[order])
+            ])
+    return all_hits
 
 
 def summarize_hits(gene_set_name, gene_set_size, hits):
@@ -257,8 +305,9 @@ def score_gene_sets(gene_sets, context, p_value_cutoff=DEFAULT_P_VALUE_CUTOFF,
                     max_gene_sets=DEFAULT_MAX_GENE_SETS, out_f=None):
     """Score each {name: genes} gene set; optionally write per-hit results to the open file out_f."""
     scores = []
-    for gene_set_name, genes in gene_sets.items():
-        hits = evaluate_gene_set(genes, context, p_value_cutoff, max_gene_sets)
+    items = list(gene_sets.items())
+    all_hits = evaluate_gene_sets([genes for _, genes in items], context, p_value_cutoff, max_gene_sets)
+    for (gene_set_name, genes), hits in zip(items, all_hits):
         if out_f is not None:
             write_validation_results(out_f, gene_set_name, len(genes), hits)
         scores.append(summarize_hits(gene_set_name, len(genes), hits))

@@ -43,6 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, help="Random seed for generated negative controls")
     parser.add_argument("--p-value", type=float, default=0.05, help="Strict enrichment p-value cutoff")
     parser.add_argument("--max-gene-sets", type=int, default=50, help="Maximum enriched hits per input gene set")
+    parser.add_argument("--batch-size", type=int, default=128, help="Gene sets evaluated per sparse batch (default: 128)")
     parser.add_argument(
         "--progress-every", type=int, default=100,
         help="Log gene-set progress every N gene sets (default: 100)",
@@ -81,6 +82,8 @@ def main() -> None:
         raise SystemExit("--p-value must be greater than 0 and at most 1")
     if args.max_gene_sets < 1:
         raise SystemExit("--max-gene-sets must be at least 1")
+    if args.batch_size < 1:
+        raise SystemExit("--batch-size must be at least 1")
     if args.progress_every < 1:
         raise SystemExit("--progress-every must be at least 1")
     gmt_files = discover_gmt_files(local_output_root)
@@ -95,7 +98,7 @@ def main() -> None:
         intermediate_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        from gene_set_evaluation_score import build_evaluation_context, evaluate_gene_set, read_gmt, summarize_hits
+        from gene_set_evaluation_score import build_evaluation_context, evaluate_gene_sets, read_gmt, summarize_hits
         context = build_evaluation_context(args.reference, args.negative_controls, args.seed)
         gmt_gene_sets = [(gmt_path, read_gmt(gmt_path)) for gmt_path in gmt_files]
         total_gene_sets = sum(len(gene_sets) for _, gene_sets in gmt_gene_sets)
@@ -117,8 +120,10 @@ def main() -> None:
                 for gmt_index, (gmt_path, gene_sets) in enumerate(gmt_gene_sets, 1):
                     source_gmt = gmt_path.relative_to(local_output_root).as_posix()
                     logging.info("Evaluating GMT %d/%d: %s", gmt_index, len(gmt_gene_sets), source_gmt)
-                    for gene_set_name, genes in gene_sets.items():
-                        hits = evaluate_gene_set(genes, context, args.p_value, args.max_gene_sets)
+                    batch_hits = evaluate_gene_sets(
+                        list(gene_sets.values()), context, args.p_value, args.max_gene_sets, args.batch_size
+                    )
+                    for (gene_set_name, genes), hits in zip(gene_sets.items(), batch_hits):
                         score = summarize_hits(gene_set_name, len(genes), hits)
                         summary_writer.writerow({"source_gmt": source_gmt, **score})
                         if hits_handle:
@@ -127,11 +132,14 @@ def main() -> None:
                                                       hit["gene_set"], hit["gene_set_size"], hit["p_value"]])
                         completed_gene_sets += 1
                         if completed_gene_sets % args.progress_every == 0 or completed_gene_sets == total_gene_sets:
+                            elapsed_seconds = time.monotonic() - started
+                            remaining_seconds = elapsed_seconds * (total_gene_sets - completed_gene_sets) / completed_gene_sets
                             logging.info(
-                                "Evaluated gene sets %d/%d (elapsed %.1f seconds)",
+                                "Evaluated gene sets %d/%d (elapsed %.1f seconds; estimated remaining %.1f seconds)",
                                 completed_gene_sets,
                                 total_gene_sets,
-                                time.monotonic() - started,
+                                elapsed_seconds,
+                                remaining_seconds,
                             )
         logging.info("Saved summary to %s", output_path)
         if intermediate_path is not None:
