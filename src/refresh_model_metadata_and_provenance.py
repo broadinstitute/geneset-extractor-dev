@@ -46,6 +46,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--provenance_mirror_local_prefix")
     parser.add_argument("--provenance_mirror_remote_prefix")
     parser.add_argument("--local_input_source_map_tsv")
+    parser.add_argument("--evaluate-gene-sets", action="store_true", help="Regenerate GMT evaluation sidecars during refresh.")
+    parser.add_argument("--evaluation-reference", action="append", help="Reference GMT file or directory; repeat as needed.")
     parser.add_argument("--show_template_vars", action="store_true")
     return parser.parse_args()
 
@@ -1420,6 +1422,8 @@ def main() -> int:
         template = template_map.get(args.model_id, "")
         if not template:
             raise SystemExit(f"No description_template found for model_id={args.model_id}")
+    if args.evaluate_gene_sets and not args.evaluation_reference:
+        raise SystemExit("--evaluation-reference is required with --evaluate-gene-sets")
     metadata_paths = discover_metadata_paths(model_dir)
     source_map: dict[str, str] = {}
     if args.local_input_source_map_tsv:
@@ -1457,6 +1461,10 @@ def main() -> int:
             cmd.append("--show_template_vars")
         else:
             cmd.extend(["--description_template", template])
+        if args.evaluate_gene_sets:
+            cmd.append("--evaluate-gene-sets")
+            for reference in args.evaluation_reference:
+                cmd.extend(["--evaluation-reference", reference])
         run_command(cmd, cwd=dig_dir, env=env)
 
     local_output_root = (
