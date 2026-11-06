@@ -139,6 +139,10 @@ if [[ -n "${APPTAINER_EXTRA_ARGS:-}" ]]; then
 fi
 wrapper_args=(--apptainer-bin "$APPTAINER_BIN" --bind "$bind_csv" --image "$APPTAINER_IMAGE" --launcher "$SELF_PATH")
 for extra_arg in "${extra_args[@]}"; do wrapper_args+=(--extra-arg "$extra_arg"); done
-wrapper_args+=(-- --execution-mode apptainer --library-id "$LIBRARY_ID" --library-root "$LIBRARY_ROOT" --task-manifest "$TASK_MANIFEST" --submit)
+wrapper_args+=(-- --execution-mode apptainer --library-id "$LIBRARY_ID" --library-root "$LIBRARY_ROOT" --task-manifest "$TASK_MANIFEST")
+[[ -n "$TASK_ID" ]] && wrapper_args+=(--task-id "$TASK_ID")
+[[ -n "$MODEL_ID" ]] && wrapper_args+=(--model-id "$MODEL_ID")
+[[ -n "$PARTITION_ID" ]] && wrapper_args+=(--partition-id "$PARTITION_ID")
+wrapper_args+=(--submit)
 exec "$QSUB_BIN" -N "${LIBRARY_ID,,}_manifest" -o "$qsub_log_root" -e "$qsub_log_root" "${RESOURCE_ARGS[@]}" -b y -t "1-${task_count}" -v "$profile_csv" \
   "$TASK_WRAPPER" "${wrapper_args[@]}"
