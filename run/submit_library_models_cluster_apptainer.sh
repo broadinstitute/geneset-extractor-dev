@@ -109,8 +109,10 @@ if [[ "$EXECUTION_MODE" == "native" ]]; then
 fi
 [[ -n "$APPTAINER_IMAGE" && -f "$APPTAINER_IMAGE" ]] || { echo "--submit requires APPTAINER_IMAGE" >&2; exit 1; }
 APPTAINER_BIN="$(command -v "$APPTAINER_BIN")" || { echo "Unable to find APPTAINER_BIN: ${APPTAINER_BIN}" >&2; exit 1; }
-profile_csv="GENESET_EXTRACTORS_IN_APPTAINER=1,WORK_ROOT=${WORK_ROOT},SUBMISSION_WORK_DIR=${WORK_ROOT}"
-for assignment in "${PROFILE_ENVIRONMENT[@]}"; do profile_csv+=",${assignment}"; done
+profile_csv="GENESET_EXTRACTORS_IN_APPTAINER=1,WORK_ROOT=${WORK_ROOT},SUBMISSION_WORK_DIR=${WORK_ROOT},APPTAINERENV_GENESET_EXTRACTORS_IN_APPTAINER=1,APPTAINERENV_WORK_ROOT=${WORK_ROOT},APPTAINERENV_SUBMISSION_WORK_DIR=${WORK_ROOT}"
+for assignment in "${PROFILE_ENVIRONMENT[@]}"; do
+  profile_csv+=",${assignment},APPTAINERENV_${assignment}"
+done
 bind_paths=("$(pwd)" "$WORK_ROOT" "$LIBRARY_ROOT" "$(dirname "$SELF_PATH")")
 for assignment in "${PROFILE_ENVIRONMENT[@]}"; do
   input_path="${assignment#*=}"
