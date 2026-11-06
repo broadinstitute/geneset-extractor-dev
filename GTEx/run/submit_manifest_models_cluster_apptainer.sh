@@ -20,6 +20,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "${SUBMISSION_WORK_DIR:-}" ]] || { echo "Set SUBMISSION_WORK_DIR" >&2; exit 1; }
+export SUBMISSION_ARRAY_MEMORY="${SUBMISSION_ARRAY_MEMORY:-${GTEX_ARRAY_MEMORY:-16G}}"
+export SUBMISSION_ARRAY_WALLTIME="${SUBMISSION_ARRAY_WALLTIME:-${GTEX_ARRAY_WALLTIME:-24:00:00}}"
 command=(bash "${repo_root}/geneset-extractor-dev/run/submit_library_models_cluster_apptainer.sh"
   --library-id GTEx --library-root "${root}" --task-manifest "${root}/config/task_manifest.tsv")
 [[ -n "$model_id" ]] && command+=(--model-id "$model_id")

@@ -21,6 +21,7 @@ APPTAINER_BIN="${APPTAINER_BIN:-apptainer}"
 APPTAINER_IMAGE="${APPTAINER_IMAGE:-}"
 EXECUTION_MODE="apptainer"
 PROFILE_ENVIRONMENT=()
+RESOURCE_ARGS=()
 
 usage() {
   cat <<'EOF'
@@ -54,6 +55,8 @@ done
 [[ -n "$LIBRARY_ID" && -n "$LIBRARY_ROOT" && -n "$TASK_MANIFEST" ]] || { usage >&2; exit 2; }
 [[ "$EXECUTION_MODE" == "apptainer" || "$EXECUTION_MODE" == "native" ]] || { echo "--execution-mode must be apptainer or native" >&2; exit 2; }
 [[ -n "$WORK_ROOT" ]] || { echo "Set SUBMISSION_WORK_DIR (or explicit WORK_ROOT) outside the wrapper checkout" >&2; exit 2; }
+[[ -n "${SUBMISSION_ARRAY_MEMORY:-}" ]] && RESOURCE_ARGS+=(-l "h_vmem=${SUBMISSION_ARRAY_MEMORY}")
+[[ -n "${SUBMISSION_ARRAY_WALLTIME:-}" ]] && RESOURCE_ARGS+=(-l "h_rt=${SUBMISSION_ARRAY_WALLTIME}")
 [[ -f "$TASK_MANIFEST" ]] || { echo "Missing task manifest: $TASK_MANIFEST" >&2; exit 1; }
 builder="$LIBRARY_ROOT/run/build_$(tr '[:upper:]-' '[:lower:]_' <<< "$LIBRARY_ID")_genesets.sh"
 [[ -x "$builder" ]] || { echo "Missing executable local builder: $builder" >&2; exit 1; }
@@ -103,7 +106,7 @@ if [[ "$EXECUTION_MODE" == "native" ]]; then
   done
   native_env_args=()
   [[ -n "$profile_csv" ]] && native_env_args=(-v "$profile_csv")
-  exec "$QSUB_BIN" -N "${LIBRARY_ID,,}_manifest" -o "$qsub_log_root" -e "$qsub_log_root" -t "1-${task_count}" "${native_env_args[@]}" "$SELF_PATH" \
+  exec "$QSUB_BIN" -N "${LIBRARY_ID,,}_manifest" -o "$qsub_log_root" -e "$qsub_log_root" "${RESOURCE_ARGS[@]}" -t "1-${task_count}" "${native_env_args[@]}" "$SELF_PATH" \
     --execution-mode native --library-id "$LIBRARY_ID" --library-root "$LIBRARY_ROOT" --task-manifest "$TASK_MANIFEST" \
     --submit
 fi
@@ -113,13 +116,27 @@ profile_csv="GENESET_EXTRACTORS_IN_APPTAINER=1,WORK_ROOT=${WORK_ROOT},SUBMISSION
 for assignment in "${PROFILE_ENVIRONMENT[@]}"; do
   profile_csv+=",${assignment},APPTAINERENV_${assignment}"
 done
+for runtime_variable in PYTHON_BIN RSCRIPT_BIN APPTAINER_PYTHON_BIN APPTAINER_RSCRIPT_BIN PROVENANCE_MIRROR_LOCAL_PREFIX PROVENANCE_MIRROR_REMOTE_PREFIX LOCAL_INPUT_SOURCE_MAP_TSV; do
+  [[ -n "${!runtime_variable:-}" ]] || continue
+  profile_csv+=",${runtime_variable}=${!runtime_variable},APPTAINERENV_${runtime_variable}=${!runtime_variable}"
+done
 bind_paths=("$(pwd)" "$WORK_ROOT" "$LIBRARY_ROOT" "$(dirname "$SELF_PATH")")
 for assignment in "${PROFILE_ENVIRONMENT[@]}"; do
   input_path="${assignment#*=}"
   if [[ -d "$input_path" ]]; then bind_paths+=("$input_path"); else bind_paths+=("$(dirname "$input_path")"); fi
 done
+for path_variable in PROVENANCE_MIRROR_LOCAL_PREFIX LOCAL_INPUT_SOURCE_MAP_TSV; do
+  [[ -n "${!path_variable:-}" ]] || continue
+  path_value="${!path_variable}"
+  [[ -e "$path_value" ]] && bind_paths+=("$( [[ -d "$path_value" ]] && printf '%s' "$path_value" || dirname "$path_value" )")
+done
 bind_csv="$(printf '%s\n' "${bind_paths[@]}" | awk '!seen[$0]++' | paste -sd, -)"
-exec "$QSUB_BIN" -N "${LIBRARY_ID,,}_manifest" -o "$qsub_log_root" -e "$qsub_log_root" -b y -t "1-${task_count}" -v "$profile_csv" \
-  "$APPTAINER_BIN" exec --bind "$bind_csv" "$APPTAINER_IMAGE" "$SELF_PATH" \
+extra_args=()
+if [[ -n "${APPTAINER_EXTRA_ARGS:-}" ]]; then
+  # shellcheck disable=SC2206
+  extra_args=(${APPTAINER_EXTRA_ARGS})
+fi
+exec "$QSUB_BIN" -N "${LIBRARY_ID,,}_manifest" -o "$qsub_log_root" -e "$qsub_log_root" "${RESOURCE_ARGS[@]}" -b y -t "1-${task_count}" -v "$profile_csv" \
+  "$APPTAINER_BIN" exec --bind "$bind_csv" "${extra_args[@]}" "$APPTAINER_IMAGE" "$SELF_PATH" \
   --execution-mode apptainer --library-id "$LIBRARY_ID" --library-root "$LIBRARY_ROOT" --task-manifest "$TASK_MANIFEST" \
   --submit
