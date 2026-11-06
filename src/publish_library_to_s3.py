@@ -578,13 +578,13 @@ def filter_output_candidates_to_provenance_paths(
         if resolved is not None and is_within_directory(resolved, local_output_root):
             keep_paths.add(resolved)
 
-    # Evaluation is a post-generation aggregate.  Preserve the publisher's
-    # provenance boundary while publishing it whenever a selected GMT exists,
-    # rather than requiring every provenance format to be rewritten.
-    if any(path.suffix.lower() == ".gmt" for path in keep_paths):
-        evaluation_summary = (local_output_root / "evaluation" / "evaluation_summary.tsv").resolve()
-        if evaluation_summary in by_path:
-            keep_paths.add(evaluation_summary)
+    # Evaluation is a post-generation sidecar. Preserve the provenance
+    # boundary while publishing a selected GMT's paired evaluation file.
+    for path in tuple(keep_paths):
+        if path.name == "genesets.gmt":
+            evaluation_path = path.with_suffix(".evaluation.tsv").resolve()
+            if evaluation_path in by_path:
+                keep_paths.add(evaluation_path)
 
     filtered = []  # type: List[CandidateFile]
     for path in sorted(keep_paths):
