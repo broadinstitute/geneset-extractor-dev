@@ -9,6 +9,7 @@ submit=0
 refresh=0
 model_id=""
 tissue_id=""
+evaluation_references=()
 array_memory="${SUBMISSION_ARRAY_MEMORY:-${GTEX_ARRAY_MEMORY:-16G}}"
 array_walltime="${SUBMISSION_ARRAY_WALLTIME:-${GTEX_ARRAY_WALLTIME:-24:00:00}}"
 array_job_name="${SUBMISSION_JOB_NAME:-${GTEX_JOB_NAME:-gtex_submission_apptainer}}"
@@ -51,6 +52,7 @@ while [[ $# -gt 0 ]]; do
     --refresh-metadata-and-provenance|--refresh_metadata_and_provenance) refresh=1 ;;
     --model-id) [[ $# -ge 2 ]] || { echo "Missing value for --model-id" >&2; exit 2; }; model_id="$2"; shift ;;
     --tissue-id) [[ $# -ge 2 ]] || { echo "Missing value for --tissue-id" >&2; exit 2; }; tissue_id="$2"; shift ;;
+    --evaluation-reference) [[ $# -ge 2 ]] || { echo "Missing value for --evaluation-reference" >&2; exit 2; }; evaluation_references+=("$2"); shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -63,6 +65,10 @@ if [[ ${refresh} -eq 1 ]]; then
   command=(bash "${root}/run/refresh_submission_models_apptainer.sh")
   [[ -n "${model_id}" ]] && command+=(--model-id "${model_id}")
   [[ -n "${tissue_id}" ]] && command+=(--partition-id "${tissue_id}")
+  if [[ ${#evaluation_references[@]} -gt 0 ]]; then
+    command+=(--evaluate-gene-sets)
+    for evaluation_reference in "${evaluation_references[@]}"; do command+=(--evaluation-reference "${evaluation_reference}"); done
+  fi
   [[ ${submit} -eq 1 ]] && command+=(--submit)
   exec "${command[@]}"
 fi
