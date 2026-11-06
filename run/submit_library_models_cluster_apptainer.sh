@@ -3,6 +3,7 @@
 set -euo pipefail
 
 SELF_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+TASK_WRAPPER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/run_manifest_task_apptainer.sh"
 
 LIBRARY_ID=""
 LIBRARY_ROOT=""
@@ -136,7 +137,8 @@ if [[ -n "${APPTAINER_EXTRA_ARGS:-}" ]]; then
   # shellcheck disable=SC2206
   extra_args=(${APPTAINER_EXTRA_ARGS})
 fi
+wrapper_args=(--apptainer-bin "$APPTAINER_BIN" --bind "$bind_csv" --image "$APPTAINER_IMAGE" --launcher "$SELF_PATH")
+for extra_arg in "${extra_args[@]}"; do wrapper_args+=(--extra-arg "$extra_arg"); done
+wrapper_args+=(-- --execution-mode apptainer --library-id "$LIBRARY_ID" --library-root "$LIBRARY_ROOT" --task-manifest "$TASK_MANIFEST" --submit)
 exec "$QSUB_BIN" -N "${LIBRARY_ID,,}_manifest" -o "$qsub_log_root" -e "$qsub_log_root" "${RESOURCE_ARGS[@]}" -b y -t "1-${task_count}" -v "$profile_csv" \
-  "$APPTAINER_BIN" exec --bind "$bind_csv" "${extra_args[@]}" "$APPTAINER_IMAGE" "$SELF_PATH" \
-  --execution-mode apptainer --library-id "$LIBRARY_ID" --library-root "$LIBRARY_ROOT" --task-manifest "$TASK_MANIFEST" \
-  --submit
+  "$TASK_WRAPPER" "${wrapper_args[@]}"
