@@ -42,7 +42,11 @@ def main() -> int:
     task = _task(root, args.task_id)
     dig_repo = Path(os.environ.get("DIG_REPO", root.parents[1] / "dig-gene-set-extractors")).resolve()
     if not (dig_repo / "src/geneset_extractors").is_dir():
-        raise SystemExit("DIG_REPO must identify a dig-gene-set-extractors checkout")
+        raise SystemExit(
+            "DIG_REPO must identify a dig-gene-set-extractors checkout: "
+            f"DIG_REPO={os.environ.get('DIG_REPO', '')!r}; resolved={dig_repo}; "
+            f"expected={dig_repo / 'src/geneset_extractors'}"
+        )
     if task["model_id"] != "HZ2":
         if args.mode == "--smoke":
             raise SystemExit("standard GTEx manifest tasks require full mode")
