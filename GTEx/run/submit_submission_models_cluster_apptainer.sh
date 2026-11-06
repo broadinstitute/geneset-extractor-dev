@@ -80,6 +80,15 @@ if [[ "${mode}" == "--smoke" ]]; then
     bash "${root}/run/run_submission_models_apptainer.sh" --smoke
 fi
 
+# Full GTEx submissions now use the shared task-manifest launcher.  Keep the
+# smoke and refresh branches above as explicit compatibility operations.
+manifest_launcher="${root}/run/submit_manifest_models_cluster_apptainer.sh"
+manifest_command=(bash "${manifest_launcher}" --full)
+[[ -n "${model_id}" ]] && manifest_command+=(--model-id "${model_id}")
+[[ -n "${tissue_id}" ]] && manifest_command+=(--partition-id "${tissue_id}")
+[[ ${submit} -eq 1 ]] && manifest_command+=(--submit)
+exec "${manifest_command[@]}"
+
 for requested_model in ${model_id//,/ }; do
   awk -F $'\t' -v model="${requested_model}" 'NR > 1 && $1 == model && $3 == "true" { found = 1 } END { exit !found }' "${root}/config/model_list.tsv" \
     || { echo "Unknown or disabled GTEx model ID: ${requested_model}" >&2; exit 2; }

@@ -58,10 +58,15 @@ builder="$LIBRARY_ROOT/run/build_$(tr '[:upper:]-' '[:lower:]_' <<< "$LIBRARY_ID
 
 profile="$LIBRARY_ROOT/config/execution_profile.tsv"
 if [[ -f "$profile" ]]; then
-  while IFS=$'\t' read -r variable required; do
+  while IFS=$'\t' read -r variable required path_type; do
     [[ "$variable" == "environment_variable" ]] && continue
     [[ "$required" == "true" ]] || continue
-    [[ -n "${!variable:-}" && -f "${!variable}" ]] || { echo "Missing required ${LIBRARY_ID} input: ${variable}" >&2; exit 1; }
+    [[ -n "${!variable:-}" ]] || { echo "Missing required ${LIBRARY_ID} input: ${variable}" >&2; exit 1; }
+    if [[ "$path_type" == "directory" ]]; then
+      [[ -d "${!variable}" ]] || { echo "Expected directory for ${variable}: ${!variable}" >&2; exit 1; }
+    else
+      [[ -f "${!variable}" ]] || { echo "Expected file for ${variable}: ${!variable}" >&2; exit 1; }
+    fi
     PROFILE_ENVIRONMENT+=("${variable}=${!variable}")
   done < "$profile"
 fi
@@ -70,7 +75,7 @@ mkdir -p "$WORK_ROOT"
 worklist="$WORK_ROOT/${LIBRARY_ID,,}_worklist.tsv"
 awk -F $'\t' -v task="$TASK_ID" -v model="$MODEL_ID" -v partition="$PARTITION_ID" '
   NR == 1 { for (i=1;i<=NF;i++) col[$i]=i; print "task_index\ttask_id\tmodel_id\tpartition_id\tdig_identifier\toutput_relative_path"; next }
-  $(col["enabled"]) == "true" && (!task || $(col["task_id"]) == task) && (!model || $(col["model_id"]) == model) && (!partition || $(col["partition_id"]) == partition) {
+  $(col["enabled"]) == "true" && (!task || $(col["task_id"]) == task) && (!model || ("," model ",") ~ ("," $(col["model_id"]) ",")) && (!partition || $(col["partition_id"]) == partition) {
     print ++n "\t" $(col["task_id"]) "\t" $(col["model_id"]) "\t" $(col["partition_id"]) "\t" $(col["dig_identifier"]) "\t" $(col["output_relative_path"])
   }
 ' "$TASK_MANIFEST" > "$worklist"
@@ -101,7 +106,13 @@ fi
 [[ -n "$APPTAINER_IMAGE" && -f "$APPTAINER_IMAGE" ]] || { echo "--submit requires APPTAINER_IMAGE" >&2; exit 1; }
 profile_csv="GENESET_EXTRACTORS_IN_APPTAINER=1"
 for assignment in "${PROFILE_ENVIRONMENT[@]}"; do profile_csv+=",${assignment}"; done
+bind_paths=("$(pwd)" "$WORK_ROOT" "$LIBRARY_ROOT")
+for assignment in "${PROFILE_ENVIRONMENT[@]}"; do
+  input_path="${assignment#*=}"
+  if [[ -d "$input_path" ]]; then bind_paths+=("$input_path"); else bind_paths+=("$(dirname "$input_path")"); fi
+done
+bind_csv="$(printf '%s\n' "${bind_paths[@]}" | awk '!seen[$0]++' | paste -sd, -)"
 exec "$QSUB_BIN" -t "1-${task_count}" -v "$profile_csv" \
-  "$APPTAINER_BIN" exec --bind "$(pwd):$(pwd)" "$APPTAINER_IMAGE" "$0" \
+  "$APPTAINER_BIN" exec --bind "$bind_csv" "$APPTAINER_IMAGE" "$0" \
   --execution-mode apptainer --library-id "$LIBRARY_ID" --library-root "$LIBRARY_ROOT" --task-manifest "$TASK_MANIFEST" \
   --submit
