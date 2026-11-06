@@ -58,7 +58,7 @@ def _evaluate_if_requested(*, task: dict[str, str], out_root: Path, dig_repo: Pa
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("--smoke", "full"))
+    parser.add_argument("mode", choices=("smoke", "full"))
     parser.add_argument("--task-id", required=True)
     parser.add_argument("--out-root", required=True)
     args = parser.parse_args()
@@ -72,7 +72,7 @@ def main() -> int:
             f"expected={dig_repo / 'src/geneset_extractors'}"
         )
     if task["model_id"] != "HZ2":
-        if args.mode == "--smoke":
+        if args.mode == "smoke":
             raise SystemExit("standard GTEx manifest tasks require full mode")
         required = {
             "counts_gct": _input("GTEX_V10_COUNTS_GCT"),
@@ -95,7 +95,7 @@ def main() -> int:
         return result if result else _evaluate_if_requested(task=task, out_root=Path(args.out_root).resolve(), dig_repo=dig_repo, env=os.environ.copy())
 
     settings = _hz2_settings(root)
-    if args.mode == "--smoke":
+    if args.mode == "smoke":
         inputs = {
             "expression_gct": root / "tests/fixtures/gtex_hz_consensus_expression.gct",
             "sample_attributes_tsv": root / "tests/fixtures/gtex_hz_consensus_sample_attributes.tsv",

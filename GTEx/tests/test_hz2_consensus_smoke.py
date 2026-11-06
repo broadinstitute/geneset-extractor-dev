@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import os
 import json
+import importlib.util
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
+import pytest
+
 
 def test_hz2_smoke_uses_dig_and_writes_deterministic_consensus() -> None:
+    if importlib.util.find_spec("yaml") is None:
+        pytest.skip("PyYAML is required by DIG's DAPPER provenance writer")
     root = Path(__file__).resolve().parents[1]
     dig = root.parents[1] / "dig-gene-set-extractors"
     with tempfile.TemporaryDirectory() as temporary:
@@ -16,7 +21,12 @@ def test_hz2_smoke_uses_dig_and_writes_deterministic_consensus() -> None:
         completed = subprocess.run(
             ["bash", "run/build_gtex_genesets.sh", "--smoke", "--task-id", "gtex_smoke_hz2_all_detailed_tissues", "--out-root", str(work)],
             cwd=root,
-            env={**os.environ, "DIG_REPO": str(dig), "PYTHON_BIN": sys.executable},
+            env={
+                **os.environ,
+                "DIG_REPO": str(dig),
+                "PYTHON_BIN": sys.executable,
+                "GENESET_SKIP_EVALUATION": "1",
+            },
             text=True,
             capture_output=True,
         )
