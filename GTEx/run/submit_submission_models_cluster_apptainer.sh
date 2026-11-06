@@ -10,6 +10,7 @@ refresh=0
 model_id=""
 tissue_id=""
 evaluation_references=()
+skip_evaluation=0
 array_memory="${SUBMISSION_ARRAY_MEMORY:-${GTEX_ARRAY_MEMORY:-16G}}"
 array_walltime="${SUBMISSION_ARRAY_WALLTIME:-${GTEX_ARRAY_WALLTIME:-24:00:00}}"
 array_job_name="${SUBMISSION_JOB_NAME:-${GTEX_JOB_NAME:-gtex_submission_apptainer}}"
@@ -53,6 +54,7 @@ while [[ $# -gt 0 ]]; do
     --model-id) [[ $# -ge 2 ]] || { echo "Missing value for --model-id" >&2; exit 2; }; model_id="$2"; shift ;;
     --tissue-id) [[ $# -ge 2 ]] || { echo "Missing value for --tissue-id" >&2; exit 2; }; tissue_id="$2"; shift ;;
     --evaluation-reference) [[ $# -ge 2 ]] || { echo "Missing value for --evaluation-reference" >&2; exit 2; }; evaluation_references+=("$2"); shift ;;
+    --skip-evaluation) skip_evaluation=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -92,6 +94,11 @@ manifest_launcher="${root}/run/submit_manifest_models_cluster_apptainer.sh"
 manifest_command=(bash "${manifest_launcher}" --full)
 [[ -n "${model_id}" ]] && manifest_command+=(--model-id "${model_id}")
 [[ -n "${tissue_id}" ]] && manifest_command+=(--partition-id "${tissue_id}")
+if [[ $skip_evaluation -eq 1 ]]; then
+  manifest_command+=(--skip-evaluation)
+else
+  for evaluation_reference in "${evaluation_references[@]}"; do manifest_command+=(--evaluation-reference "${evaluation_reference}"); done
+fi
 [[ ${submit} -eq 1 ]] && manifest_command+=(--submit)
 exec "${manifest_command[@]}"
 
