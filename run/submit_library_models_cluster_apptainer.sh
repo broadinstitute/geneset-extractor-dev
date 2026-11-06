@@ -94,6 +94,8 @@ if [[ $SUBMIT -eq 0 ]]; then
   exit 0
 fi
 task_count=$(( $(wc -l < "$worklist") - 1 ))
+qsub_log_root="$WORK_ROOT/qsub_logs_${LIBRARY_ID,,}"
+mkdir -p "$qsub_log_root"
 if [[ "$EXECUTION_MODE" == "native" ]]; then
   profile_csv=""
   for assignment in "${PROFILE_ENVIRONMENT[@]}"; do
@@ -101,7 +103,7 @@ if [[ "$EXECUTION_MODE" == "native" ]]; then
   done
   native_env_args=()
   [[ -n "$profile_csv" ]] && native_env_args=(-v "$profile_csv")
-  exec "$QSUB_BIN" -t "1-${task_count}" "${native_env_args[@]}" "$SELF_PATH" \
+  exec "$QSUB_BIN" -N "${LIBRARY_ID,,}_manifest" -o "$qsub_log_root" -e "$qsub_log_root" -t "1-${task_count}" "${native_env_args[@]}" "$SELF_PATH" \
     --execution-mode native --library-id "$LIBRARY_ID" --library-root "$LIBRARY_ROOT" --task-manifest "$TASK_MANIFEST" \
     --submit
 fi
@@ -109,13 +111,13 @@ fi
 APPTAINER_BIN="$(command -v "$APPTAINER_BIN")" || { echo "Unable to find APPTAINER_BIN: ${APPTAINER_BIN}" >&2; exit 1; }
 profile_csv="GENESET_EXTRACTORS_IN_APPTAINER=1"
 for assignment in "${PROFILE_ENVIRONMENT[@]}"; do profile_csv+=",${assignment}"; done
-bind_paths=("$(pwd)" "$WORK_ROOT" "$LIBRARY_ROOT")
+bind_paths=("$(pwd)" "$WORK_ROOT" "$LIBRARY_ROOT" "$(dirname "$SELF_PATH")")
 for assignment in "${PROFILE_ENVIRONMENT[@]}"; do
   input_path="${assignment#*=}"
   if [[ -d "$input_path" ]]; then bind_paths+=("$input_path"); else bind_paths+=("$(dirname "$input_path")"); fi
 done
 bind_csv="$(printf '%s\n' "${bind_paths[@]}" | awk '!seen[$0]++' | paste -sd, -)"
-exec "$QSUB_BIN" -b y -t "1-${task_count}" -v "$profile_csv" \
+exec "$QSUB_BIN" -N "${LIBRARY_ID,,}_manifest" -o "$qsub_log_root" -e "$qsub_log_root" -b y -t "1-${task_count}" -v "$profile_csv" \
   "$APPTAINER_BIN" exec --bind "$bind_csv" "$APPTAINER_IMAGE" "$SELF_PATH" \
   --execution-mode apptainer --library-id "$LIBRARY_ID" --library-root "$LIBRARY_ROOT" --task-manifest "$TASK_MANIFEST" \
   --submit
