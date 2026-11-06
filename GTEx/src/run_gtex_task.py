@@ -38,13 +38,13 @@ def _evaluate_if_requested(*, task: dict[str, str], out_root: Path, dig_repo: Pa
     references = [path for path in env.get("GENESET_EVALUATION_REFERENCES", "").split(":") if path]
     if not references:
         raise SystemExit("evaluation references were not forwarded; use --skip-evaluation to disable evaluation")
-    gmt_path = out_root / task["output_relative_path"]
-    output_path = gmt_path.with_name("geneset.evaluation.tsv")
+    gmt_root = (out_root / task["output_relative_path"]).parent
     command = [
         env.get("PYTHON_BIN", sys.executable), "-c",
-        "import sys; from geneset_extractors.core.gene_set_evaluation import write_gmt_evaluation; "
-        "write_gmt_evaluation(sys.argv[1], sys.argv[3:], sys.argv[2])",
-        str(gmt_path), str(output_path), *references,
+        "import sys; from pathlib import Path; from geneset_extractors.core.gene_set_evaluation import write_gmt_evaluation; "
+        "root=Path(sys.argv[1]); refs=sys.argv[2:]; "
+        "[write_gmt_evaluation(gmt, refs, gmt.with_suffix('.evaluation.tsv')) for gmt in sorted(root.rglob('*.gmt'))]",
+        str(gmt_root), *references,
     ]
     print("$ " + " ".join(command), flush=True)
     evaluation_env = dict(env)
