@@ -2,6 +2,8 @@
 # Generic, configuration-driven cluster launcher for new-format libraries.
 set -euo pipefail
 
+SELF_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+
 LIBRARY_ID=""
 LIBRARY_ROOT=""
 TASK_MANIFEST=""
@@ -99,11 +101,12 @@ if [[ "$EXECUTION_MODE" == "native" ]]; then
   done
   native_env_args=()
   [[ -n "$profile_csv" ]] && native_env_args=(-v "$profile_csv")
-  exec "$QSUB_BIN" -t "1-${task_count}" "${native_env_args[@]}" "$0" \
+  exec "$QSUB_BIN" -t "1-${task_count}" "${native_env_args[@]}" "$SELF_PATH" \
     --execution-mode native --library-id "$LIBRARY_ID" --library-root "$LIBRARY_ROOT" --task-manifest "$TASK_MANIFEST" \
     --submit
 fi
 [[ -n "$APPTAINER_IMAGE" && -f "$APPTAINER_IMAGE" ]] || { echo "--submit requires APPTAINER_IMAGE" >&2; exit 1; }
+APPTAINER_BIN="$(command -v "$APPTAINER_BIN")" || { echo "Unable to find APPTAINER_BIN: ${APPTAINER_BIN}" >&2; exit 1; }
 profile_csv="GENESET_EXTRACTORS_IN_APPTAINER=1"
 for assignment in "${PROFILE_ENVIRONMENT[@]}"; do profile_csv+=",${assignment}"; done
 bind_paths=("$(pwd)" "$WORK_ROOT" "$LIBRARY_ROOT")
@@ -113,6 +116,6 @@ for assignment in "${PROFILE_ENVIRONMENT[@]}"; do
 done
 bind_csv="$(printf '%s\n' "${bind_paths[@]}" | awk '!seen[$0]++' | paste -sd, -)"
 exec "$QSUB_BIN" -t "1-${task_count}" -v "$profile_csv" \
-  "$APPTAINER_BIN" exec --bind "$bind_csv" "$APPTAINER_IMAGE" "$0" \
+  "$APPTAINER_BIN" exec --bind "$bind_csv" "$APPTAINER_IMAGE" "$SELF_PATH" \
   --execution-mode apptainer --library-id "$LIBRARY_ID" --library-root "$LIBRARY_ROOT" --task-manifest "$TASK_MANIFEST" \
   --submit
