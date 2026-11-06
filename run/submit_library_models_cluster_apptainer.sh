@@ -131,6 +131,14 @@ for path_variable in PROVENANCE_MIRROR_LOCAL_PREFIX LOCAL_INPUT_SOURCE_MAP_TSV; 
   path_value="${!path_variable}"
   [[ -e "$path_value" ]] && bind_paths+=("$( [[ -d "$path_value" ]] && printf '%s' "$path_value" || dirname "$path_value" )")
 done
+if [[ -n "${GENESET_EVALUATION_REFERENCES:-}" ]]; then
+  IFS=: read -r -a evaluation_reference_paths <<< "${GENESET_EVALUATION_REFERENCES}"
+  for reference_path in "${evaluation_reference_paths[@]}"; do
+    [[ -n "$reference_path" ]] || continue
+    [[ -e "$reference_path" ]] || { echo "Missing evaluation reference: $reference_path" >&2; exit 1; }
+    if [[ -d "$reference_path" ]]; then bind_paths+=("$reference_path"); else bind_paths+=("$(dirname "$reference_path")"); fi
+  done
+fi
 bind_csv="$(printf '%s\n' "${bind_paths[@]}" | awk '!seen[$0]++' | paste -sd, -)"
 extra_args=()
 if [[ -n "${APPTAINER_EXTRA_ARGS:-}" ]]; then
