@@ -47,7 +47,12 @@ def _evaluate_if_requested(*, task: dict[str, str], out_root: Path, dig_repo: Pa
         str(gmt_path), str(output_path), *references,
     ]
     print("$ " + " ".join(command), flush=True)
-    return subprocess.run(command, check=False, env=env).returncode
+    evaluation_env = dict(env)
+    dig_src = str(dig_repo / "src")
+    evaluation_env["PYTHONPATH"] = dig_src + (
+        os.pathsep + evaluation_env["PYTHONPATH"] if evaluation_env.get("PYTHONPATH") else ""
+    )
+    return subprocess.run(command, check=False, env=evaluation_env).returncode
 
 
 def main() -> int:
