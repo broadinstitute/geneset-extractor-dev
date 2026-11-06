@@ -97,9 +97,9 @@ task_count=$(( $(wc -l < "$worklist") - 1 ))
 qsub_log_root="$WORK_ROOT/qsub_logs_${LIBRARY_ID,,}"
 mkdir -p "$qsub_log_root"
 if [[ "$EXECUTION_MODE" == "native" ]]; then
-  profile_csv=""
+  profile_csv="WORK_ROOT=${WORK_ROOT},SUBMISSION_WORK_DIR=${WORK_ROOT}"
   for assignment in "${PROFILE_ENVIRONMENT[@]}"; do
-    profile_csv+="${profile_csv:+,}${assignment}"
+    profile_csv+=",${assignment}"
   done
   native_env_args=()
   [[ -n "$profile_csv" ]] && native_env_args=(-v "$profile_csv")
@@ -109,7 +109,7 @@ if [[ "$EXECUTION_MODE" == "native" ]]; then
 fi
 [[ -n "$APPTAINER_IMAGE" && -f "$APPTAINER_IMAGE" ]] || { echo "--submit requires APPTAINER_IMAGE" >&2; exit 1; }
 APPTAINER_BIN="$(command -v "$APPTAINER_BIN")" || { echo "Unable to find APPTAINER_BIN: ${APPTAINER_BIN}" >&2; exit 1; }
-profile_csv="GENESET_EXTRACTORS_IN_APPTAINER=1"
+profile_csv="GENESET_EXTRACTORS_IN_APPTAINER=1,WORK_ROOT=${WORK_ROOT},SUBMISSION_WORK_DIR=${WORK_ROOT}"
 for assignment in "${PROFILE_ENVIRONMENT[@]}"; do profile_csv+=",${assignment}"; done
 bind_paths=("$(pwd)" "$WORK_ROOT" "$LIBRARY_ROOT" "$(dirname "$SELF_PATH")")
 for assignment in "${PROFILE_ENVIRONMENT[@]}"; do
