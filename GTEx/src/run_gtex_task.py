@@ -1,4 +1,4 @@
-"""Thin HZ2 task selector; DIG owns GTEx TPM processing and GMT construction."""
+"""Run one declared GTEx task from the shared task manifest."""
 from __future__ import annotations
 
 import argparse
@@ -40,8 +40,31 @@ def main() -> int:
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     task = _task(root, args.task_id)
-    if task["model_id"] != "HZ2" or task["dig_identifier"] != "gtex_hz_consensus":
-        raise SystemExit("run_gtex_task.py only dispatches the HZ2 consensus extension")
+    dig_repo = Path(os.environ.get("DIG_REPO", root.parents[1] / "dig-gene-set-extractors")).resolve()
+    if not (dig_repo / "src/geneset_extractors").is_dir():
+        raise SystemExit("DIG_REPO must identify a dig-gene-set-extractors checkout")
+    if task["model_id"] != "HZ2":
+        if args.mode == "--smoke":
+            raise SystemExit("standard GTEx manifest tasks require full mode")
+        required = {
+            "counts_gct": _input("GTEX_V10_COUNTS_GCT"),
+            "sample_metadata_tsv": _input("GTEX_V10_SAMPLE_ATTRIBUTES_TSV"),
+            "subject_metadata_tsv": _input("GTEX_V10_SUBJECT_PHENOTYPES_TSV"),
+            "gtf": _input("GTEX_GTF"),
+        }
+        command = [
+            "bash", str(root / "run/build_genesets.sh"),
+            "--models", task["model_id"], "--tissues", task["partition_id"],
+            "--tissue_granularity", "broad", "--counts_gct", required["counts_gct"],
+            "--sample_metadata_tsv", required["sample_metadata_tsv"],
+            "--subject_metadata_tsv", required["subject_metadata_tsv"], "--gtf", required["gtf"],
+            "--dig_dir", str(dig_repo), "--out_root", str(Path(args.out_root).resolve()), "--overwrite",
+        ]
+        if task["model_id"].startswith("HZ"):
+            command.extend(["--human_gene_info", _input("GTEX_V8_HUMAN_GENE_INFO")])
+        print("$ " + " ".join(command), flush=True)
+        return subprocess.run(command, check=False).returncode
+
     settings = _hz2_settings(root)
     if args.mode == "--smoke":
         inputs = {
@@ -58,7 +81,6 @@ def main() -> int:
     for label, path in inputs.items():
         if not path.is_file():
             raise SystemExit(f"missing committed smoke fixture {label}: {path}")
-    dig_repo = Path(os.environ.get("DIG_REPO", root.parents[1] / "dig-gene-set-extractors")).resolve()
     cli = dig_repo / "src/geneset_extractors/cli.py"
     if not cli.is_file():
         raise SystemExit("DIG_REPO must identify a dig-gene-set-extractors checkout")
