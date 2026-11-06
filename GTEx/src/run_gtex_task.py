@@ -42,8 +42,9 @@ def _evaluate_if_requested(*, task: dict[str, str], out_root: Path, dig_repo: Pa
     command = [
         env.get("PYTHON_BIN", sys.executable), "-c",
         "import sys; from pathlib import Path; from geneset_extractors.core.gene_set_evaluation import write_gmt_evaluation; "
-        "root=Path(sys.argv[1]); refs=sys.argv[2:]; "
-        "[write_gmt_evaluation(gmt, refs, gmt.with_suffix('.evaluation.tsv')) for gmt in sorted(root.rglob('*.gmt'))]",
+        "root=Path(sys.argv[1]); refs=sys.argv[2:]; gmts=sorted(root.rglob('genesets.gmt')); "
+        "leaves=[gmt for gmt in gmts if not any(gmt.parent in other.parent.parents for other in gmts if other != gmt)]; "
+        "[write_gmt_evaluation(gmt, refs, gmt.with_suffix('.evaluation.tsv')) for gmt in leaves]",
         str(gmt_root), *references,
     ]
     print("$ " + " ".join(command), flush=True)
