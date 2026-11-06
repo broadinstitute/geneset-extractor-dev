@@ -32,6 +32,24 @@ def _hz2_settings(root: Path) -> dict[str, str]:
     raise SystemExit("HZ2 settings are missing from config/hz_consensus_model_manifest.tsv")
 
 
+def _evaluate_if_requested(*, task: dict[str, str], out_root: Path, dig_repo: Path, env: dict[str, str]) -> int:
+    if env.get("GENESET_SKIP_EVALUATION") == "1":
+        return 0
+    references = [path for path in env.get("GENESET_EVALUATION_REFERENCES", "").split(":") if path]
+    if not references:
+        raise SystemExit("evaluation references were not forwarded; use --skip-evaluation to disable evaluation")
+    gmt_path = out_root / task["output_relative_path"]
+    output_path = gmt_path.with_name("geneset.evaluation.tsv")
+    command = [
+        env.get("PYTHON_BIN", sys.executable), "-c",
+        "import sys; from geneset_extractors.core.gene_set_evaluation import write_gmt_evaluation; "
+        "write_gmt_evaluation(sys.argv[1], sys.argv[3:], sys.argv[2])",
+        str(gmt_path), str(output_path), *references,
+    ]
+    print("$ " + " ".join(command), flush=True)
+    return subprocess.run(command, check=False, env=env).returncode
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("--smoke", "full"))
@@ -67,7 +85,8 @@ def main() -> int:
         if task["model_id"].startswith("HZ"):
             command.extend(["--human_gene_info", _input("GTEX_V8_HUMAN_GENE_INFO")])
         print("$ " + " ".join(command), flush=True)
-        return subprocess.run(command, check=False).returncode
+        result = subprocess.run(command, check=False, env=os.environ.copy()).returncode
+        return result if result else _evaluate_if_requested(task=task, out_root=Path(args.out_root).resolve(), dig_repo=dig_repo, env=os.environ.copy())
 
     settings = _hz2_settings(root)
     if args.mode == "--smoke":
@@ -108,7 +127,8 @@ def main() -> int:
     environment = dict(os.environ)
     dig_src = str(dig_repo / "src")
     environment["PYTHONPATH"] = dig_src + (os.pathsep + environment["PYTHONPATH"] if environment.get("PYTHONPATH") else "")
-    return subprocess.run(command, check=False, env=environment).returncode
+    result = subprocess.run(command, check=False, env=environment).returncode
+    return result if result else _evaluate_if_requested(task=task, out_root=Path(args.out_root).resolve(), dig_repo=dig_repo, env=environment)
 
 
 if __name__ == "__main__":
