@@ -115,7 +115,7 @@ for assignment in "${PROFILE_ENVIRONMENT[@]}"; do
   if [[ -d "$input_path" ]]; then bind_paths+=("$input_path"); else bind_paths+=("$(dirname "$input_path")"); fi
 done
 bind_csv="$(printf '%s\n' "${bind_paths[@]}" | awk '!seen[$0]++' | paste -sd, -)"
-exec "$QSUB_BIN" -t "1-${task_count}" -v "$profile_csv" \
+exec "$QSUB_BIN" -b y -t "1-${task_count}" -v "$profile_csv" \
   "$APPTAINER_BIN" exec --bind "$bind_csv" "$APPTAINER_IMAGE" "$SELF_PATH" \
   --execution-mode apptainer --library-id "$LIBRARY_ID" --library-root "$LIBRARY_ROOT" --task-manifest "$TASK_MANIFEST" \
   --submit
