@@ -18,6 +18,7 @@ QSUB_BIN="${QSUB_BIN:-qsub}"
 APPTAINER_BIN="${APPTAINER_BIN:-apptainer}"
 APPTAINER_IMAGE="${APPTAINER_IMAGE:-}"
 EXECUTION_MODE="apptainer"
+PROFILE_ENVIRONMENT=()
 
 usage() {
   cat <<'EOF'
@@ -55,6 +56,16 @@ done
 builder="$LIBRARY_ROOT/run/build_$(tr '[:upper:]-' '[:lower:]_' <<< "$LIBRARY_ID")_genesets.sh"
 [[ -x "$builder" ]] || { echo "Missing executable local builder: $builder" >&2; exit 1; }
 
+profile="$LIBRARY_ROOT/config/execution_profile.tsv"
+if [[ -f "$profile" ]]; then
+  while IFS=$'\t' read -r variable required; do
+    [[ "$variable" == "environment_variable" ]] && continue
+    [[ "$required" == "true" ]] || continue
+    [[ -n "${!variable:-}" && -f "${!variable}" ]] || { echo "Missing required ${LIBRARY_ID} input: ${variable}" >&2; exit 1; }
+    PROFILE_ENVIRONMENT+=("${variable}=${!variable}")
+  done < "$profile"
+fi
+
 mkdir -p "$WORK_ROOT"
 worklist="$WORK_ROOT/${LIBRARY_ID,,}_worklist.tsv"
 awk -F $'\t' -v task="$TASK_ID" -v model="$MODEL_ID" -v partition="$PARTITION_ID" '
@@ -68,7 +79,7 @@ awk -F $'\t' -v task="$TASK_ID" -v model="$MODEL_ID" -v partition="$PARTITION_ID
 if [[ -n "$TASK_INDEX" ]]; then
   task_id=$(awk -F $'\t' -v task_number="$TASK_INDEX" 'NR > 1 && $1 == task_number {print $2; exit}' "$worklist")
   [[ -n "$task_id" ]] || { echo "No task for array index $TASK_INDEX" >&2; exit 1; }
-  exec bash "$builder" full --task-id "$task_id" --out-root "$WORK_ROOT"
+  exec env "${PROFILE_ENVIRONMENT[@]}" bash "$builder" full --task-id "$task_id" --out-root "$WORK_ROOT"
 fi
 
 if [[ $SUBMIT -eq 0 ]]; then
@@ -77,12 +88,20 @@ if [[ $SUBMIT -eq 0 ]]; then
 fi
 task_count=$(( $(wc -l < "$worklist") - 1 ))
 if [[ "$EXECUTION_MODE" == "native" ]]; then
-  exec "$QSUB_BIN" -t "1-${task_count}" "$0" \
+  profile_csv=""
+  for assignment in "${PROFILE_ENVIRONMENT[@]}"; do
+    profile_csv+="${profile_csv:+,}${assignment}"
+  done
+  native_env_args=()
+  [[ -n "$profile_csv" ]] && native_env_args=(-v "$profile_csv")
+  exec "$QSUB_BIN" -t "1-${task_count}" "${native_env_args[@]}" "$0" \
     --execution-mode native --library-id "$LIBRARY_ID" --library-root "$LIBRARY_ROOT" --task-manifest "$TASK_MANIFEST" \
     --submit
 fi
 [[ -n "$APPTAINER_IMAGE" && -f "$APPTAINER_IMAGE" ]] || { echo "--submit requires APPTAINER_IMAGE" >&2; exit 1; }
-exec "$QSUB_BIN" -t "1-${task_count}" -v "GENESET_EXTRACTORS_IN_APPTAINER=1" \
+profile_csv="GENESET_EXTRACTORS_IN_APPTAINER=1"
+for assignment in "${PROFILE_ENVIRONMENT[@]}"; do profile_csv+=",${assignment}"; done
+exec "$QSUB_BIN" -t "1-${task_count}" -v "$profile_csv" \
   "$APPTAINER_BIN" exec --bind "$(pwd):$(pwd)" "$APPTAINER_IMAGE" "$0" \
   --execution-mode apptainer --library-id "$LIBRARY_ID" --library-root "$LIBRARY_ROOT" --task-manifest "$TASK_MANIFEST" \
   --submit
