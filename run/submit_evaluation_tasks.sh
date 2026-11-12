@@ -15,6 +15,6 @@ for reference in "${references[@]}"; do common+=(--reference "$reference"); done
 result="$("${PYTHON_BIN:-python3}" "${repo_root}/geneset-extractor-dev/src/evaluate_gmt_chunks.py" "${common[@]}" | tee /dev/stderr)"
 [[ $submit -eq 1 ]] || exit 0
 chunks="${result##*chunks=}"; [[ "$chunks" -gt 0 ]] || exit 0
-qsub_args=(-N geneset_evaluation -o "${work_dir}/logs" -e "${work_dir}/logs" -t "1-${chunks}")
+qsub_args=(-b y -N geneset_evaluation -o "${work_dir}/logs" -e "${work_dir}/logs" -t "1-${chunks}")
 [[ -n "$memory" ]] && qsub_args+=(-l "h_vmem=${memory}")
 exec "${QSUB_BIN:-qsub}" "${qsub_args[@]}" bash "${script_dir}/run_evaluation_chunk.sh" "${common[@]}"
